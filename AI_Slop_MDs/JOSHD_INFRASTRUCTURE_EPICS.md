@@ -6,7 +6,9 @@
 **Timeline:** 12-14 weeks (February 2026 - May 2026)
 
 ---
+//Expose API, Collect versions to display on the front end, system monitoring (Graphana, prometheus), 
 
+// suggesting uv for dependencies, want unit tests developers to perform, want you to document api structure (openAPI). 
 ## Epic Overview
 
 | Epic ID | Epic Name | Duration | Dependencies |
@@ -42,6 +44,7 @@ Establish the foundational development environment, CI/CD pipelines, and reposit
 | INFRA-1.4 | As a developer, I need a local test database so I can develop without affecting production | 3 | Docker Compose includes PostGIS; test data seeding script works |
 | INFRA-1.5 | As a developer, I need pre-commit hooks so issues are caught before push | 2 | pre-commit config with black, isort, pylint hooks |
 | INFRA-1.6 | As a team, we need dependency management so builds are reproducible | 2 | requirements.txt pinned; dependabot configured |
+
 
 ### Definition of Done
 - [ ] GitHub Actions CI pipeline passing on all PRs
