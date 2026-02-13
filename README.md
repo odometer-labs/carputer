@@ -24,6 +24,8 @@ Use the following format for all branches:
 
 ### Types
 
+**docs/** - Adding documentation or specsheets (e.g., `docs/emb/gps-module-techsheet`)
+
 **dev/** - New features and functionality (e.g., `dev/fe/user-authentication`, `dev/be/gps-parser`)
 
 **bugfix/** - Routine bug fixes (e.g., `bugfix/emb/aprs-timeout`, `bugfix/fe/map-rendering`)
