@@ -398,16 +398,3 @@ ls -l /dev/serial0
 5. **Integrate with backend** using Python gpsd client
 
 ---
-
-## Final Notes
-
-This is an **excellent GPS module** for your carputer project - much better than a standard GPS module. The multi-band reception will provide:
-
-- **Better accuracy** in urban environments (buildings don't block as much)
-- **More reliable fixes** in partially obstructed environments
-- **Faster acquisition** after power loss (with battery backup)
-- **Smoother tracking** due to better position accuracy
-
-The only downside is cost (~$200 for module vs. ~$40 for standard GPS), but since you're getting it from Kevin as a sponsor, this is a great advantage for your project!
-
-**All the gpsd integration and database schema I documented earlier applies perfectly to this module.**
