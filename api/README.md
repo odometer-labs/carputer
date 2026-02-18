@@ -36,14 +36,14 @@ Install python packages:
 ### Starting the server
 
 Running locally:
-`fastapi dev ./src/main.py`
+In the project's root, run: `fastapi dev src/main.py`
 
 ### Running Tests
 Before running pytest, be sure that you start the server locally (see above). 
 Otherwise, the tests will fail. 
 
 Running pytest:  
-`pytest`
+In the project's root, run: `pytest`
 
 ## Authors
 Brian Le  
