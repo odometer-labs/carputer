@@ -11,6 +11,7 @@
   import VectorSource from 'ol/source/Vector.js';
   import { Style, Circle, Fill, Stroke } from 'ol/style.js';
   import 'ol/ol.css';
+  import { push } from 'svelte-spa-router';
 
   let mapElement;
   let map;
@@ -55,8 +56,6 @@
     });
 
   }
-
-
 
 /* Note for snapToUserLocation():
   Right now, we are currently getting the user's location from browser data.
@@ -119,16 +118,28 @@
     }
   }
 
+  function goToNewPage() {
+    push('/other');
+  }
+
 </script>
 
 <main style="margin: 0; padding: 0; height: 100%; width: 100%;">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
+  
+  <div class="snap_nav">
+      <!-- svelte-ignore a11y_consider_explicit_label -->
+    <button class="snap_nav_btn" on:click={snapToUserLocation}><i class="iconoir-maps-arrow" style="font-size: 24px;"></i></button>
+  </div>
+
+  <div class="temp">
+    <button class="temp_btn" on:click={goToNewPage}>New Page</button>
+  </div>
+
   <div class="map-container">
     <div bind:this={mapElement} class="map" style="width: 100%; height: 100%;"></div>
   </div>
 
-  <div class="header">
-    <button on:click={snapToUserLocation}>Snap to My Location</button>
-  </div>
 </main>
 
 
@@ -144,22 +155,21 @@
     border: 2px solid #ccc;
     border-radius: 4px;
   }
-  .header {
+  .snap_nav {
     position: absolute;
-    top: 20px;
-    right: 20px;
+    bottom: 20px;
+    left: 25px;
     z-index: 1000;
     display: flex;
     flex-direction: column;
     gap: 10px;
   }
 
-  button {
-    padding: 10px 20px;
-    font-size: 14px;
+  .snap_nav_btn {
+    padding: 15px;
     cursor: pointer;
     border: none;
-    border-radius: 8px;
+    border-radius: 50%;
     background-color: rgba(255, 255, 255, 0.9);
     color: #333;
     font-weight: 500;
@@ -167,8 +177,32 @@
     transition: all 0.2s;
   }
 
-  button:hover {
+  .snap_nav_btn:hover {
     background-color: rgba(255, 255, 255, 1);
     box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
   }
+
+  .temp{
+    position: absolute;
+    top: 30px;
+    right: 50px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .temp_btn {
+    -webkit-text-fill-color: black;
+    padding: 15px;
+    cursor: pointer;
+    border: none;
+    border-radius: 4px;
+    background-color: #ffffff;
+    color: white;
+    font-weight: 500;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    transition: all 0.2s;
+  }
+
 </style>
