@@ -121,9 +121,16 @@
 
 </script>
 
-<div class="map-container">
-  <div bind:this={mapElement} class="map" style="width: 100%; height: 100%;"></div>
-</div>
+<main style="margin: 0; padding: 0; height: 100%; width: 100%;">
+  <div class="map-container">
+    <div bind:this={mapElement} class="map" style="width: 100%; height: 100%;"></div>
+  </div>
+
+  <div class="header">
+    <button on:click={snapToUserLocation}>Snap to My Location</button>
+  </div>
+</main>
+
 
 <style>
   .map-container {
@@ -136,5 +143,32 @@
     height: 500px;
     border: 2px solid #ccc;
     border-radius: 4px;
+  }
+  .header {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  button {
+    padding: 10px 20px;
+    font-size: 14px;
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.9);
+    color: #333;
+    font-weight: 500;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s;
+  }
+
+  button:hover {
+    background-color: rgba(255, 255, 255, 1);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
   }
 </style>
