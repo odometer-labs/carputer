@@ -1,5 +1,5 @@
 <script>
-  import OpenlayersMap from './lib/OpenlayersMap.svelte';
+  import OpenlayersMap from './pages/OpenlayersMap.svelte';
 
   let openlayersMapComponent;
 
