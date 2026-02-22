@@ -122,15 +122,73 @@
     push('/other');
   }
 
+
+  let isDropdownOpen = false;
+
 </script>
 
 <main style="margin: 0; padding: 0; height: 100%; width: 100%;">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
   
-  <div class="snap_nav">
+  <div class="snap_nav_icon">
       <!-- svelte-ignore a11y_consider_explicit_label -->
     <button class="snap_nav_btn" on:click={snapToUserLocation}><i class="iconoir-maps-arrow" style="font-size: 24px;"></i></button>
   </div>
+
+  <div class="hamburger_menu_icon">
+      <!-- svelte-ignore a11y_consider_explicit_label -->
+    <button class="hamburger_menu_icon_btn" on:click={() => isDropdownOpen = !isDropdownOpen}>
+      {#if isDropdownOpen}
+        <i class="iconoir-xmark" style="font-size: 24px;"></i>
+      {:else}
+        <i class="iconoir-menu" style="font-size: 24px;"></i>
+      {/if}
+    </button>
+  </div>
+
+
+  {#if isDropdownOpen}
+    <div class="dropdown-menu">
+      <ul style="list-style: none; margin: 0; padding: 10px;">
+        <li style="padding: 0;">
+            <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false;}}>
+              <i class="iconoir-wifi" style="font-size: 16px; margin-right: 8px; color: black"></i>
+              Wifi
+              <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
+                <sub class="sub_text">Connected</sub>
+              </div>  
+            </button>
+        </li>
+        <li style="padding: 0;">
+            <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false;}}>
+              <i class="iconoir-download" style="font-size: 16px; margin-right: 8px; color: black"></i>
+              Download Map
+              <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
+                <sub class="sub_text">2GB free</sub>
+              </div>  
+            </button>
+        </li>
+        <li style="padding: 0;">
+            <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false;}}>
+              <i class="iconoir-settings" style="font-size: 16px; margin-right: 8px; color: black"></i>
+              Settings
+              <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
+                <sub class="sub_text">Day mode activated</sub>
+              </div>  
+            </button>
+        </li>
+        <li style="padding: 0;">
+          <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false;}}>
+            <i class="iconoir-info-circle" style="font-size: 16px; margin-right: 8px; color: black"></i>
+            System Info
+            <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
+                <sub class="sub_text">Patch Level: 0.0.0</sub>
+            </div>  
+          </button>
+        </li>
+      </ul>
+    </div>
+  {/if}
 
   <div class="temp">
     <button class="temp_btn" on:click={goToNewPage}>New Page</button>
@@ -144,6 +202,18 @@
 
 
 <style>
+  .grid-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* Creates three equal-width columns */
+    gap: 10px; /* Adds space between columns */
+  }
+
+  .sub_text {
+    -webkit-text-fill-color: grey;
+    float: right; 
+    font-size: 12px; 
+    color: gray;
+  }
   .map-container {
     width: 100%;
     height: 100%;
@@ -155,7 +225,7 @@
     border: 2px solid #ccc;
     border-radius: 4px;
   }
-  .snap_nav {
+  .snap_nav_icon {
     position: absolute;
     bottom: 20px;
     left: 25px;
@@ -170,21 +240,22 @@
     cursor: pointer;
     border: none;
     border-radius: 50%;
-    background-color: rgba(255, 255, 255, 0.9);
+    background-color: rgba(188, 188, 188, 0.9);
     color: #333;
     font-weight: 500;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
     transition: all 0.2s;
+    outline: none;
   }
 
   .snap_nav_btn:hover {
-    background-color: rgba(255, 255, 255, 1);
+    background-color: rgb(225, 225, 225);
     box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
   }
 
   .temp{
     position: absolute;
-    top: 30px;
+    bottom: 50px;
     right: 50px;
     z-index: 1000;
     display: flex;
@@ -203,6 +274,62 @@
     font-weight: 500;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
     transition: all 0.2s;
+    outline: none;
   }
+
+  .hamburger_menu_icon {
+    position: absolute;
+    top: 20px;
+    right: 25px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .hamburger_menu_icon_btn {
+    padding: 15px;
+    cursor: pointer;
+    border: none;
+    border-radius: 50%;
+    background-color: rgba(188, 188, 188, 0.9);
+    color: #333;
+    font-weight: 500;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s;
+    outline: none;
+  }
+  .hamburger_menu_icon_btn:hover {
+    background-color: rgb(225, 225, 225);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+  }
+
+  .dropdown-menu {
+    position: absolute; 
+    top: 95px; 
+    right: 20px; 
+    background: white;
+    border: 1px solid #ccc; 
+    border-radius: 4px; 
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2); 
+    background-color: rgba(188, 188, 188, 0.9);
+    z-index: 1000;
+  }
+
+  .dropdown-menu_btn {
+    -webkit-text-fill-color: black;
+    padding: 8px 12px; 
+    cursor: pointer; 
+    border: none; 
+    background: none; 
+    width: 100%; 
+    text-align: left;
+    background-color: rgba(188, 188, 188, 0.9);
+    outline: none;
+  }
+  .dropdown-menu_btn:hover {
+    background-color: rgb(202, 202, 202);
+  }
+
 
 </style>
