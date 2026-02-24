@@ -9,11 +9,13 @@
 
 <main style="margin: 0; padding: 0; height: 100%; width: 100%;">
   
-  <!-- Keep all pages mounted, control visibility with CSS -->
+  <!-- Pages are continuously mounted, visibility controlled by CSS. -->
+   
   <div style:display={$location === '/' ? 'block' : 'none'} style="height: 100%; width: 100%;">
     <HomeMapPage />
   </div>
   
+
   <div style:display={$location === '/other' ? 'block' : 'none'} style="height: 100%; width: 100%;">
     <ExamplePage />
   </div>

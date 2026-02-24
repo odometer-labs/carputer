@@ -118,6 +118,8 @@
     }
   }
 
+  /*** IMPORTANT ***/
+  // This function is an example of navigating to a new page
   function goToNewPage() {
     push('/other');
   }
@@ -135,6 +137,7 @@
     <button class="snap_nav_btn" on:click={snapToUserLocation}><i class="iconoir-maps-arrow" style="font-size: 24px;"></i></button>
   </div>
 
+  <!-- This is the button to toggle the hamburger menu -->
   <div class="hamburger_menu_icon">
       <!-- svelte-ignore a11y_consider_explicit_label -->
     <button class="hamburger_menu_icon_btn" on:click={() => isDropdownOpen = !isDropdownOpen}>
@@ -146,22 +149,22 @@
     </button>
   </div>
 
-
+  <!-- If the hamburger menu is toggled open then show this menu -->
   {#if isDropdownOpen}
     <div class="dropdown-menu">
       <ul style="list-style: none; margin: 0; padding: 10px;">
         <li style="padding: 0;">
             <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false;}}>
-              <i class="iconoir-wifi" style="font-size: 16px; margin-right: 8px; color: black"></i>
+              <i class="iconoir-wifi dropdown-menu_btn_icons"></i>
               Wifi
               <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
-                <sub class="sub_text">Connected</sub>
+                <sub class="sub_text">Connected to PSU-Guest</sub>
               </div>  
             </button>
         </li>
         <li style="padding: 0;">
             <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false;}}>
-              <i class="iconoir-download" style="font-size: 16px; margin-right: 8px; color: black"></i>
+              <i class="iconoir-download dropdown-menu_btn_icons"></i>
               Download Map
               <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
                 <sub class="sub_text">2GB free</sub>
@@ -170,7 +173,7 @@
         </li>
         <li style="padding: 0;">
             <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false;}}>
-              <i class="iconoir-settings" style="font-size: 16px; margin-right: 8px; color: black"></i>
+              <i class="iconoir-settings dropdown-menu_btn_icons"></i>
               Settings
               <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
                 <sub class="sub_text">Day mode activated</sub>
@@ -179,7 +182,7 @@
         </li>
         <li style="padding: 0;">
           <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false;}}>
-            <i class="iconoir-info-circle" style="font-size: 16px; margin-right: 8px; color: black"></i>
+            <i class="iconoir-info-circle dropdown-menu_btn_icons"></i>
             System Info
             <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
                 <sub class="sub_text">Patch Level: 0.0.0</sub>
@@ -190,6 +193,7 @@
     </div>
   {/if}
 
+  <!-- Delete this button when you understand how to navigate to a new page. -->
   <div class="temp">
     <button class="temp_btn" on:click={goToNewPage}>New Page</button>
   </div>
@@ -202,57 +206,8 @@
 
 
 <style>
-  .grid-container {
-    display: grid;
-    grid-template-columns: 1fr 1fr; /* Creates three equal-width columns */
-    gap: 10px; /* Adds space between columns */
-  }
 
-  .sub_text {
-    -webkit-text-fill-color: grey;
-    float: right; 
-    font-size: 12px; 
-    color: gray;
-  }
-  .map-container {
-    width: 100%;
-    height: 100%;
-  }
-
-  .map {
-    width: 100%;
-    height: 500px;
-    border: 2px solid #ccc;
-    border-radius: 4px;
-  }
-  .snap_nav_icon {
-    position: absolute;
-    bottom: 20px;
-    left: 25px;
-    z-index: 1000;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .snap_nav_btn {
-    padding: 15px;
-    cursor: pointer;
-    border: none;
-    border-radius: 50%;
-    background-color: rgba(188, 188, 188, 0.9);
-    color: #333;
-    font-weight: 500;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-    transition: all 0.2s;
-    outline: none;
-  }
-
-  .snap_nav_btn:hover {
-    background-color: rgb(225, 225, 225);
-    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
-  }
-
+  /* These need to get deleted when the temp button does. */
   .temp{
     position: absolute;
     bottom: 50px;
@@ -262,7 +217,6 @@
     flex-direction: column;
     gap: 10px;
   }
-
   .temp_btn {
     -webkit-text-fill-color: black;
     padding: 15px;
@@ -277,6 +231,56 @@
     outline: none;
   }
 
+  .grid-container {
+    display: grid;
+    grid-template-columns: 1fr; /* Creates three equal-width columns */
+    gap: 10px; /* Adds space between columns */
+  }
+
+  .sub_text {
+    -webkit-text-fill-color: grey;
+    float: right; 
+    font-size: 12px; 
+    color: gray;
+  }
+
+  .map-container {
+    width: 100%;
+    height: 100%;
+  }
+  .map {
+    width: 100%;
+    height: 500px;
+    border: 2px solid #ccc;
+    border-radius: 4px;
+  }
+
+  .snap_nav_icon {
+    position: absolute;
+    bottom: 20px;
+    left: 25px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .snap_nav_btn {
+    padding: 15px;
+    cursor: pointer;
+    border: 1px solid white;
+    border-radius: 50%;
+    background-color: rgba(188, 188, 188, 0.9);
+    color: #333;
+    font-weight: 500;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s;
+    outline: none;
+  }
+  .snap_nav_btn:hover {
+    background-color: rgb(225, 225, 225);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+  }
+
   .hamburger_menu_icon {
     position: absolute;
     top: 20px;
@@ -286,11 +290,10 @@
     flex-direction: column;
     gap: 10px;
   }
-
   .hamburger_menu_icon_btn {
-    padding: 15px;
+    padding: 10px;
     cursor: pointer;
-    border: none;
+    border: 1px solid white;
     border-radius: 50%;
     background-color: rgba(188, 188, 188, 0.9);
     color: #333;
@@ -308,28 +311,33 @@
     position: absolute; 
     top: 95px; 
     right: 20px; 
-    background: white;
+    background-color: rgb(188, 188, 188);
     border: 1px solid #ccc; 
     border-radius: 4px; 
     box-shadow: 0 2px 6px rgba(0,0,0,0.2); 
-    background-color: rgba(188, 188, 188, 0.9);
     z-index: 1000;
   }
-
   .dropdown-menu_btn {
     -webkit-text-fill-color: black;
-    padding: 8px 12px; 
+    padding: 10px 70px 10px 10px;
     cursor: pointer; 
     border: none; 
-    background: none; 
+    background: transparent;
     width: 100%; 
     text-align: left;
-    background-color: rgba(188, 188, 188, 0.9);
     outline: none;
+    z-index: 1000;
   }
   .dropdown-menu_btn:hover {
-    background-color: rgb(202, 202, 202);
+    background-color: rgba(202, 202, 202);
   }
-
+  .dropdown-menu_btn_icons {
+    font-size: 20px; 
+    margin-right: 8px; 
+    position: relative;
+    top: 4px;
+    color: black;
+    font-weight: bold;
+  }
 
 </style>

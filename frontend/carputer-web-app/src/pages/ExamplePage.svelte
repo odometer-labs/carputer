@@ -1,6 +1,11 @@
+<!-- DELETE ME -->
+<!-- This is an example page to demonstrate page navigation. 
+Once you understand how to navigate between pages, you can delete this file. -->
+
 <script>
   import { push } from 'svelte-spa-router';
 
+  // Function to navigate back to the home map page
   function goBack() {
     push('/');
   }
