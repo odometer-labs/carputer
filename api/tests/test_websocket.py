@@ -1,12 +1,17 @@
-import asyncio
-import websockets
-import pytest
+from src.main import app
+from fastapi.websockets import WebSocket
+from fastapi.testclient import TestClient
 
+client = TestClient(app)
 
-@pytest.mark.asyncio
-async def test_websocket():
-    uri = "ws://127.0.0.1:8000/ws/hello"
+def test_websocket_hello():
+    with client.websocket_connect("/ws/hello") as ws:
+        ws.send_text("knock knock")
+        greeting = ws.receive_text()
+        assert greeting == "Hello!"
 
-    async with websockets.connect(uri) as ws:
-        await ws.send("knock knock")
-        greeting = await ws.recv()
+def test_websocket_embedded():
+    with client.websocket_connect("/ws/embedded") as ws:
+        ws.send_text("knock knock")
+        result = ws.receive_text()
+        assert result == "PLACEHOLDER"

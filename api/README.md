@@ -36,12 +36,11 @@ Install python packages:
 ### Starting the server
 
 Running locally:
-In the project's root, run: `fastapi dev src/main.py`
+In the project's root, run: `fastapi dev src/main.py`  
+
+For deployment, a `run.sh` bash script has been provided. This bash script should be ran by the Raspberry Pi's as a systemd service.
 
 ### Running Tests
-Before running pytest, be sure that you start the server locally (see above). 
-Otherwise, the tests will fail. 
-
 Running pytest:  
 In the project's root, run: `pytest`
 
