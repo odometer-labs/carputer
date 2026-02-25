@@ -1,0 +1,68 @@
+{
+  "compilerOptions": {
+    /**
+     * Framework & Environment
+     */
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "target": "ESNext",
+    "module": "ESNext",
+
+    /**
+     * Module Resolution
+     */
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+
+    /**
+     * Type Checking - Strict Mode
+     * 'strict' enables: noImplicitAny, strictNullChecks, strictFunctionTypes,
+     * strictBindCallApply, strictPropertyInitialization, noImplicitThis, alwaysStrict
+     */
+    "strict": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+
+    /**
+     * Source Maps & Debugging
+     */
+    "sourceMap": true,
+    "declaration": false,
+
+    /**
+     * Emit Options
+     */
+    "skipLibCheck": true,
+
+    /**
+     * Module Compilation
+     * Note: Svelte handles JSX/component syntax via preprocessor
+     */
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+
+    /**
+     * Path Mapping
+     * Note: Vite handles path resolution; TypeScript paths are synced with vite.config.ts
+     */
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+
+    /**
+     * Declaration Files
+     */
+    "types": ["vite/client", "node"]
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.d.ts",
+    "src/**/*.svelte",
+    "vite-env.d.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

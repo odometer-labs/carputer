@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import { onMount } from 'svelte';
   import Map from 'ol/Map.js';
   import View from 'ol/View.js';
@@ -11,17 +11,15 @@
   import VectorSource from 'ol/source/Vector.js';
   import { Style, Circle, Fill, Stroke } from 'ol/style.js';
   import 'ol/ol.css';
-  import { push } from 'svelte-spa-router';
 
-  let mapElement;
-  let map;
-  let locationStatus = 'Getting location...';
-  let watchId = null;
-  let userLayer;
-  let orientationListener = null;
+  let mapElement: HTMLDivElement | undefined;
+  let map: Map | undefined;
+  let locationStatus: string = 'Getting location...';
+  let watchId: number | null = null;
+  let userLayer: VectorLayer | undefined;
+  let orientationListener: ((event: DeviceOrientationEvent) => void) | null = null;
 
   onMount(() => {
-
     loadMap();
     snapToUserLocation();
 
@@ -40,7 +38,7 @@
     };
   });
 
-  function loadMap() {
+  function loadMap(): void {
     // Create the map
     map = new Map({
       target: mapElement,
@@ -54,62 +52,62 @@
         zoom: 2
       })
     });
-
   }
 
-/* Note for snapToUserLocation():
-  Right now, we are currently getting the user's location from browser data.
-  As soon as we can start getting data from the hardware this will need to change.
-*/
-  export function snapToUserLocation() {
+  /* Note for snapToUserLocation():
+    Right now, we are currently getting the user's location from browser data.
+    As soon as we can start getting data from the hardware this will need to change.
+  */
+  function snapToUserLocation(): void {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const lon = position.coords.longitude;
-          const lat = position.coords.latitude;
+        (position: GeolocationPosition) => {
+          const lon: number = position.coords.longitude;
+          const lat: number = position.coords.latitude;
           const coords = fromLonLat([lon, lat]);
           
           // Center map on user's location
-          map.getView().setCenter(coords);
-          map.getView().setZoom(19); // Zoom in to city level
-          
-          // Add a marker at the user's location
-          const marker = new Feature({
-            geometry: new Point(coords)
-          });
-          
-          marker.setStyle(new Style({
-            image: new Circle({
-              radius: 8,
-              fill: new Fill({ color: '#3399CC' }),
-              stroke: new Stroke({ color: '#fff', width: 2 })
-            })
-          }));
-          
-          const vectorSource = new VectorSource({
-            features: [marker]
-          });
+          if (map) {
+            map.getView().setCenter(coords);
+            map.getView().setZoom(19); // Zoom in to city level
+            
+            // Add a marker at the user's location
+            const marker = new Feature({
+              geometry: new Point(coords)
+            });
+            
+            marker.setStyle(new Style({
+              image: new Circle({
+                radius: 8,
+                fill: new Fill({ color: '#3399CC' }),
+                stroke: new Stroke({ color: '#fff', width: 2 })
+              })
+            }));
+            
+            const vectorSource = new VectorSource({
+              features: [marker]
+            });
 
-          if (userLayer) {
-            map.removeLayer(userLayer);
+            if (userLayer) {
+              map.removeLayer(userLayer);
+            }
+
+            userLayer = new VectorLayer({
+              source: vectorSource
+            });
+
+            map.addLayer(userLayer);
+            
+            locationStatus = `Location: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+            console.log('User location:', lat, lon);
           }
-
-          userLayer = new VectorLayer({
-            source: vectorSource
-          });
-
-          map.addLayer(userLayer);
-          
-          locationStatus = `Location: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
-          console.log('User location:', lat, lon);
         },
-        (error) => {
+        (error: GeolocationPositionError) => {
           console.error('Geolocation error:', error.message);
           locationStatus = 'Location access denied or unavailable';
         },
         {
           enableHighAccuracy: true,
-          
           maximumAge: 0
         }
       );
@@ -118,15 +116,7 @@
     }
   }
 
-  /*** IMPORTANT ***/
-  // This function is an example of navigating to a new page
-  function goToNewPage() {
-    push('/other');
-  }
-
-
-  let isDropdownOpen = false;
-
+  let isDropdownOpen: boolean = false;
 </script>
 
 <main style="margin: 0; padding: 0; height: 100%; width: 100%;">

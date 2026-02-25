@@ -1,9 +1,9 @@
-<script>
+<script lang="ts">
   import { location } from 'svelte-spa-router';
   import HomeMapPage from './pages/HomeMapPage.svelte';
 
-</script>
 
+</script>
 
 <main style="margin: 0; padding: 0; height: 100%; width: 100%;">
   
