@@ -193,11 +193,6 @@
     </div>
   {/if}
 
-  <!-- Delete this button when you understand how to navigate to a new page. -->
-  <div class="temp">
-    <button class="temp_btn" on:click={goToNewPage}>New Page</button>
-  </div>
-
   <div class="map-container">
     <div bind:this={mapElement} class="map" style="width: 100%; height: 100%;"></div>
   </div>
@@ -206,31 +201,6 @@
 
 
 <style>
-
-  /* These need to get deleted when the temp button does. */
-  .temp{
-    position: absolute;
-    bottom: 50px;
-    right: 50px;
-    z-index: 1000;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-  .temp_btn {
-    -webkit-text-fill-color: black;
-    padding: 15px;
-    cursor: pointer;
-    border: none;
-    border-radius: 4px;
-    background-color: #ffffff;
-    color: white;
-    font-weight: 500;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-    transition: all 0.2s;
-    outline: none;
-  }
-
   .grid-container {
     display: grid;
     grid-template-columns: 1fr; /* Creates three equal-width columns */

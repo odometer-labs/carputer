@@ -1,8 +1,6 @@
 <script>
   import { location } from 'svelte-spa-router';
   import HomeMapPage from './pages/HomeMapPage.svelte';
-  import ExamplePage from './pages/ExamplePage.svelte';
-  
 
 </script>
 
@@ -13,11 +11,6 @@
    
   <div style:display={$location === '/' ? 'block' : 'none'} style="height: 100%; width: 100%;">
     <HomeMapPage />
-  </div>
-  
-
-  <div style:display={$location === '/other' ? 'block' : 'none'} style="height: 100%; width: 100%;">
-    <ExamplePage />
   </div>
 
 </main>
