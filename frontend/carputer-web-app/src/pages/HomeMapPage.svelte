@@ -11,6 +11,7 @@
   import VectorSource from 'ol/source/Vector.js';
   import { Style, Circle, Fill, Stroke } from 'ol/style.js';
   import 'ol/ol.css';
+  import { push } from 'svelte-spa-router';
 
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
@@ -116,6 +117,11 @@
     }
   }
 
+  // this function simply pushes the settingPreferencePage forward
+  function goToSettingPreference() : void {
+    push("/SettingPreference");
+  }
+
   let isDropdownOpen: boolean = false;
 </script>
 
@@ -162,7 +168,7 @@
             </button>
         </li>
         <li style="padding: 0;">
-            <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false;}}>
+            <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false; goToSettingPreference()}}>
               <i class="iconoir-settings dropdown-menu_btn_icons"></i>
               Settings
               <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
