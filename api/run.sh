@@ -26,4 +26,4 @@ else
 fi
 
 source .venv/bin/activate
-fastapi run src/main.py
+fastapi run app/main.py

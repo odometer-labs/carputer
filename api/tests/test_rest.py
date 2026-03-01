@@ -1,12 +1,8 @@
 import json
 from datetime import datetime
 from fastapi.testclient import TestClient
-from src.main import app
-from src.model.models import (
-    Track,
-    TrackLine,
-    TrackPoint
-)
+from app.main import app
+from app.model.models import Track
 
 test_track = Track(id=123, start_time=datetime.now(), end_time=datetime.now())
 

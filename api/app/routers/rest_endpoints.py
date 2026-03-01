@@ -1,6 +1,7 @@
 from datetime import datetime
 from fastapi import APIRouter
-from src.model.models import (
+from ..logging.handlers import logger
+from app.model.models import (
     Track,
     TrackLine,
     TrackPoint
@@ -23,6 +24,7 @@ async def get_track(track_id: str) -> Track:
     Returns:
         Track: A serializable Track object with the same track id.
     """
+    logger.info("GET Track")
     track = Track(id=int(track_id), start_time=datetime.now(), end_time=datetime.now())
     return track
 
@@ -37,6 +39,7 @@ async def add_track(track: Track) -> Track:
     Returns:
         Track: A serializable Track object we just added.
     """
+    logger.info("POST Track")
     return track
 
 @router.put("/track/{track_id}")
@@ -51,6 +54,7 @@ async def update_track(track_id: str, track: Track) -> Track:
     Returns:
         Track: A serializable Track object we just updated.
     """
+    logger.info("PUT Track")
     return track
 
 @router.delete("/track/{track_id}")
@@ -64,4 +68,5 @@ async def delete_track(track_id: str):
     Returns:
         dict: A json body indicating success or failure.
     """
+    logger.info("DEL Track")
     return {"result": "success"}

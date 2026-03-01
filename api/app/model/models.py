@@ -8,12 +8,13 @@ class Track(BaseModel):
     end_time: datetime
 
 class TrackPoint(BaseModel):
+    """
+    The model representing the GPSD data
+    """
     track_id: int
     timestamp: datetime
-    # geom GEOGRAPHY
-    speed: int
+    speed: float # speed over ground, m/s (double)
     heading: str
 
 class TrackLine(BaseModel):
     track_id: int
-    # geom GEOGRAPHY
