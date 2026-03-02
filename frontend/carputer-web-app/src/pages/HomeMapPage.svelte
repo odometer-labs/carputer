@@ -11,26 +11,32 @@
   import VectorSource from 'ol/source/Vector.js';
   import { Style, Circle, Fill, Stroke } from 'ol/style.js';
   import 'ol/ol.css';
+  import { gpsService } from '../fake-api/gpsService';
+  import type { GPSPosition } from '../fake-api/types';
 
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
   let locationStatus: string = 'Getting location...';
-  let watchId: number | null = null;
   let userLayer: VectorLayer | undefined;
+  let userMarker: Feature<Point> | undefined;
+  let latestUserCoords: number[] | null = null;
+  let isFollowingUser: boolean = true;
+  let isFollowingHeading: boolean = false;
+  let latestHeadingDegrees: number | null = null;
+  let isProgrammaticMove: boolean = false;
+  let hasCenteredInitially: boolean = false;
   let orientationListener: ((event: DeviceOrientationEvent) => void) | null = null;
 
   onMount(() => {
     loadMap();
-    snapToUserLocation();
+    startGPSTracking();
 
     // Cleanup when component is destroyed
     return () => {
       if (map) {
-        map.setTarget(null);
+        map.setTarget(undefined);
       }
-      if (watchId !== null) {
-        navigator.geolocation.clearWatch(watchId);
-      }
+      gpsService.stop();
       if (orientationListener) {
         window.removeEventListener('deviceorientationabsolute', orientationListener);
         window.removeEventListener('deviceorientation', orientationListener);
@@ -52,40 +58,84 @@
         zoom: 2
       })
     });
+
+    map.on('movestart', () => {
+      if (!isProgrammaticMove) {
+        isFollowingUser = false;
+        isFollowingHeading = false;
+      }
+    });
+
+    map.on('moveend', () => {
+      isProgrammaticMove = false;
+    });
   }
 
-  /* Note for snapToUserLocation():
-    Right now, we are currently getting the user's location from browser data.
-    As soon as we can start getting data from the hardware this will need to change.
+  function centerOnUserLocation(zoomToUser: boolean = false): void {
+    if (!map || !latestUserCoords) {
+      return;
+    }
+
+    isProgrammaticMove = true;
+    const view = map.getView();
+    view.setCenter(latestUserCoords);
+
+    if (zoomToUser) {
+      view.setZoom(15);
+    }
+  }
+
+  function applyHeadingRotation(): void {
+    if (!map || !isFollowingUser || !isFollowingHeading || latestHeadingDegrees === null) {
+      return;
+    }
+
+    const headingRadians = (latestHeadingDegrees * Math.PI) / 180;
+    isProgrammaticMove = true;
+    map.getView().setRotation(-headingRadians);
+  }
+
+  function resetMapRotation(): void {
+    if (!map) {
+      return;
+    }
+
+    isProgrammaticMove = true;
+    map.getView().setRotation(0);
+  }
+
+  /* Note for startGPSTracking():
+    Getting GPS location from the fake API for testing.
+    Defaults to mock data but can connect to gpsfake if available.
+    Change useMockData to false in gpsService.ts to connect to gpsfake instead.
   */
-  function snapToUserLocation(): void {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position: GeolocationPosition) => {
-          const lon: number = position.coords.longitude;
-          const lat: number = position.coords.latitude;
-          const coords = fromLonLat([lon, lat]);
-          
-          // Center map on user's location
-          if (map) {
-            map.getView().setCenter(coords);
-            map.getView().setZoom(19); // Zoom in to city level
-            
-            // Add a marker at the user's location
-            const marker = new Feature({
+  function startGPSTracking(): void {
+    gpsService.start(
+      (position: GPSPosition) => {
+        const lon: number = position.longitude;
+        const lat: number = position.latitude;
+        if (typeof position.heading === 'number' && Number.isFinite(position.heading)) {
+          latestHeadingDegrees = position.heading;
+        }
+        const coords = fromLonLat([lon, lat]);
+        latestUserCoords = coords;
+        
+        if (map) {
+          if (!userMarker) {
+            userMarker = new Feature({
               geometry: new Point(coords)
             });
-            
-            marker.setStyle(new Style({
+
+            userMarker.setStyle(new Style({
               image: new Circle({
                 radius: 8,
                 fill: new Fill({ color: '#3399CC' }),
                 stroke: new Stroke({ color: '#fff', width: 2 })
               })
             }));
-            
+
             const vectorSource = new VectorSource({
-              features: [marker]
+              features: [userMarker]
             });
 
             if (userLayer) {
@@ -97,22 +147,44 @@
             });
 
             map.addLayer(userLayer);
-            
-            locationStatus = `Location: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
-            console.log('User location:', lat, lon);
+          } else {
+            userMarker.setGeometry(new Point(coords));
           }
-        },
-        (error: GeolocationPositionError) => {
-          console.error('Geolocation error:', error.message);
-          locationStatus = 'Location access denied or unavailable';
-        },
-        {
-          enableHighAccuracy: true,
-          maximumAge: 0
+
+          if (!hasCenteredInitially) {
+            centerOnUserLocation(true);
+            hasCenteredInitially = true;
+          } else if (isFollowingUser) {
+            centerOnUserLocation(false);
+          }
+
+          applyHeadingRotation();
+          
+          locationStatus = `Location: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+          // console.log('GPS Position:', lat, lon);
         }
-      );
+      },
+      (error: string) => {
+        console.error('GPS error:', error);
+        locationStatus = `GPS Error: ${error}`;
+      }
+    );
+  }
+
+  function snapToUserLocation(): void {
+    if (!isFollowingUser) {
+      isFollowingUser = true;
+      isFollowingHeading = false;
+      centerOnUserLocation(true);
+      return;
+    }
+
+    isFollowingHeading = !isFollowingHeading;
+
+    if (isFollowingHeading) {
+      applyHeadingRotation();
     } else {
-      locationStatus = 'Geolocation not supported by browser';
+      resetMapRotation();
     }
   }
 
@@ -124,7 +196,13 @@
   
   <div class="snap_nav_icon">
       <!-- svelte-ignore a11y_consider_explicit_label -->
-    <button class="snap_nav_btn" on:click={snapToUserLocation}><i class="iconoir-maps-arrow" style="font-size: 24px;"></i></button>
+    <button class="snap_nav_btn" on:click={snapToUserLocation}>
+      {#if !isFollowingUser || isFollowingHeading}
+        <i class="iconoir-maps-arrow" style="font-size: 24px;"></i>
+      {:else}
+        <i class="iconoir-compass" style="font-size: 24px;"></i>
+      {/if}
+    </button>
   </div>
 
   <!-- This is the button to toggle the hamburger menu -->
@@ -214,7 +292,7 @@
     border: 2px solid #ccc;
     border-radius: 4px;
   }
-
+  /* I need to make this whole button bigger */
   .snap_nav_icon {
     position: absolute;
     bottom: 20px;
@@ -222,10 +300,14 @@
     z-index: 1000;
     display: flex;
     flex-direction: column;
+    justify-content: center;
+    align-items: center;
     gap: 10px;
   }
   .snap_nav_btn {
-    padding: 15px;
+    width: 60px;
+    height: 60px;
+    padding: 0px;
     cursor: pointer;
     border: 1px solid white;
     border-radius: 50%;
@@ -248,10 +330,14 @@
     z-index: 1000;
     display: flex;
     flex-direction: column;
+    justify-content: center;
+    align-items: center;
     gap: 10px;
   }
   .hamburger_menu_icon_btn {
-    padding: 10px;
+    padding: 0px;
+    width: 60px;
+    height: 60px;
     cursor: pointer;
     border: 1px solid white;
     border-radius: 50%;
