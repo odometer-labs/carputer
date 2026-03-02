@@ -18,6 +18,9 @@ export class GPSService {
   private ws: WebSocket | null = null;
   private mockInterval: number | null = null;
   private mockPosition: GPSPosition;
+  private nmeaPositions: GPSPosition[] = [];
+  private currentPositionIndex: number = 0;
+  private nmeaFileLoaded: boolean = false;
 
   constructor(config: GPSServiceConfig = {}) {
     this.config = {
@@ -70,10 +73,80 @@ export class GPSService {
   }
 
   /**
-   * Start mock GPS data generation
+   * Start mock GPS data generation - loads from NMEA file or falls back to random
    */
   private startMockGPS(): void {
-    // Simulate movement in a small area
+    this.loadNMEAFile().then((positions) => {
+      if (positions.length > 0) {
+        this.nmeaPositions = positions;
+        this.currentPositionIndex = 0;
+        this.startNMEAPlayback();
+      } else {
+        // Fallback to random GPS if NMEA file couldn't be loaded
+        this.startRandomGPS();
+      }
+    });
+  }
+
+  /**
+   * Replay GPS data from NMEA file
+   */
+  private startNMEAPlayback(): void {
+    // Send initial position immediately
+    if (this.onUpdate && this.nmeaPositions.length > 0) {
+      const position = this.nmeaPositions[0];
+
+      if (
+        position &&
+        Number.isFinite(position.latitude) &&
+        Number.isFinite(position.longitude)
+      ) {
+        this.mockPosition = {
+          latitude: position.latitude as number,
+          longitude: position.longitude as number,
+          altitude: position.altitude,
+          accuracy: position.accuracy,
+          heading: position.heading,
+          speed: position.speed,
+          timestamp: Date.now(),
+        };
+        this.onUpdate(this.mockPosition);
+      }
+    }
+
+    // Iterate through NMEA positions
+    this.mockInterval = window.setInterval(() => {
+      if (this.nmeaPositions.length === 0) return;
+
+      const position = this.nmeaPositions[this.currentPositionIndex];
+      if (
+        position &&
+        Number.isFinite(position.latitude) &&
+        Number.isFinite(position.longitude)
+      ) {
+        this.mockPosition = {
+          latitude: position.latitude as number,
+          longitude: position.longitude as number,
+          altitude: position.altitude,
+          accuracy: position.accuracy,
+          heading: position.heading,
+          speed: position.speed,
+          timestamp: Date.now(),
+        };
+        this.currentPositionIndex =
+          (this.currentPositionIndex + 1) % this.nmeaPositions.length;
+
+        if (this.onUpdate) {
+          this.onUpdate(this.mockPosition);
+        }
+      }
+    }, this.config.mockUpdateInterval);
+  }
+
+  /**
+   * Simulate movement with random variations (fallback)
+   */
+  private startRandomGPS(): void {
     this.mockInterval = window.setInterval(() => {
       // Add small random variations to position
       this.mockPosition.latitude +=
@@ -183,6 +256,134 @@ export class GPSService {
       // Fallback to mock data
       this.config.useMockData = true;
       this.startMockGPS();
+    }
+  }
+
+  /**
+   * Load and parse NMEA file
+   */
+  private async loadNMEAFile(): Promise<GPSPosition[]> {
+    if (this.nmeaFileLoaded) {
+      return this.nmeaPositions;
+    }
+
+    try {
+      const response = await fetch("/src/fake-api/kras-en.nmea");
+      if (!response.ok) {
+        throw new Error(`Failed to load NMEA file: ${response.statusText}`);
+      }
+
+      const text = await response.text();
+      const lines = text.split("\n");
+
+      const positions: GPSPosition[] = [];
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("$GPRMC")) {
+          const position = this.parseNMEASentence(trimmed);
+          if (
+            position &&
+            Number.isFinite(position.latitude) &&
+            Number.isFinite(position.longitude)
+          ) {
+            positions.push(position);
+          }
+        }
+      }
+
+      this.nmeaFileLoaded = true;
+      this.nmeaPositions = positions;
+      return positions;
+    } catch (error) {
+      console.error("Failed to load NMEA file:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Parse NMEA GPRMC sentence to extract GPS data
+   * Format: $GPRMC,time,status,lat,lat_dir,lon,lon_dir,speed,heading,date,mag_var,mag_var_dir*checksum
+   */
+  private parseNMEASentence(sentence: string): GPSPosition | null {
+    try {
+      // Remove $ and checksum
+      const cleanSentence = sentence.replace(/^\$|[\*\w]{2}$/g, "");
+      const fields = cleanSentence.split(",");
+
+      if (fields[0] !== "GPRMC" || fields.length < 9) {
+        return null;
+      }
+
+      // Extract fields
+      const status = fields[2]; // A = active, V = void
+      if (status !== "A") {
+        return null; // Skip invalid data
+      }
+
+      // Parse latitude (format: DDMM.MMMM)
+      const latRaw = fields[3];
+      const latDir = fields[4];
+      if (!latRaw || !latDir) return null;
+      const lat = this.parseNMEACoordinate(latRaw, latDir);
+      if (!lat) return null;
+
+      // Parse longitude (format: DDDMM.MMMM)
+      const lonRaw = fields[5];
+      const lonDir = fields[6];
+      if (!lonRaw || !lonDir) return null;
+      const lon = this.parseNMEACoordinate(lonRaw, lonDir);
+      if (!lon) return null;
+
+      // Parse speed (in knots)
+      const speedKnots = parseFloat(fields[7] ?? "");
+      const speed = Number.isFinite(speedKnots) ? speedKnots : undefined;
+
+      // Parse heading (course over ground in degrees)
+      const headingStr = fields[8] ?? "";
+      const heading = Number.isFinite(parseFloat(headingStr))
+        ? parseFloat(headingStr)
+        : undefined;
+
+      return {
+        latitude: lat,
+        longitude: lon,
+        heading,
+        speed,
+        altitude: undefined,
+        accuracy: undefined,
+        timestamp: Date.now(),
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Parse NMEA coordinate (lat/lon) to decimal degrees
+   * Latitude format: DDMM.MMMM (2 digits degrees, 2 digits minutes)
+   * Longitude format: DDDMM.MMMM (3 digits degrees, 2 digits minutes)
+   */
+  private parseNMEACoordinate(coord: string, direction: string): number | null {
+    try {
+      const value = parseFloat(coord);
+      if (!Number.isFinite(value)) return null;
+
+      // Extract degrees and minutes
+      const isLongitude = coord.length > 9;
+      const degreeLength = isLongitude ? 3 : 2;
+      const degrees = Math.floor(value / 100);
+      const minutes = value % 100;
+
+      let decimal = degrees + minutes / 60;
+
+      // Apply direction
+      if (direction === "S" || direction === "W") {
+        decimal = -decimal;
+      }
+
+      return decimal;
+    } catch (error) {
+      return null;
     }
   }
 

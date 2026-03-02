@@ -89,10 +89,10 @@
     if (!map || !isFollowingUser || !isFollowingHeading || latestHeadingDegrees === null) {
       return;
     }
-
-    const headingRadians = (latestHeadingDegrees * Math.PI) / 180;
+    
+    const headingRadians = (-latestHeadingDegrees * Math.PI) / 180;
     isProgrammaticMove = true;
-    map.getView().setRotation(-headingRadians);
+    map.getView().setRotation(headingRadians);
   }
 
   function resetMapRotation(): void {
