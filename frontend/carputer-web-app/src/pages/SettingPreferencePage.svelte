@@ -12,51 +12,54 @@
 
 <div class="translucent-overlay">
 
-    <!-- this is the exit buttion -->
-    <button style="position:absolute; top:2%; left:1%;" on:click={goBack}>Return</button>
+  <!-- this is the exit buttion -->
+  <!-- svelte-ignore a11y_consider_explicit_label -->
+  <button style="position:absolute; top:2%; left:1%;" on:click={goBack}>
+    <i class="iconoir-arrow-left" style="font-size: 24px;"></i>
+  </button>
 
-    <!-- this contains everything for settins -->
-    <div>
-        <!-- this is a box to show the title -->
-        <div class="title-box"> 
-            <h2>Settings</h2>
-        </div>
-
-        <!-- the box contains a settings functionality 
-            THIS IS ALL JUST TEMPORARY, I JUST DIDN'T WANT THIS PAGE
-            TO BE EMPY                                              -->
-        <div class="option-box">
-            <h3>Togle something</h3>
-            <input type="checkbox" style="margin-left: auto;"/>
-        </div>
-        
-        <div class="option-box">
-            <h3>Miles to Discover Roads</h3>
-            <input type="range" min="1" max="100" value="50" style="margin-left: auto;">
-        </div>
+  <!-- this contains everything for settins -->
+  <div>
+    <!-- this is a box to show the title -->
+    <div class="title-box"> 
+      <h2>Settings</h2>
     </div>
 
-
-    <!-- this contains everything for settins -->
-    <div>
-        <!-- This page will also have a Preferences title -->
-        <div class="title-box" style="margin-top: 10%;"> 
-            <h2>Preferences</h2>
-        </div>
-
-        <!-- the box contains a preferences functionality
-            THIS IS ALL JUST TEMPORARY, I JUST DIDN'T WANT THIS PAGE
-            TO BE EMPY                                              -->
-        <div class="option-box">
-            <h3>Night Mode</h3>
-            <input type="checkbox" style="margin-left: auto;"/>
-        </div>
+    <!-- the box contains a settings functionality 
+        THIS IS ALL JUST TEMPORARY, I JUST DIDN'T WANT THIS PAGE
+        TO BE EMPY                                              -->
+    <div class="option-box">
+      <h3>Togle something</h3>
+      <input type="checkbox" style="margin-left: auto;"/>
     </div>
+    
+    <div class="option-box">
+      <h3>Miles to Discover Roads</h3>
+      <input type="range" min="1" max="100" value="50" style="margin-left: auto;">
+    </div>
+  </div>
+
+
+  <!-- this contains everything for settins -->
+  <div>
+    <!-- This page will also have a Preferences title -->
+    <div class="title-box" style="margin-top: 10%;"> 
+      <h2>Preferences</h2>
+    </div>
+
+    <!-- the box contains a preferences functionality
+        THIS IS ALL JUST TEMPORARY, I JUST DIDN'T WANT THIS PAGE
+        TO BE EMPY                                              -->
+    <div class="option-box">
+      <h3>Night Mode</h3>
+      <input type="checkbox" style="margin-left: auto;"/>
+    </div>
+  </div>
 </div>
 
 
 <style>
-    .translucent-overlay {
+  .translucent-overlay {
     position: absolute;
     inset:0;
     background: rgba(190, 190, 190, 0.3);

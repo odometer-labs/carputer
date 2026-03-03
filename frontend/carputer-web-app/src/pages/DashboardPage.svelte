@@ -12,45 +12,48 @@
 
 <div class="translucent-overlay">
 
-    <!-- this is the exit buttion -->
-    <button style="position:absolute; top:2%; left:1%;" on:click={goBack}>Return</button>
+  <!-- this is the exit buttion -->
+  <!-- svelte-ignore a11y_consider_explicit_label -->
+  <button style="position:absolute; top:2%; left:1%;" on:click={goBack}>
+    <i class="iconoir-arrow-left" style="font-size: 24px;"></i>
+  </button>
 
-    <!-- this is a box to show the title -->
-    <div class="title-box"> 
-        <h2>System Info</h2>
+  <!-- this is a box to show the title -->
+  <div class="title-box"> 
+    <h2>System Info</h2>
+  </div>
+
+
+  <!-- this contains both the information of the system and import/export button-->
+  <div class="seperate-vert" style="height: 30%">
+
+    <!-- this is the information of the system -->
+    <div class="seperate-hori" style="height: 40%;">
+      <div class="info-box">
+        <h>Number of GPS Tracks: empty</h>
+      </div>
+      
+      <div class="info-box">
+        <h>Current Patch Level: empty</h>
+      </div>
     </div>
 
+    <!-- this section is for the export/import buttons -->
+    <div class="seperate-hori" style="height: 75%;">
+      <button>Import Track</button>
 
-    <!-- this contains both the information of the system and import/export button-->
-    <div class="seperate-vert" style="height: 30%">
-
-        <!-- this is the information of the system -->
-        <div class="seperate-hori" style="height: 40%;">
-            <div class="info-box">
-                <h>Number of GPS Tracks: empty</h>
-            </div>
-            
-            <div class="info-box">
-                <h>Current Patch Level: empty</h>
-            </div>
-        </div>
-
-        <!-- this section is for the export/import buttons -->
-        <div class="seperate-hori" style="height: 75%;">
-            <button>Import Track</button>
-
-            <button>Export Track</button>
-        </div>
+      <button>Export Track</button>
     </div>
+  </div>
 
-    <!-- this button is for checking updates of the system.-->
-    <button style="margin-left: 5%;">Check for Updates</button>
-    
+  <!-- this button is for checking updates of the system.-->
+  <button style="margin-left: 5%;">Check for Updates</button>
+  
 </div>
 
 
 <style>
-    .translucent-overlay {
+  .translucent-overlay {
     position: absolute;
     inset:0;
     background: rgba(190, 190, 190, 0.3);
