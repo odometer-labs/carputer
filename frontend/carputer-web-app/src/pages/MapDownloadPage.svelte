@@ -1,11 +1,5 @@
 <script>
-  import { push } from 'svelte-spa-router';
-
-  
-  // Function to navigate back to the home map page
-  function goBack() {
-    push('/');
-  }
+  import BackButton from "../assets/components/BackButton.svelte";
 
 </script>
 
@@ -13,10 +7,7 @@
 <div class="translucent-overlay">
     
   <!-- this is the exit buttion -->
-  <!-- svelte-ignore a11y_consider_explicit_label -->
-  <button style="position:absolute; top:2%; left:1%;" on:click={goBack}>
-    <i class="iconoir-arrow-left" style="font-size: 24px;"></i>
-  </button>
+  <BackButton />
 
   <!-- this is a box to show the title -->
   <div class="title-box"> 
