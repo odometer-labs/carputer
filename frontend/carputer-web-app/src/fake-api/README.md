@@ -31,8 +31,13 @@ The map will show simulated GPS movement around Portland State University.
 gpsfake -c 0.05 -n kras-en.nmea
 ```
 
-Replace `kras-en.nmea` with your NMEA log file path. Flags:
+OR
 
+```bash
+gpsfake -c 0.05 -n kras-en-heading-changes.nmea
+```
+
+Flags:
 - `-c 0.05` = 50ms delay between sentences (adjust for different speeds)
 - `-n` = don't wait for client before starting
 
