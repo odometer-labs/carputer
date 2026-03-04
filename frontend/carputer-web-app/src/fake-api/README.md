@@ -28,17 +28,17 @@ The map will show simulated GPS movement around Portland State University.
 **Terminal 1 - Start gpsfake:**
 
 ```bash
-gpsfake -c 0.05 -n kras-en.nmea
+gpsfake -c 0.01 -n kras-en.nmea
 ```
 
 OR
 
 ```bash
-gpsfake -c 0.05 -n kras-en-heading-changes.nmea
+gpsfake -c 0.01 -n kras-en-heading-changes.nmea
 ```
 
 Flags:
-- `-c 0.05` = 50ms delay between sentences (adjust for different speeds)
+- `-c 0.01` = 10ms delay between sentences (adjust for different speeds)
 - `-n` = don't wait for client before starting
 
 **Terminal 2 - Start GPS WebSocket bridge:**
