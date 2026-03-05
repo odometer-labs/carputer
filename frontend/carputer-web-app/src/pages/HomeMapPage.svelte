@@ -38,6 +38,13 @@
   // helper flags for distinguishing programmatic moves vs. user pan/zoom
   let isProgrammaticMove: boolean = false;
   let hasCenteredInitially: boolean = false;
+  let isProgrammaticRotationChange: boolean = false;
+  let rotationProgrammaticGuardTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  // touch tracking: allows pinch-zoom without breaking follow lock
+  let activeTouchPointerIds: Set<number> = new Set();
+  let pointerDownListener: ((event: PointerEvent) => void) | null = null;
+  let pointerUpListener: ((event: PointerEvent) => void) | null = null;
 
   // optional orientation listener reference (not currently used)
   let orientationListener: ((event: DeviceOrientationEvent) => void) | null = null;
@@ -58,6 +65,16 @@
         window.removeEventListener('deviceorientationabsolute', orientationListener);
         window.removeEventListener('deviceorientation', orientationListener);
       }
+
+      if (mapElement && pointerDownListener && pointerUpListener) {
+        mapElement.removeEventListener('pointerdown', pointerDownListener);
+        mapElement.removeEventListener('pointerup', pointerUpListener);
+        mapElement.removeEventListener('pointercancel', pointerUpListener);
+      }
+
+      if (rotationProgrammaticGuardTimeout !== null) {
+        clearTimeout(rotationProgrammaticGuardTimeout);
+      }
     };
   });
 
@@ -65,11 +82,10 @@
    * Initialize the OpenLayers map and attach event handlers.
    *
    * - Creates a basic map with OSM tiles and a default view.
-   * - Listens for "movestart"/"moveend" so we can tell when the user
-   *   pans/zooms versus when we call view.animate() programmatically.
-   * - Adds native pointerdown/wheel listeners on the map element itself to
-   *   cancel tracking immediately, avoiding the small delay that OpenLayers
-   *   sometimes introduces.
+  * - Tracks active touch pointers so we can distinguish one-finger pan
+  *   (break lock) from two-finger pinch zoom (keep lock).
+  * - Uses pointerdrag/moveend to distinguish user-driven movement from
+  *   programmatic recenter/rotation updates.
    */
   function loadMap(): void {
     // Create the map
@@ -89,8 +105,31 @@
       })
     });
 
+    if (mapElement) {
+      pointerDownListener = (event: PointerEvent) => {
+        if (event.pointerType === 'touch') {
+          activeTouchPointerIds.add(event.pointerId);
+        }
+      };
+
+      pointerUpListener = (event: PointerEvent) => {
+        if (event.pointerType === 'touch') {
+          activeTouchPointerIds.delete(event.pointerId);
+        }
+      };
+
+      mapElement.addEventListener('pointerdown', pointerDownListener);
+      mapElement.addEventListener('pointerup', pointerUpListener);
+      mapElement.addEventListener('pointercancel', pointerUpListener);
+    }
+
     // break lock only when the user drags/pans the map
     map.on('pointerdrag', () => {
+      const isPinchGesture = activeTouchPointerIds.size >= 2;
+      if (isPinchGesture) {
+        return;
+      }
+
       if (!isProgrammaticMove && (isFollowingUser || isFollowingHeading)) {
         isFollowingUser = false;
         isFollowingHeading = false;
@@ -102,6 +141,20 @@
     // clear the programmatic move flag once motion finishes
     map.on('moveend', () => {
       isProgrammaticMove = false;
+    });
+
+    // if user manually rotates while in compass mode, drop back to simple follow.
+    // no need to call updateUserMarkerStyle() here — rotateWithView:true makes OL
+    // apply the current view rotation every render frame automatically.
+    map.getView().on('change:rotation', () => {
+      if (isProgrammaticRotationChange) {
+        return;
+      }
+
+      if (isFollowingHeading) {
+        isFollowingHeading = false;
+        updateUserMarkerStyle(); // switch button icon state
+      }
     });
 
     // intentionally do not break lock on wheel/pinch zoom
@@ -151,6 +204,7 @@
     
     const headingRadians = (-latestHeadingDegrees * Math.PI) / 180;
     isProgrammaticMove = true;
+    beginProgrammaticRotationGuard();
     // Set rotation immediately without animation to stay in sync with rapid GPS updates
     map.getView().setRotation(headingRadians);
   }
@@ -165,6 +219,7 @@
     }
 
     isProgrammaticMove = true;
+    beginProgrammaticRotationGuard(350);
 
     // point map toward the north
     map.getView().setRotation(0);
@@ -173,6 +228,22 @@
       rotation: 0,
       duration: 300
     });
+  }
+
+  /**
+   * Temporarily ignore rotation-change events triggered by our own code.
+   */
+  function beginProgrammaticRotationGuard(durationMs: number = 50): void {
+    isProgrammaticRotationChange = true;
+
+    if (rotationProgrammaticGuardTimeout !== null) {
+      clearTimeout(rotationProgrammaticGuardTimeout);
+    }
+
+    rotationProgrammaticGuardTimeout = setTimeout(() => {
+      isProgrammaticRotationChange = false;
+      rotationProgrammaticGuardTimeout = null;
+    }, durationMs);
   }
 
 
@@ -199,16 +270,24 @@
 
     if (isFollowingUser && latestHeadingDegrees !== null) {
       // Show heading arrow while locked on user.
+      // rotateWithView: true means OL adds the current view rotation to this value
+      // on every render frame, so the arrow stays correct in real-time as the map
+      // rotates without needing to update the style on each rotation event.
+      // Formula is the same for both compass and non-compass modes:
+      //   pixelRotation = (H * π/180) + viewRotation
+      // In compass mode viewRotation = -H*π/180, so pixelRotation = 0 (points up). ✓
+      // In non-compass mode pixelRotation = H*π/180 + viewRotation as desired. ✓
       const iconUrl = getIconoirArrowUrl();
-      const markerRotation = isFollowingHeading ? 0 : (latestHeadingDegrees * Math.PI) / 180;
+      const markerRotation = (latestHeadingDegrees * Math.PI) / 180;
       
       userMarker.setStyle(new Style({
         image: new Icon({
           src: iconUrl,
-          anchor: [0.5, 0.5],        // center of icon
-          scale: 1,                // slightly larger for visibility
+          anchor: [0.5, 0.5],
+          scale: 1,
           rotation: markerRotation,
-          crossOrigin: 'anonymous',  // allow loading from CDN
+          rotateWithView: true,
+          crossOrigin: 'anonymous',
         })
       }));
     } else {
@@ -332,6 +411,7 @@
       isFollowingHeading = false;
       updateUserMarkerStyle();
       centerOnUserLocation(true);
+      resetMapRotation();
       return;
     }
 
