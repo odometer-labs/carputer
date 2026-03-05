@@ -88,7 +88,7 @@
       ],
       view: new View({
         center: fromLonLat([0, 0]), // Default center
-        zoom: 2
+        zoom: 15
       }),
       controls: defaultControls({
         rotate: false, // disable default rotation control since we handle it ourselves

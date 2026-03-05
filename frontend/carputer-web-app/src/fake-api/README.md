@@ -74,9 +74,13 @@ The WebSocket host is resolved dynamically from `window.location.hostname`, so t
 **Terminal 1 - Start gpsfake (WSL or Linux):**
 
 ```bash
-gpsfake -c 0.1 -n kras-en.nmea
+gpsfake -c 0.01 -n kras-en.nmea
 ```
+OR
 
+```bash
+gpsfake -c 0.01 -n kras-en-heading-changes.nmea
+```
 **Terminal 2 - Start GPS WebSocket bridge:**
 
 ```bash
