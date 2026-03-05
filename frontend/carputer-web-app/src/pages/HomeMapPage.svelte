@@ -11,6 +11,9 @@
   import VectorSource from 'ol/source/Vector.js';
   import { Style, Circle, Fill, Stroke } from 'ol/style.js';
   import 'ol/ol.css';
+  import { push } from 'svelte-spa-router';
+
+  import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
 
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
@@ -26,7 +29,7 @@
     // Cleanup when component is destroyed
     return () => {
       if (map) {
-        map.setTarget(null);
+        map.setTarget(undefined);
       }
       if (watchId !== null) {
         navigator.geolocation.clearWatch(watchId);
@@ -116,6 +119,26 @@
     }
   }
 
+  // this function changes route to /SettingPreference
+  function goToSettingPreference() : void {
+    push("/SettingPreference");
+  }
+
+  // this function changes route to /Wifi
+  function goToWifi() : void {
+    push("/Wifi");
+  }
+
+  // this function changes route to /Dashboard
+  function goToDashboard() : void {
+    push("/Dashboard");
+  }
+  
+  // this function changes route to /Dashboard
+  function goToMapDownload() : void {
+    push("/MapDownload");
+  }
+
   let isDropdownOpen: boolean = false;
 </script>
 
@@ -144,7 +167,7 @@
     <div class="dropdown-menu">
       <ul style="list-style: none; margin: 0; padding: 10px;">
         <li style="padding: 0;">
-            <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false;}}>
+            <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false; goToWifi()}}>
               <i class="iconoir-wifi dropdown-menu_btn_icons"></i>
               Wifi
               <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
@@ -153,7 +176,7 @@
             </button>
         </li>
         <li style="padding: 0;">
-            <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false;}}>
+            <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false; goToMapDownload()}}>
               <i class="iconoir-download dropdown-menu_btn_icons"></i>
               Download Map
               <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
@@ -162,7 +185,7 @@
             </button>
         </li>
         <li style="padding: 0;">
-            <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false;}}>
+            <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false; goToSettingPreference()}}>
               <i class="iconoir-settings dropdown-menu_btn_icons"></i>
               Settings
               <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
@@ -171,7 +194,7 @@
             </button>
         </li>
         <li style="padding: 0;">
-          <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false;}}>
+          <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false; goToDashboard()}}>
             <i class="iconoir-info-circle dropdown-menu_btn_icons"></i>
             System Info
             <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
