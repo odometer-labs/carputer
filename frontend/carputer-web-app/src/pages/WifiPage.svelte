@@ -33,7 +33,7 @@
 
     </label>
 
-    <h3>{wifiStatus}</h3>
+    <h3 class={isWifiOn ? "wifi_text_on" : "wifi_text_off"}>{wifiStatus}</h3>
   </div>
 
 
@@ -61,6 +61,16 @@
     color: black;
   }
 
+  .wifi_text_on {
+    color: rgb(33, 140, 0);
+    font-size: 18px;
+    margin-left: 5%;
+  }
+  .wifi_text_off {
+    color: rgb(180, 42, 0);
+    font-size: 18px;
+    margin-left: 5%;
+  } 
   .switch {
     cursor: pointer;
     color: #333;
