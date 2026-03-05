@@ -13,6 +13,8 @@
   import 'ol/ol.css';
   import { push } from 'svelte-spa-router';
 
+  import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
+
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
   let locationStatus: string = 'Getting location...';

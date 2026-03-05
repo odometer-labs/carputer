@@ -1,5 +1,6 @@
 <script>
   import BackButton from "../assets/components/BackButton.svelte";
+  
 
 </script>
 
@@ -21,27 +22,25 @@
 
 
 <style>
-  .translucent-overlay {
-    position: absolute;
-    inset:0;
-    background: rgba(190, 190, 190, 0.3);
-    z-index: 1000;
-    backdrop-filter: blur(1.5px);
-    overflow-y: auto;
-  }
-
-  .title-box {
-    background: rgba(194, 194, 194, 0.9);
-    text-align: center;
-    border: 2px solid rgba(0, 0, 0, 1);
-    color: rgb(0, 0, 0);
-  }
-
   .download-map-btn {
     position:relative; 
     margin-top: 5%; 
     left: 5%;
-    background-color: lightgrey;
+  
+    background-color: var(--primary-color);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+
+    border: 1px solid white;
+    outline: none;
+
+    display: flex;
+    align-items: center;
+
+    justify-content: center;
+  }
+  .download-map-btn:hover {
+    background-color: var(--secondary-color);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
   }
 
 </style>

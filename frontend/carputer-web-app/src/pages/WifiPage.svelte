@@ -1,8 +1,14 @@
 <script>
   import BackButton from "../assets/components/BackButton.svelte";
+  
 
   // this is for if the user wishes to turn off the wifi
-  let isWiFiOn = true;
+  let isWifiOn = true;
+
+  // text to let the user know if the switch is on or off.
+  let wifiStatus = "ON"
+  // Reactive statement
+  $: wifiStatus = isWifiOn ? "ON" : "OFF";
 
 </script>
 
@@ -18,19 +24,23 @@
   </div>
 
   <!-- This button is to disable the wifi -->
-  <label class="switch">
-    <input type="checkbox" bind:checked={isWiFiOn} />
-    
-    <!-- Icon changes based on state -->
-    <i class={isWiFiOn ? "iconoir-switch-on" : "iconoir-switch-off"}></i>
+  <div class="switch-box">
+    <label class="switch">
+      <input type="checkbox" bind:checked={isWifiOn} />
+      
+      <!-- Icon changes based on state -->
+      <i class={isWifiOn ? "iconoir-switch-on" : "iconoir-switch-off"}></i>
 
-  </label>
+    </label>
+
+    <h3>{wifiStatus}</h3>
+  </div>
 
 
   <!-- this is just a box to tell the user that below
       is the current connection                       -->
   <div class="option-box">
-    <h3>currently Connected To:</h3>
+    <h3>Currently Connected To:</h3>
   </div>
   
   <!-- this is just a box to tell the user that below
@@ -43,22 +53,6 @@
 
 
 <style>
-  .translucent-overlay {
-    position: absolute;
-    inset:0;
-    background: rgba(190, 190, 190, 0.3);
-    z-index: 1000;
-    backdrop-filter: blur(1.5px);
-    overflow-y: auto;
-  }
-
-  .title-box {
-    background: rgba(194, 194, 194, 0.9);
-    border: 2px solid rgba(0, 0, 0, 1);
-    text-align: center;
-    color: rgb(0, 0, 0);
-  }
-
   .option-box {
     display: flex;
     border-bottom: 1px solid rgba(0, 0, 0, 0.5);
@@ -68,10 +62,11 @@
   }
 
   .switch {
-    position: absolute;
     cursor: pointer;
-    top: 1%;
-    right: 3%;
+    color: #333;
+
+    display: inline-block;
+    cursor: pointer;
   }
 
   .switch input {
@@ -80,6 +75,17 @@
 
   .switch i {
     font-size: 64px;
+    display: inline-block;
+    cursor: pointer;
+  }
+
+  .switch-box {
+    position: absolute;
+    top: 1%;
+    right: 0%;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr); 
+    gap: 10px;
   }
     
 </style>

@@ -1,0 +1,15 @@
+.translucent-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(190, 190, 190, 0.3);
+  z-index: 1000;
+  backdrop-filter: blur(1.5px);
+  overflow-y: auto;
+}
+
+.title-box {
+  background-color: rgba(188, 188, 188, 0.9);
+  border: 2px solid black;
+  text-align: center;
+  color: black;
+}

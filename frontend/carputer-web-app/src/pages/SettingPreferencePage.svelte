@@ -1,6 +1,9 @@
 <script>
   import BackButton from "../assets/components/BackButton.svelte";
 
+  // this is just a template of what we can do
+  let miles = 50;
+
 </script>
 
 
@@ -26,7 +29,11 @@
     
     <div class="option-box">
       <h3>Miles to Discover Roads</h3>
-      <input type="range" min="1" max="100" value="50" style="margin-left: auto;">
+      
+      <div class="controls">
+        <input type="range" min="0" max="100" bind:value={miles} step="5">
+        <span style="text-align: right; width: 30px;"><b>{miles}</b></span>
+      </div>
     </div>
   </div>
 
@@ -50,27 +57,24 @@
 
 
 <style>
-  .translucent-overlay {
-    position: absolute;
-    inset:0;
-    background: rgba(190, 190, 190, 0.3);
-    z-index: 1000;
-    backdrop-filter: blur(1.5px);
-    overflow-y: auto;
-  }
-
-  .title-box {
-    background: rgba(194, 194, 194, 0.9);
-    text-align: center;
-    border: 2px solid rgba(0, 0, 0, 1);
-    color: rgb(0, 0, 0);
-  }
-
   .option-box {
     display: flex;
+    align-items: center;
+    justify-content: space-between;
     border: 1px solid rgba(0, 0, 0, 0.5);
     padding-left: 5%;
     padding-right: 5%;
     color: black;
   }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+  }
+  .controls input[type="range"] {
+  width: 250px;
+}
+
 </style>

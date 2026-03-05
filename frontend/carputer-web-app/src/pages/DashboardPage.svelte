@@ -31,35 +31,19 @@
 
     <!-- this section is for the export/import buttons -->
     <div class="seperate-hori" style="height: 75%;">
-      <button>Import Track</button>
+      <button class="button-color">Import Track</button>
 
-      <button>Export Track</button>
+      <button class="button-color">Export Track</button>
     </div>
   </div>
 
   <!-- this button is for checking updates of the system.-->
-  <button style="margin-left: 5%;">Check for Updates</button>
+  <button class="button-color" style="margin-left: 5%;">Check for Updates</button>
   
 </div>
 
 
 <style>
-  .translucent-overlay {
-    position: absolute;
-    inset:0;
-    background: rgba(190, 190, 190, 0.3);
-    z-index: 1000;
-    backdrop-filter: blur(1.5px);
-    overflow-y: auto;
-  }
-
-  .title-box {
-    background: rgba(194, 194, 194, 0.9);
-    text-align: center;
-    border: 2px solid rgba(0, 0, 0, 1);
-    color: rgb(0, 0, 0);
-  }
-
   .info-box {
     display: flex;
     align-items: center;
@@ -84,6 +68,23 @@
     flex-direction: column;
     justify-content: space-around;
     height: 100%;
+  }
+
+  .button-color {
+    background-color: var(--primary-color);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+
+    border: 1px solid white;
+    outline: none;
+
+    display: flex;
+    align-items: center;
+
+    justify-content: center;
+  }
+  .button-color:hover {
+    background-color: var(--secondary-color);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
   }
 
 </style>
