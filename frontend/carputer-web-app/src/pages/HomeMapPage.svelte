@@ -4,6 +4,7 @@
   import View from 'ol/View.js';
   import TileLayer from 'ol/layer/Tile.js';
   import OSM from 'ol/source/OSM.js';
+  import { defaults as defaultControls } from 'ol/control/defaults.js';
   import { fromLonLat } from 'ol/proj.js';
   import Feature from 'ol/Feature.js';
   import Point from 'ol/geom/Point.js';
@@ -82,14 +83,19 @@
       view: new View({
         center: fromLonLat([0, 0]), // Default center
         zoom: 2
+      }),
+      controls: defaultControls({
+        rotate: false, // disable default rotation control since we handle it ourselves
       })
     });
 
-    // mark any user-initiated movement so we stop following
-    map.on('movestart', () => {
-      if (!isProgrammaticMove) {
+    // break lock only when the user drags/pans the map
+    map.on('pointerdrag', () => {
+      if (!isProgrammaticMove && (isFollowingUser || isFollowingHeading)) {
         isFollowingUser = false;
         isFollowingHeading = false;
+        updateUserMarkerStyle(); // show circle instead of arrow
+        resetMapRotation(); // point map north if we were heading-following
       }
     });
 
@@ -98,21 +104,8 @@
       isProgrammaticMove = false;
     });
 
-    // extra listeners on the DOM element give snappier response than OL events
-    if (mapElement) {
-      let apply_map_changes = () =>{
-        isFollowingUser = false;
-        isFollowingHeading = false;
-        updateUserMarkerStyle(); // show circle instead of arrow
-      }
-      mapElement.addEventListener('pointerdown', () => {
-        apply_map_changes();
-      });
-
-      mapElement.addEventListener('wheel', () => {
-        apply_map_changes();
-      }, { passive: true });
-    }
+    // intentionally do not break lock on wheel/pinch zoom
+    // users can zoom while still following their position
   }
 
 
@@ -333,12 +326,12 @@
    *   resets the map to north-up and rotates the marker.
    */
   function snapToUserLocation(): void {
+    map?.getView().setZoom(15);
     if (!isFollowingUser) {
       isFollowingUser = true;
       isFollowingHeading = false;
       updateUserMarkerStyle();
       centerOnUserLocation(true);
-      map?.getView().setZoom(15);
       return;
     }
 
@@ -362,9 +355,9 @@
       <!-- svelte-ignore a11y_consider_explicit_label -->
     <button class="snap_nav_btn" on:click={snapToUserLocation}>
       {#if !isFollowingUser || isFollowingHeading}
-        <i class="iconoir-maps-arrow" style="font-size: 24px;"></i>
+        <i class="iconoir-maps-arrow" style="font-size: 28px;"></i>
       {:else}
-        <i class="iconoir-compass" style="font-size: 24px;"></i>
+        <i class="iconoir-compass" style="font-size: 28px;"></i>
       {/if}
     </button>
   </div>
@@ -456,7 +449,7 @@
     border: 2px solid #ccc;
     border-radius: 4px;
   }
-  /* I need to make this whole button bigger */
+  
   .snap_nav_icon {
     position: absolute;
     bottom: 20px;
@@ -472,6 +465,9 @@
     width: 60px;
     height: 60px;
     padding: 0px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
     border: 1px solid white;
     border-radius: 50%;
@@ -502,6 +498,9 @@
     padding: 0px;
     width: 60px;
     height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
     border: 1px solid white;
     border-radius: 50%;
@@ -548,6 +547,12 @@
     top: 4px;
     color: black;
     font-weight: bold;
+  }
+
+  .snap_nav_btn i,
+  .hamburger_menu_icon_btn i {
+    display: block;
+    line-height: 1;
   }
 
 </style>
