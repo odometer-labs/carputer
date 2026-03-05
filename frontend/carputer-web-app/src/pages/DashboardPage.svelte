@@ -71,20 +71,20 @@
   }
 
   .button-color {
-    background-color: var(--primary-color);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    background-color: rgba(188, 188, 188, 0.9);
 
-    border: 1px solid white;
+    color: black;
+
     outline: none;
 
     display: flex;
     align-items: center;
 
     justify-content: center;
+    border: none;
   }
   .button-color:hover {
-    background-color: var(--secondary-color);
-    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+    background-color: rgba(202, 202, 202, 0.9);
   }
 
 </style>

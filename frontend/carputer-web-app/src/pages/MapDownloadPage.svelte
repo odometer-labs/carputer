@@ -27,10 +27,10 @@
     margin-top: 5%; 
     left: 5%;
   
-    background-color: var(--primary-color);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    background-color: rgba(188, 188, 188, 0.9);
+    color: black;
 
-    border: 1px solid white;
+    border: none;
     outline: none;
 
     display: flex;
@@ -39,8 +39,8 @@
     justify-content: center;
   }
   .download-map-btn:hover {
-    background-color: var(--secondary-color);
-    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+    background-color: rgba(202, 202, 202, 0.9);
+    box-shadow: none;
   }
 
 </style>
