@@ -29,7 +29,7 @@
     // Cleanup when component is destroyed
     return () => {
       if (map) {
-        map.setTarget(null);
+        map.setTarget(undefined);
       }
       if (watchId !== null) {
         navigator.geolocation.clearWatch(watchId);
