@@ -10,9 +10,16 @@ export const GPS_CONFIG = {
   USE_MOCK_DATA: false,
 
   // gpsfake WebSocket server configuration
+  // Host defaults to whatever hostname the page was loaded from, so that
+  // remote devices (phones on the same network via --host) automatically
+  // connect back to the dev machine instead of their own localhost.
   GPSFAKE: {
     port: 8765,
-    host: "localhost",
+    get host(): string {
+      return typeof window !== "undefined"
+        ? window.location.hostname
+        : "localhost";
+    },
   },
 
   // Mock data configuration

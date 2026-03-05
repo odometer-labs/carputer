@@ -15,38 +15,35 @@
   import { gpsService } from '../fake-api/gpsService';
   import type { GPSPosition } from '../fake-api/types';
 
-  // references to DOM and OpenLayers objects
-  let mapElement: HTMLDivElement | undefined;          // container div bound by Svelte
-  let map: Map | undefined;                            // OpenLayers Map instance
-
-  // status text shown somewhere in the UI (not currently rendered)
+  let mapElement: HTMLDivElement | undefined;
+  let map: Map | undefined;
   let locationStatus: string = 'Getting location...';
 
-  // layers and features used for the user's position marker
+  // position marker objects
   let userLayer: VectorLayer | undefined;
   let userMarker: Feature<Point> | undefined;
   let vectorSource: VectorSource | undefined;
 
-  // latest coordinates (in view projection) and heading from GPS feed
+  // latest GPS state (map projection coords + heading)
   let latestUserCoords: number[] | null = null;
   let latestHeadingDegrees: number | null = null;
 
-  // tracking state flags triggered by user interaction or code
-  let isFollowingUser: boolean = true;        // are we locked to the user's position?
-  let isFollowingHeading: boolean = false;    // if true also rotate map to heading
+  // follow-lock state: position only vs. position + heading (compass mode)
+  let isFollowingUser: boolean = true;
+  let isFollowingHeading: boolean = false;
 
-  // helper flags for distinguishing programmatic moves vs. user pan/zoom
+  // guards that prevent user-gesture handlers from reacting to our own view changes
   let isProgrammaticMove: boolean = false;
   let hasCenteredInitially: boolean = false;
   let isProgrammaticRotationChange: boolean = false;
   let rotationProgrammaticGuardTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  // touch tracking: allows pinch-zoom without breaking follow lock
+  // active touch pointer IDs — used to distinguish one-finger pan from pinch-zoom
   let activeTouchPointerIds: Set<number> = new Set();
   let pointerDownListener: ((event: PointerEvent) => void) | null = null;
   let pointerUpListener: ((event: PointerEvent) => void) | null = null;
 
-  // optional orientation listener reference (not currently used)
+  // device orientation listener (reserved for future compass integration)
   let orientationListener: ((event: DeviceOrientationEvent) => void) | null = null;
 
   // run once when the Svelte component is mounted
@@ -54,14 +51,11 @@
     loadMap();             // create map instance and hook events
     startGPSTracking();    // begin receiving simulated GPS data
 
-    // Cleanup closure returned by onMount: called when component is destroyed
     return () => {
-      if (map) {
-        map.setTarget(undefined); // remove map from DOM
-      }
-      gpsService.stop();          // stop fake GPS polling
+      map?.setTarget(undefined);
+      gpsService.stop();
+
       if (orientationListener) {
-        // remove any attached device orientation listeners
         window.removeEventListener('deviceorientationabsolute', orientationListener);
         window.removeEventListener('deviceorientation', orientationListener);
       }
@@ -79,16 +73,12 @@
   });
 
   /**
-   * Initialize the OpenLayers map and attach event handlers.
-   *
-   * - Creates a basic map with OSM tiles and a default view.
-  * - Tracks active touch pointers so we can distinguish one-finger pan
-  *   (break lock) from two-finger pinch zoom (keep lock).
-  * - Uses pointerdrag/moveend to distinguish user-driven movement from
-  *   programmatic recenter/rotation updates.
+   * Initialize the OpenLayers map and attach all event handlers.
+   * Distinguishes user pan (breaks lock) from pinch-zoom (keeps lock) via
+   * active touch pointer tracking, and guards programmatic view changes with
+   * isProgrammaticMove / isProgrammaticRotationChange flags.
    */
   function loadMap(): void {
-    // Create the map
     map = new Map({
       target: mapElement,
       layers: [
@@ -123,42 +113,31 @@
       mapElement.addEventListener('pointercancel', pointerUpListener);
     }
 
-    // break lock only when the user drags/pans the map
+    // one-finger drag breaks lock; two-finger pinch does not
     map.on('pointerdrag', () => {
-      const isPinchGesture = activeTouchPointerIds.size >= 2;
-      if (isPinchGesture) {
-        return;
-      }
+      if (activeTouchPointerIds.size >= 2) return;
 
       if (!isProgrammaticMove && (isFollowingUser || isFollowingHeading)) {
         isFollowingUser = false;
         isFollowingHeading = false;
-        updateUserMarkerStyle(); // show circle instead of arrow
-        resetMapRotation(); // point map north if we were heading-following
+        updateUserMarkerStyle();
+        resetMapRotation();
       }
     });
 
-    // clear the programmatic move flag once motion finishes
     map.on('moveend', () => {
       isProgrammaticMove = false;
     });
 
-    // if user manually rotates while in compass mode, drop back to simple follow.
-    // no need to call updateUserMarkerStyle() here — rotateWithView:true makes OL
-    // apply the current view rotation every render frame automatically.
+    // manual map rotation exits compass mode but keeps position lock
     map.getView().on('change:rotation', () => {
-      if (isProgrammaticRotationChange) {
-        return;
-      }
+      if (isProgrammaticRotationChange) return;
 
       if (isFollowingHeading) {
         isFollowingHeading = false;
-        updateUserMarkerStyle(); // switch button icon state
+        updateUserMarkerStyle();
       }
     });
-
-    // intentionally do not break lock on wheel/pinch zoom
-    // users can zoom while still following their position
   }
 
 
@@ -178,68 +157,44 @@
     const view = map.getView();
     
     if (zoomToUser) {
-      // Cancel any existing animations to ensure a fresh start
       view.cancelAnimations();
-      view.animate({
-        center: latestUserCoords,
-        zoom: 15,
-        duration: 500
-      });
+      view.animate({ center: latestUserCoords, zoom: 15, duration: 500 });
     } else {
-      // For continuous tracking, set the center immediately without animation
-      // This prevents animations from queuing up when GPS updates arrive rapidly
+      // Set immediately — avoids queuing up animations on rapid GPS updates
       view.setCenter(latestUserCoords);
     }
   }
 
   /**
-   * Rotate the map view to match the user's heading (compass north-up).
-   * This only runs when tracking both user and heading; in locked-on mode
-   * but heading-off we leave the map north-up and rotate the marker instead.
+   * Rotate the map to match the user's heading (compass mode).
+   * Only active when both isFollowingUser and isFollowingHeading are true.
+   * In simple-follow mode the map stays north-up and the marker rotates instead.
    */
   function applyHeadingRotation(): void {
     if (!map || !isFollowingUser || !isFollowingHeading || latestHeadingDegrees === null) {
       return;
     }
-    
+
     const headingRadians = (-latestHeadingDegrees * Math.PI) / 180;
     isProgrammaticMove = true;
     beginProgrammaticRotationGuard();
-    // Set rotation immediately without animation to stay in sync with rapid GPS updates
     map.getView().setRotation(headingRadians);
   }
 
-  /**
-   * Return the map to north-up orientation with a small animation.
-   * Called when the user toggles heading-follow off.
-   */
+  /** Animate the map back to north-up. Called when exiting compass mode. */
   function resetMapRotation(): void {
-    if (!map) {
-      return;
-    }
+    if (!map) return;
 
     isProgrammaticMove = true;
     beginProgrammaticRotationGuard(350);
-
-    // point map toward the north
     map.getView().setRotation(0);
-
-    map.getView().animate({
-      rotation: 0,
-      duration: 300
-    });
+    map.getView().animate({ rotation: 0, duration: 300 });
   }
 
-  /**
-   * Temporarily ignore rotation-change events triggered by our own code.
-   */
+  /** Suppress the change:rotation handler for durationMs after a programmatic rotation. */
   function beginProgrammaticRotationGuard(durationMs: number = 50): void {
     isProgrammaticRotationChange = true;
-
-    if (rotationProgrammaticGuardTimeout !== null) {
-      clearTimeout(rotationProgrammaticGuardTimeout);
-    }
-
+    if (rotationProgrammaticGuardTimeout !== null) clearTimeout(rotationProgrammaticGuardTimeout);
     rotationProgrammaticGuardTimeout = setTimeout(() => {
       isProgrammaticRotationChange = false;
       rotationProgrammaticGuardTimeout = null;
@@ -247,51 +202,35 @@
   }
 
 
-  // utility returning the path to the locally hosted arrow SVG used for
-  // the user marker.  switching the returned string lets you easily swap
-  // designs without touching the rest of the drawing code.
   function getIconoirArrowUrl(): string {
-    // path is relative to the site root once the app is built
     return '/src/assets/icons/maps-arrow-blue-white.svg';
   }
 
   /**
-   * Adjust the style of the position marker based on tracking state.
+   * Update the position marker style to reflect current tracking state.
    *
-   * - when following the user with a heading available, render an arrow SVG
-   *   oriented appropriately (map rotates in heading-follow mode; marker
-   *   rotates in north-up lock mode).
-   * - otherwise fall back to a simple blue circle.
+   * When locked on the user with a heading, renders a directional arrow SVG.
+   * rotateWithView:true lets OpenLayers apply the current view rotation every
+   * render frame, so the arrow stays correct during live map rotation without
+   * needing style updates on each change:rotation event.
+   *
+   * Falls back to a plain blue circle when not locked or heading is unknown.
    */
   function updateUserMarkerStyle(): void {
-    if (!userMarker) {
-      return;
-    }
+    if (!userMarker) return;
 
     if (isFollowingUser && latestHeadingDegrees !== null) {
-      // Show heading arrow while locked on user.
-      // rotateWithView: true means OL adds the current view rotation to this value
-      // on every render frame, so the arrow stays correct in real-time as the map
-      // rotates without needing to update the style on each rotation event.
-      // Formula is the same for both compass and non-compass modes:
-      //   pixelRotation = (H * π/180) + viewRotation
-      // In compass mode viewRotation = -H*π/180, so pixelRotation = 0 (points up). ✓
-      // In non-compass mode pixelRotation = H*π/180 + viewRotation as desired. ✓
-      const iconUrl = getIconoirArrowUrl();
-      const markerRotation = (latestHeadingDegrees * Math.PI) / 180;
-      
       userMarker.setStyle(new Style({
         image: new Icon({
-          src: iconUrl,
+          src: getIconoirArrowUrl(),
           anchor: [0.5, 0.5],
           scale: 1,
-          rotation: markerRotation,
+          rotation: (latestHeadingDegrees * Math.PI) / 180,
           rotateWithView: true,
           crossOrigin: 'anonymous',
         })
       }));
     } else {
-      // Show regular circle marker
       userMarker.setStyle(new Style({
         image: new Circle({
           radius: 8,
@@ -302,20 +241,11 @@
     }
   }
 
-  
-  /* Note for startGPSTracking():
-    Getting GPS location from the fake API for testing.
-    Defaults to mock data but can connect to gpsfake if available.
-    Change useMockData to false in gpsService.ts to connect to gpsfake instead.
-  */
   /**
-   * Start receiving positions from the fake GPS service.
-   * Every update drives several pieces of state:
-   *  - convert lon/lat to map projection and store in latestUserCoords
-   *  - remember heading if available
-   *  - create or move the marker feature and refresh its style
-   *  - optionally recentre/zoom the map for tracking
-   *  - apply map rotation when heading-following
+   * Start receiving positions from the GPS service (NMEA playback or gpsfake).
+   * Each update: stores coords and heading, creates/moves the marker feature,
+   * recentres the map if locked, and applies heading rotation in compass mode.
+   * See src/fake-api/README.md for mode switching and configuration.
    */
   function startGPSTracking(): void {
     gpsService.start(
@@ -330,7 +260,7 @@
         
         if (map) {
           if (!userMarker) {
-            // first GPS fix: create feature, layer and style
+            // first fix: create marker feature and add to map
             userMarker = new Feature({
               geometry: new Point(coords)
             });
@@ -357,7 +287,7 @@
 
             map.addLayer(userLayer);
           } else {
-            // subsequent fixes: move existing feature and refresh style
+            // subsequent fixes: move marker and refresh style
             const geometry = userMarker.getGeometry();
             if (geometry) {
               geometry.setCoordinates(coords);
@@ -375,11 +305,9 @@
           }
 
           if (!hasCenteredInitially) {
-            // on first fix zoom in
             centerOnUserLocation(true);
             hasCenteredInitially = true;
           } else if (isFollowingUser) {
-            // on later fixes just recenter without animation
             centerOnUserLocation(false);
           }
 
