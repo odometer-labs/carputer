@@ -1,5 +1,8 @@
 <script>
   import BackButton from "../assets/components/BackButton.svelte";
+  import cloud_download from "../assets/cloud-download-bold.svg";
+  import cloud_upload from "../assets/cloud-upload-bold.svg";
+  import check_mark from "../assets/check-circle-bold.svg";
 
 </script>
 
@@ -31,14 +34,23 @@
 
     <!-- this section is for the export/import buttons -->
     <div class="seperate-hori" style="height: 75%;">
-      <button class="button-color">Import Track</button>
+      <button class="button-color">
+        <img src={cloud_download} alt="Import" class="icons" />
+        Import Track
+      </button>
 
-      <button class="button-color">Export Track</button>
+      <button class="button-color">
+        <img src={cloud_upload} alt="Export" class="icons" />
+        Export Track
+      </button>
     </div>
   </div>
 
   <!-- this button is for checking updates of the system.-->
-  <button class="button-color" style="margin-left: 5%;">Check for Updates</button>
+  <button class="button-color" style="margin-left: 5%;">
+    <img src={check_mark} alt="Check" class="icons" />
+    Check for Updates
+  </button>
   
 </div>
 
@@ -71,7 +83,7 @@
   }
 
   .button-color {
-    background-color: rgba(188, 188, 188, 0.9);
+    background-color: rgba(188, 188, 188);
 
     color: black;
 
@@ -84,7 +96,13 @@
     border: none;
   }
   .button-color:hover {
-    background-color: rgba(202, 202, 202, 0.9);
+    background-color: rgba(202, 202, 202);
+  }
+
+  .icons {
+    width: 24px;
+    height: 24px;
+    margin-right: 8px;
   }
 
 </style>
