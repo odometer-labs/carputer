@@ -1,13 +1,13 @@
 # Systemd Services
 
 This directory contains systemd service files for automatic startup of the Carputer application on Raspberry Pi.
+This is for manual control. HIGHLY recommend to use `setup.sh` in `infrastructure/`
 
 ## Services
 
 | Service | Description |
 |---------|-------------|
 | `carputer.service` | Main Carputer application (FastAPI backend) |
-| `carputer-gps.service` | GPS daemon (gpsd) for GPS module communication |
 
 ## Installation
 
@@ -23,7 +23,6 @@ sudo systemctl daemon-reload
 Enable services to start on boot:
 
 ```bash
-sudo systemctl enable carputer-gps.service
 sudo systemctl enable carputer.service
 ```
 
@@ -31,7 +30,6 @@ sudo systemctl enable carputer.service
 
 ```bash
 # Start services
-sudo systemctl start carputer-gps.service
 sudo systemctl start carputer.service
 
 # Check status
