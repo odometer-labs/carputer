@@ -24,6 +24,9 @@ export const GPS_CONFIG = {
 
   // Mock data configuration
   MOCK: {
+    // Optional: replay bundled NMEA route instead of random mock movement
+    useNMEAPlayback: false,
+
     // Update interval in milliseconds
     updateInterval: 1000,
 

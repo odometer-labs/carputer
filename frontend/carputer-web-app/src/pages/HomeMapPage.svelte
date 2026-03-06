@@ -49,6 +49,8 @@
   // device orientation listener (reserved for future compass integration)
   let orientationListener: ((event: DeviceOrientationEvent) => void) | null = null;
 
+  let zoomLevel: number = 18; // default zoom level when centering on user
+
   // run once when the Svelte component is mounted
   onMount(() => {
     loadMap();             // create map instance and hook events
@@ -91,7 +93,7 @@
       ],
       view: new View({
         center: fromLonLat([0, 0]), // Default center
-        zoom: 15
+        zoom: zoomLevel
       }),
       controls: defaultControls({
         rotate: false, // disable default rotation control since we handle it ourselves
@@ -161,7 +163,7 @@
     
     if (zoomToUser) {
       view.cancelAnimations();
-      view.animate({ center: latestUserCoords, zoom: 15, duration: 500 });
+      view.animate({ center: latestUserCoords, zoom: zoomLevel, duration: 500 });
     } else {
       // Set immediately — avoids queuing up animations on rapid GPS updates
       view.setCenter(latestUserCoords);
@@ -336,7 +338,7 @@
    *   resets the map to north-up and rotates the marker.
    */
   function snapToUserLocation(): void {
-    map?.getView().setZoom(15);
+    map?.getView().setZoom(zoomLevel);
     if (!isFollowingUser) {
       isFollowingUser = true;
       isFollowingHeading = false;

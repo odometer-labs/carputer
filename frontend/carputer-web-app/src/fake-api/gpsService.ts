@@ -29,6 +29,8 @@ export class GPSService {
       gpsfakeHost: config.gpsfakeHost ?? GPS_CONFIG.GPSFAKE.host,
       mockUpdateInterval:
         config.mockUpdateInterval ?? GPS_CONFIG.MOCK.updateInterval,
+      useNMEAPlayback:
+        config.useNMEAPlayback ?? GPS_CONFIG.MOCK.useNMEAPlayback,
     };
 
     // Initial mock position
@@ -47,8 +49,18 @@ export class GPSService {
    * Start listening for GPS updates
    */
   public start(onUpdate: GPSUpdateCallback, onError?: GPSErrorCallback): void {
+    // Stop any existing session before starting a new one.
+    this.stop();
+
     this.onUpdate = onUpdate;
     this.onError = onError || (() => {});
+
+    // Read the latest values so runtime config changes are respected.
+    this.config.useMockData = GPS_CONFIG.USE_MOCK_DATA;
+    this.config.gpsfakePort = GPS_CONFIG.GPSFAKE.port;
+    this.config.gpsfakeHost = GPS_CONFIG.GPSFAKE.host;
+    this.config.mockUpdateInterval = GPS_CONFIG.MOCK.updateInterval;
+    this.config.useNMEAPlayback = GPS_CONFIG.MOCK.useNMEAPlayback;
 
     if (this.config.useMockData) {
       this.startMockGPS();
@@ -76,6 +88,13 @@ export class GPSService {
    * Start mock GPS data generation - loads from NMEA file or falls back to random
    */
   private startMockGPS(): void {
+    this.resetMockPositionToDefault();
+
+    if (!this.config.useNMEAPlayback) {
+      this.startRandomGPS();
+      return;
+    }
+
     this.loadNMEAFile().then((positions) => {
       if (positions.length > 0) {
         this.nmeaPositions = positions;
@@ -86,6 +105,21 @@ export class GPSService {
         this.startRandomGPS();
       }
     });
+  }
+
+  /**
+   * Reset mock coordinates to configured defaults.
+   */
+  private resetMockPositionToDefault(): void {
+    this.mockPosition = {
+      latitude: GPS_CONFIG.MOCK.defaultLocation.latitude,
+      longitude: GPS_CONFIG.MOCK.defaultLocation.longitude,
+      altitude: GPS_CONFIG.MOCK.defaultLocation.altitude,
+      accuracy: GPS_CONFIG.MOCK.defaultLocation.accuracy,
+      heading: 0,
+      speed: 0,
+      timestamp: Date.now(),
+    };
   }
 
   /**

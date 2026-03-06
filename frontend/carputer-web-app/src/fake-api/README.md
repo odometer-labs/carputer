@@ -6,20 +6,20 @@ This folder contains a fake API layer for testing the frontend with simulated GP
 
 The fake API provides two modes for GPS data:
 
-1. **Mock Data Mode** (default) - Replays positions from a local NMEA file, or falls back to random movement if the file can't be loaded.
+1. **Mock Data Mode** (default) - Simulates random movement around the configured default location (PSU).
 2. **gpsfake Mode** - Connects to a real gpsfake + gpsd daemon via WebSocket bridge for realistic testing.
 
 ## Quick Start
 
 ### Option 1: Mock Data (No Setup Required)
 
-The app replays the bundled NMEA file by default. Just run:
+The app uses random mock movement around PSU by default. Just run:
 
 ```bash
 npm run dev
 ```
 
-The map will show simulated GPS movement from the bundled route data.
+The map will show simulated GPS movement near the configured mock default location.
 
 ### Option 2: Real GPS Data via gpsfake (Recommended)
 
@@ -72,6 +72,13 @@ Look for: `Connected to gpsfake server` in browser DevTools → Console.
 The WebSocket host is resolved dynamically from `window.location.hostname`, so the app automatically connects to the right machine regardless of whether it's opened from `localhost` or a network IP.
 
 **Terminal 1 - Start gpsfake (WSL or Linux):**
+Make sure to cd into frontend/carputer-web-app/src/fake-api to access the NMEA files:
+
+```bash
+cd frontend/carputer-web-app/src/fake-api
+```
+
+Then run:
 
 ```bash
 gpsfake -c 0.01 -n kras-en.nmea
@@ -81,7 +88,9 @@ OR
 ```bash
 gpsfake -c 0.01 -n kras-en-heading-changes.nmea
 ```
+
 **Terminal 2 - Start GPS WebSocket bridge:**
+Make sure to cd into frontend/carputer-web-app to access the config:
 
 ```bash
 cd frontend/carputer-web-app
@@ -89,12 +98,20 @@ npm run dev:gps
 ```
 
 **Terminal 3 - Start frontend with network access:**
+Make sure to cd into frontend/carputer-web-app:
 
 ```bash
+cd frontend/carputer-web-app
 npm run dev -- --host
 ```
 
 Vite will print a **Network** URL like `http://192.168.x.x:5173`. Open that on your phone (must be on the same Wi-Fi network). The WebSocket bridge and GPS data will work without any extra configuration.
+
+You could also run the simple local host:
+```bash
+cd frontend/carputer-web-app
+npm run dev
+``` 
 
 ## Configuration
 
@@ -104,7 +121,7 @@ Edit `src/fake-api/config.ts` and change `USE_MOCK_DATA`:
 
 ```typescript
 export const GPS_CONFIG = {
-  USE_MOCK_DATA: true, // ← true = NMEA file playback, false = gpsfake WebSocket
+  USE_MOCK_DATA: true, // ← true = mock simulation, false = gpsfake WebSocket
 
   GPSFAKE: {
     port: 8765,
@@ -118,6 +135,7 @@ export const GPS_CONFIG = {
   },
 
   MOCK: {
+    useNMEAPlayback: false, // set true to replay /src/fake-api/kras-en.nmea
     updateInterval: 1000,
     defaultLocation: {
       latitude: 45.5147,
@@ -136,7 +154,7 @@ Or use the helper functions at runtime:
 ```typescript
 import { useMockData, useGPSFake, toggleGPSMode } from "./config";
 
-useMockData(); // Switch to NMEA file playback
+useMockData(); // Switch to mock simulation
 useGPSFake(); // Switch to gpsfake WebSocket connection
 toggleGPSMode(); // Toggle between the two modes
 ```
@@ -214,5 +232,6 @@ gpsfake -S      -n file.nmea   # Ultra-realistic timing from NMEA timestamps
 ## Notes
 
 - This folder is temporary and should be removed when the real backend GPS integration is complete
-- Mock mode defaults to replaying `kras-en.nmea`; falls back to random movement if the file can't be fetched
+- Mock mode defaults to random movement near the configured default location
+- Set `GPS_CONFIG.MOCK.useNMEAPlayback = true` to replay `kras-en.nmea` instead
 - Default mock location is Portland State University (45.5147°N, 122.6819°W)

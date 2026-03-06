@@ -22,6 +22,8 @@ export interface GPSServiceConfig {
   gpsfakeHost?: string;
   // Update interval for mock data (ms)
   mockUpdateInterval?: number;
+  // Replay NMEA route file in mock mode when true
+  useNMEAPlayback?: boolean;
 }
 
 export type GPSUpdateCallback = (position: GPSPosition) => void;
