@@ -4,13 +4,16 @@
   import View from 'ol/View.js';
   import TileLayer from 'ol/layer/Tile.js';
   import OSM from 'ol/source/OSM.js';
+  import { defaults as defaultControls } from 'ol/control/defaults.js';
   import { fromLonLat } from 'ol/proj.js';
   import Feature from 'ol/Feature.js';
   import Point from 'ol/geom/Point.js';
   import VectorLayer from 'ol/layer/Vector.js';
   import VectorSource from 'ol/source/Vector.js';
-  import { Style, Circle, Fill, Stroke } from 'ol/style.js';
+  import { Style, Circle, Fill, Stroke, RegularShape, Icon } from 'ol/style.js';
   import 'ol/ol.css';
+  import { gpsService } from '../fake-api/gpsService';
+  import type { GPSPosition } from '../fake-api/types';
   import { push } from 'svelte-spa-router';
 
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
@@ -18,31 +21,69 @@
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
   let locationStatus: string = 'Getting location...';
-  let watchId: number | null = null;
+
+  // position marker objects
   let userLayer: VectorLayer | undefined;
+  let userMarker: Feature<Point> | undefined;
+  let vectorSource: VectorSource | undefined;
+
+  // latest GPS state (map projection coords + heading)
+  let latestUserCoords: number[] | null = null;
+  let latestHeadingDegrees: number | null = null;
+
+  // follow-lock state: position only vs. position + heading (compass mode)
+  let isFollowingUser: boolean = true;
+  let isFollowingHeading: boolean = false;
+
+  // guards that prevent user-gesture handlers from reacting to our own view changes
+  let isProgrammaticMove: boolean = false;
+  let hasCenteredInitially: boolean = false;
+  let isProgrammaticRotationChange: boolean = false;
+  let rotationProgrammaticGuardTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  // active touch pointer IDs — used to distinguish one-finger pan from pinch-zoom
+  let activeTouchPointerIds: Set<number> = new Set();
+  let pointerDownListener: ((event: PointerEvent) => void) | null = null;
+  let pointerUpListener: ((event: PointerEvent) => void) | null = null;
+
+  // device orientation listener (reserved for future compass integration)
   let orientationListener: ((event: DeviceOrientationEvent) => void) | null = null;
 
-  onMount(() => {
-    loadMap();
-    snapToUserLocation();
+  let zoomLevel: number = 18; // default zoom level when centering on user
 
-    // Cleanup when component is destroyed
+  // run once when the Svelte component is mounted
+  onMount(() => {
+    loadMap();             // create map instance and hook events
+    startGPSTracking();    // begin receiving simulated GPS data
+
     return () => {
-      if (map) {
-        map.setTarget(undefined);
-      }
-      if (watchId !== null) {
-        navigator.geolocation.clearWatch(watchId);
-      }
+      map?.setTarget(undefined);
+      gpsService.stop();
+
       if (orientationListener) {
         window.removeEventListener('deviceorientationabsolute', orientationListener);
         window.removeEventListener('deviceorientation', orientationListener);
       }
+
+      if (mapElement && pointerDownListener && pointerUpListener) {
+        mapElement.removeEventListener('pointerdown', pointerDownListener);
+        mapElement.removeEventListener('pointerup', pointerUpListener);
+        mapElement.removeEventListener('pointercancel', pointerUpListener);
+      }
+
+      if (rotationProgrammaticGuardTimeout !== null) {
+        clearTimeout(rotationProgrammaticGuardTimeout);
+      }
     };
   });
 
+  /**
+   * Initialize the OpenLayers map and attach all event handlers.
+   * Distinguishes user pan (breaks lock) from pinch-zoom (keeps lock) via
+   * active touch pointer tracking, and guards programmatic view changes with
+   * isProgrammaticMove / isProgrammaticRotationChange flags.
+   */
   function loadMap(): void {
-    // Create the map
     map = new Map({
       target: mapElement,
       layers: [
@@ -52,43 +93,193 @@
       ],
       view: new View({
         center: fromLonLat([0, 0]), // Default center
-        zoom: 2
+        zoom: zoomLevel
+      }),
+      controls: defaultControls({
+        rotate: false, // disable default rotation control since we handle it ourselves
       })
+    });
+
+    if (mapElement) {
+      pointerDownListener = (event: PointerEvent) => {
+        if (event.pointerType === 'touch') {
+          activeTouchPointerIds.add(event.pointerId);
+        }
+      };
+
+      pointerUpListener = (event: PointerEvent) => {
+        if (event.pointerType === 'touch') {
+          activeTouchPointerIds.delete(event.pointerId);
+        }
+      };
+
+      mapElement.addEventListener('pointerdown', pointerDownListener);
+      mapElement.addEventListener('pointerup', pointerUpListener);
+      mapElement.addEventListener('pointercancel', pointerUpListener);
+    }
+
+    // one-finger drag breaks lock; two-finger pinch does not
+    map.on('pointerdrag', () => {
+      if (activeTouchPointerIds.size >= 2) return;
+
+      if (!isProgrammaticMove && (isFollowingUser || isFollowingHeading)) {
+        isFollowingUser = false;
+        isFollowingHeading = false;
+        updateUserMarkerStyle();
+        resetMapRotation();
+      }
+    });
+
+    map.on('moveend', () => {
+      isProgrammaticMove = false;
+    });
+
+    // manual map rotation exits compass mode but keeps position lock
+    map.getView().on('change:rotation', () => {
+      if (isProgrammaticRotationChange) return;
+
+      if (isFollowingHeading) {
+        isFollowingHeading = false;
+        updateUserMarkerStyle();
+      }
     });
   }
 
-  /* Note for snapToUserLocation():
-    Right now, we are currently getting the user's location from browser data.
-    As soon as we can start getting data from the hardware this will need to change.
-  */
-  function snapToUserLocation(): void {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position: GeolocationPosition) => {
-          const lon: number = position.coords.longitude;
-          const lat: number = position.coords.latitude;
-          const coords = fromLonLat([lon, lat]);
-          
-          // Center map on user's location
-          if (map) {
-            map.getView().setCenter(coords);
-            map.getView().setZoom(19); // Zoom in to city level
-            
-            // Add a marker at the user's location
-            const marker = new Feature({
+
+  /**
+   * Move the map view to the user's latest coordinates.
+   *
+   * @param zoomToUser when true, perform a smooth animation including zoom;
+   *                   otherwise just jump the center (used for continuous
+   *                   tracking so animations don't stack up).
+   */
+  function centerOnUserLocation(zoomToUser: boolean = false): void {
+    if (!map || !latestUserCoords) {
+      return;
+    }
+
+    isProgrammaticMove = true; // suppress movestart handler reaction
+    const view = map.getView();
+    
+    if (zoomToUser) {
+      view.cancelAnimations();
+      view.animate({ center: latestUserCoords, zoom: zoomLevel, duration: 500 });
+    } else {
+      // Set immediately — avoids queuing up animations on rapid GPS updates
+      view.setCenter(latestUserCoords);
+    }
+  }
+
+  /**
+   * Rotate the map to match the user's heading (compass mode).
+   * Only active when both isFollowingUser and isFollowingHeading are true.
+   * In simple-follow mode the map stays north-up and the marker rotates instead.
+   */
+  function applyHeadingRotation(): void {
+    if (!map || !isFollowingUser || !isFollowingHeading || latestHeadingDegrees === null) {
+      return;
+    }
+
+    const headingRadians = (-latestHeadingDegrees * Math.PI) / 180;
+    isProgrammaticMove = true;
+    beginProgrammaticRotationGuard();
+    map.getView().setRotation(headingRadians);
+  }
+
+  /** Animate the map back to north-up. Called when exiting compass mode. */
+  function resetMapRotation(): void {
+    if (!map) return;
+
+    isProgrammaticMove = true;
+    beginProgrammaticRotationGuard(350);
+    map.getView().setRotation(0);
+    map.getView().animate({ rotation: 0, duration: 300 });
+  }
+
+  /** Suppress the change:rotation handler for durationMs after a programmatic rotation. */
+  function beginProgrammaticRotationGuard(durationMs: number = 50): void {
+    isProgrammaticRotationChange = true;
+    if (rotationProgrammaticGuardTimeout !== null) clearTimeout(rotationProgrammaticGuardTimeout);
+    rotationProgrammaticGuardTimeout = setTimeout(() => {
+      isProgrammaticRotationChange = false;
+      rotationProgrammaticGuardTimeout = null;
+    }, durationMs);
+  }
+
+
+  function getIconoirArrowUrl(): string {
+    return '/src/assets/icons/maps-arrow-blue-white.svg';
+  }
+
+  /**
+   * Update the position marker style to reflect current tracking state.
+   *
+   * When locked on the user with a heading, renders a directional arrow SVG.
+   * rotateWithView:true lets OpenLayers apply the current view rotation every
+   * render frame, so the arrow stays correct during live map rotation without
+   * needing style updates on each change:rotation event.
+   *
+   * Falls back to a plain blue circle when not locked or heading is unknown.
+   */
+  function updateUserMarkerStyle(): void {
+    if (!userMarker) return;
+
+    if (isFollowingUser && latestHeadingDegrees !== null) {
+      userMarker.setStyle(new Style({
+        image: new Icon({
+          src: getIconoirArrowUrl(),
+          anchor: [0.5, 0.5],
+          scale: 1,
+          rotation: (latestHeadingDegrees * Math.PI) / 180,
+          rotateWithView: true,
+          crossOrigin: 'anonymous',
+        })
+      }));
+    } else {
+      userMarker.setStyle(new Style({
+        image: new Circle({
+          radius: 8,
+          fill: new Fill({ color: '#3399CC' }),
+          stroke: new Stroke({ color: '#fff', width: 2 })
+        })
+      }));
+    }
+  }
+
+  /**
+   * Start receiving positions from the GPS service (NMEA playback or gpsfake).
+   * Each update: stores coords and heading, creates/moves the marker feature,
+   * recentres the map if locked, and applies heading rotation in compass mode.
+   * See src/fake-api/README.md for mode switching and configuration.
+   */
+  function startGPSTracking(): void {
+    gpsService.start(
+      (position: GPSPosition) => {
+        const lon: number = position.longitude;
+        const lat: number = position.latitude;
+        if (typeof position.heading === 'number' && Number.isFinite(position.heading)) {
+          latestHeadingDegrees = position.heading;
+        }
+        const coords = fromLonLat([lon, lat]);
+        latestUserCoords = coords;
+        
+        if (map) {
+          if (!userMarker) {
+            // first fix: create marker feature and add to map
+            userMarker = new Feature({
               geometry: new Point(coords)
             });
-            
-            marker.setStyle(new Style({
+
+            userMarker.setStyle(new Style({
               image: new Circle({
                 radius: 8,
                 fill: new Fill({ color: '#3399CC' }),
                 stroke: new Stroke({ color: '#fff', width: 2 })
               })
             }));
-            
-            const vectorSource = new VectorSource({
-              features: [marker]
+
+            vectorSource = new VectorSource({
+              features: [userMarker]
             });
 
             if (userLayer) {
@@ -100,22 +291,70 @@
             });
 
             map.addLayer(userLayer);
+          } else {
+            // subsequent fixes: move marker and refresh style
+            const geometry = userMarker.getGeometry();
+            if (geometry) {
+              geometry.setCoordinates(coords);
+            } else {
+              userMarker.setGeometry(new Point(coords));
+            }
             
-            locationStatus = `Location: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
-            console.log('User location:', lat, lon);
+            if (isFollowingUser) {
+              updateUserMarkerStyle();
+            }
+            
+            if (vectorSource) {
+              vectorSource.changed();
+            }
           }
-        },
-        (error: GeolocationPositionError) => {
-          console.error('Geolocation error:', error.message);
-          locationStatus = 'Location access denied or unavailable';
-        },
-        {
-          enableHighAccuracy: true,
-          maximumAge: 0
+
+          if (!hasCenteredInitially) {
+            centerOnUserLocation(true);
+            hasCenteredInitially = true;
+          } else if (isFollowingUser) {
+            centerOnUserLocation(false);
+          }
+
+          applyHeadingRotation();
+          
+          locationStatus = `Location: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+          // console.log('GPS Position:', lat, lon);
         }
-      );
+      },
+      (error: string) => {
+        console.error('GPS error:', error);
+        locationStatus = `GPS Error: ${error}`;
+      }
+    );
+  }
+
+  /**
+   * Handler for the teleport/compass button in the UI.
+   * - if we are currently not tracking, start following the user and
+   *   zoom to 15.
+   * - if we are already following, toggle the heading-follow state.
+   *   Turning heading-follow on causes the map to rotate; turning it off
+   *   resets the map to north-up and rotates the marker.
+   */
+  function snapToUserLocation(): void {
+    map?.getView().setZoom(zoomLevel);
+    if (!isFollowingUser) {
+      isFollowingUser = true;
+      isFollowingHeading = false;
+      updateUserMarkerStyle();
+      centerOnUserLocation(true);
+      resetMapRotation();
+      return;
+    }
+
+    isFollowingHeading = !isFollowingHeading;
+    updateUserMarkerStyle();
+
+    if (isFollowingHeading) {
+      applyHeadingRotation();
     } else {
-      locationStatus = 'Geolocation not supported by browser';
+      resetMapRotation();
     }
   }
 
@@ -147,7 +386,13 @@
   
   <div class="snap_nav_icon">
       <!-- svelte-ignore a11y_consider_explicit_label -->
-    <button class="snap_nav_btn" on:click={snapToUserLocation}><i class="iconoir-maps-arrow" style="font-size: 24px;"></i></button>
+    <button class="snap_nav_btn" on:click={snapToUserLocation}>
+      {#if !isFollowingUser || isFollowingHeading}
+        <i class="iconoir-maps-arrow" style="font-size: 28px;"></i>
+      {:else}
+        <i class="iconoir-compass" style="font-size: 28px;"></i>
+      {/if}
+    </button>
   </div>
 
   <!-- This is the button to toggle the hamburger menu -->
@@ -237,7 +482,7 @@
     border: 2px solid #ccc;
     border-radius: 4px;
   }
-
+  
   .snap_nav_icon {
     position: absolute;
     bottom: 20px;
@@ -245,10 +490,17 @@
     z-index: 1000;
     display: flex;
     flex-direction: column;
+    justify-content: center;
+    align-items: center;
     gap: 10px;
   }
   .snap_nav_btn {
-    padding: 15px;
+    width: 60px;
+    height: 60px;
+    padding: 0px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
     border: 1px solid white;
     border-radius: 50%;
@@ -271,10 +523,17 @@
     z-index: 1000;
     display: flex;
     flex-direction: column;
+    justify-content: center;
+    align-items: center;
     gap: 10px;
   }
   .hamburger_menu_icon_btn {
-    padding: 10px;
+    padding: 0px;
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
     border: 1px solid white;
     border-radius: 50%;
@@ -321,6 +580,12 @@
     top: 4px;
     color: black;
     font-weight: bold;
+  }
+
+  .snap_nav_btn i,
+  .hamburger_menu_icon_btn i {
+    display: block;
+    line-height: 1;
   }
 
 </style>

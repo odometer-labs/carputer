@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:gps": "node scripts/gpsd-ws-bridge.mjs",
+    "dev:all": "npm run dev:gps",
     "build": "vite build",
     "preview": "vite preview",
     "type-check": "tsc --noEmit"
@@ -19,6 +21,7 @@
   "dependencies": {
     "iconoir": "^7.11.0",
     "ol": "^10.8.0",
-    "svelte-spa-router": "^4.0.1"
+    "svelte-spa-router": "^4.0.1",
+    "ws": "^8.18.3"
   }
 }
