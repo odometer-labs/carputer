@@ -1,10 +1,12 @@
 [Unit]
 Description=GPS Daemon for Carputer
+After=network.target chronyd.service
 Before=carputer.service
 
 [Service]
 Type=forking
-ExecStart=/usr/sbin/gpsd /dev/ttyUSB0 -F /var/run/gpsd.sock
+EnvironmentFile=-/etc/default/gpsd
+ExecStart=/usr/sbin/gpsd $GPSD_OPTIONS $OPTIONS $DEVICES
 Restart=always
 RestartSec=5
 
