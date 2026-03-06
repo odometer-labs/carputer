@@ -1,7 +1,7 @@
 [Unit]
 Description=GPS Carputer Application
-After=network.target postgresql.service carputer-gps.service
-Wants=postgresql.service carputer-gps.service
+After=network.target postgresql.service gpsd.service
+Wants=postgresql.service gpsd.service
 
 [Service]
 Type=simple
