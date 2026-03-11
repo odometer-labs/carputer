@@ -28,11 +28,11 @@
     </div>
     
     <div class="option-box">
-      <h3>Miles to Discover Roads</h3>
+      <h4>Road History</h4>
       
       <div class="controls">
         <input type="range" min="0" max="100" bind:value={miles} step="5">
-        <span style="text-align: right; width: 30px;"><b>{miles}</b></span>
+        <span style="text-align: right; width: 30px;"><b>{miles} miles</b></span>
       </div>
     </div>
   </div>
@@ -61,7 +61,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border: 1px solid rgba(0, 0, 0, 0.5);
+    border-top: 1px solid rgba(0, 0, 0, 0.5);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.5);
     padding-left: 5%;
     padding-right: 5%;
     color: black;
