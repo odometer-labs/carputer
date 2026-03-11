@@ -1,15 +1,21 @@
+import { writable, type Writable } from "svelte/store";
+
 const STORAGE_KEY = "carputer.preferences.v1";
 
 export interface Preferences {
   toggleSomething: boolean;
   milesToDiscoverRoads: number;
   nightMode: boolean;
+  brightness: number;
 }
+
+type PreferencesPatch = Partial<Preferences>;
 
 export const DEFAULT_PREFERENCES: Preferences = {
   toggleSomething: false,
   milesToDiscoverRoads: 50,
   nightMode: false,
+  brightness: 100,
 };
 
 function clampMiles(value: unknown): number {
@@ -23,6 +29,16 @@ function clampMiles(value: unknown): number {
   return Math.round(clamped / 5) * 5;
 }
 
+function clampBrightness(value: unknown): number {
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return DEFAULT_PREFERENCES.brightness;
+  }
+
+  return Math.round(Math.min(100, Math.max(10, numericValue)));
+}
+
 function sanitizePreferences(
   rawPreferences: Partial<Preferences> = {},
 ): Preferences {
@@ -30,6 +46,7 @@ function sanitizePreferences(
     toggleSomething: Boolean(rawPreferences.toggleSomething),
     milesToDiscoverRoads: clampMiles(rawPreferences.milesToDiscoverRoads),
     nightMode: Boolean(rawPreferences.nightMode),
+    brightness: clampBrightness(rawPreferences.brightness),
   };
 }
 
@@ -62,4 +79,24 @@ export function savePreferences(preferences: Partial<Preferences>): void {
     ...preferences,
   });
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
+}
+
+function createPreferencesStore(): Writable<Preferences> {
+  const initialPreferences = loadPreferences();
+  const store = writable<Preferences>(initialPreferences);
+
+  store.subscribe((preferences) => {
+    savePreferences(preferences);
+  });
+
+  return store;
+}
+
+export const preferences = createPreferencesStore();
+
+export function updatePreferences(patch: PreferencesPatch): void {
+  preferences.update((currentPreferences) => ({
+    ...currentPreferences,
+    ...patch,
+  }));
 }

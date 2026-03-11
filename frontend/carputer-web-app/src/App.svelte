@@ -1,5 +1,6 @@
 <script lang="ts">
   import { location } from 'svelte-spa-router';
+  import { preferences } from './services/preferences';
   import HomeMapPage from './pages/HomeMapPage.svelte';
   import SettingPreferencePage from './pages/SettingPreferencePage.svelte';
   import WifiPage from './pages/WifiPage.svelte'
@@ -18,10 +19,14 @@
   // Checks if current route needs an overlay
   // this is reactive, includes() function returns a true or false
   $: isOverlayRoute = overlayRoutes.includes($location);
-
+  $: appBrightness = ($preferences.brightness ?? 100) / 100;
 </script>
 
-<main style="margin: 0; padding: 0; height: 100%; width: 100%;">
+<main
+  class:night-mode={$preferences.nightMode}
+  class="app-shell"
+  style={`margin: 0; padding: 0; height: 100%; width: 100%; --app-brightness: ${appBrightness};`}
+>
   
   <!-- Pages are continuously mounted, visibility controlled by CSS. -->
    
@@ -64,8 +69,16 @@
 </main>
 
 <style>
-  main {
+  .app-shell {
     font-family: Arial, sans-serif;
+    background: #ffffff;
+    filter: brightness(var(--app-brightness, 1));
+    transition: filter 0.2s ease, background-color 0.2s ease;
+  }
+
+  .app-shell.night-mode {
+    background: #111111;
+    filter: invert(1) hue-rotate(180deg) brightness(var(--app-brightness, 1));
   }
 </style>
 

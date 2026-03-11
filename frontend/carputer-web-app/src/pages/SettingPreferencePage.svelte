@@ -1,31 +1,28 @@
-<script>
-  import { onMount } from "svelte";
+<script lang="ts">
   import BackButton from "../assets/components/BackButton.svelte";
   import {
-    DEFAULT_PREFERENCES,
-    loadPreferences,
-    savePreferences,
+    preferences,
+    updatePreferences,
   } from "../services/preferences";
 
-  let toggleSomething = DEFAULT_PREFERENCES.toggleSomething;
-  let milesToDiscoverRoads = DEFAULT_PREFERENCES.milesToDiscoverRoads;
-  let nightMode = DEFAULT_PREFERENCES.nightMode;
-  let hasLoadedPreferences = false;
+  function handleToggleSomethingChange(event: Event): void {
+    const input = event.currentTarget as HTMLInputElement;
+    updatePreferences({ toggleSomething: input.checked });
+  }
 
-  onMount(() => {
-    const persistedPreferences = loadPreferences();
-    toggleSomething = persistedPreferences.toggleSomething;
-    milesToDiscoverRoads = persistedPreferences.milesToDiscoverRoads;
-    nightMode = persistedPreferences.nightMode;
-    hasLoadedPreferences = true;
-  });
+  function handleMilesChange(event: Event): void {
+    const input = event.currentTarget as HTMLInputElement;
+    updatePreferences({ milesToDiscoverRoads: Number(input.value) });
+  }
 
-  $: if (hasLoadedPreferences) {
-    savePreferences({
-      toggleSomething,
-      milesToDiscoverRoads,
-      nightMode,
-    });
+  function handleNightModeChange(event: Event): void {
+    const input = event.currentTarget as HTMLInputElement;
+    updatePreferences({ nightMode: input.checked });
+  }
+
+  function handleBrightnessChange(event: Event): void {
+    const input = event.currentTarget as HTMLInputElement;
+    updatePreferences({ brightness: Number(input.value) });
   }
 
 </script>
@@ -48,15 +45,27 @@
         TO BE EMPY                                              -->
     <div class="option-box">
       <h3>Togle something</h3>
-      <input type="checkbox" style="margin-left: auto;" bind:checked={toggleSomething} />
+      <input
+        type="checkbox"
+        style="margin-left: auto;"
+        checked={$preferences.toggleSomething}
+        on:change={handleToggleSomethingChange}
+      />
     </div>
     
     <div class="option-box">
       <h3>Miles to Discover Roads</h3>
       
       <div class="controls">
-        <input type="range" min="0" max="100" bind:value={milesToDiscoverRoads} step="5">
-        <span style="text-align: right; width: 30px;"><b>{milesToDiscoverRoads}</b></span>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          value={$preferences.milesToDiscoverRoads}
+          step="5"
+          on:input={handleMilesChange}
+        >
+        <span style="text-align: right; width: 30px;"><b>{$preferences.milesToDiscoverRoads}</b></span>
       </div>
     </div>
   </div>
@@ -74,8 +83,29 @@
         TO BE EMPY                                              -->
     <div class="option-box">
       <h3>Night Mode</h3>
-      <input type="checkbox" style="margin-left: auto;" bind:checked={nightMode} />
+      <input
+        type="checkbox"
+        style="margin-left: auto;"
+        checked={$preferences.nightMode}
+        on:change={handleNightModeChange}
+      />
     </div>
+
+    <div class="option-box">
+      <h3>Brightness</h3>
+      
+      <div class="controls">
+        <input
+          type="range"
+          min="10"
+          max="100"
+          value={$preferences.brightness}
+          step="5"
+          on:input={handleBrightnessChange}
+        >
+        <span style="text-align: right; width: 52px;"><b>{$preferences.brightness}%</b></span>
+      </div>
+    </div>    
   </div>
 </div>
 
