@@ -19,9 +19,19 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=bind,source=requirements.txt,target=requirements.txt \
     uv pip install -r requirements.txt
 
+
+# Add non-root user
+RUN adduser --disabled-password appuser
+
 COPY . .
+
+# fix perms
+RUN chown -R appuser:appuser /app
 
 ENV PORT=8000
 EXPOSE 8000
+
+# Switch to non-root user
+USER appuser
 
 CMD ["fastapi", "run", "app/main.py"]
