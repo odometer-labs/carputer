@@ -1,9 +1,10 @@
--- 002_gps_functions.sql
--- Description: GPS Tracking System with automatic LineString generation.
+-- gps_functions.sql
 ---------------------------
 -- 1. EXTENSIONS & SCHEMA
 ---------------------------
 CREATE EXTENSION IF NOT EXISTS postgis;
+
+CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 CREATE SCHEMA IF NOT EXISTS gps;
 
@@ -266,6 +267,7 @@ FROM
     gps.track_lines AS tl
 WHERE
     tl.track_id <> latest_track_id
+    AND ST_DWithin(latest_geom, tl.geom, 500)
 ORDER BY
     latest_geom < -> tl.geom
 LIMIT
@@ -410,35 +412,26 @@ IF line_exists THEN
 UPDATE
     gps.track_lines
 SET
-    geom = ST_AddPoint(geom :: GEOMETRY, NEW.geom :: GEOMETRY) :: GEOGRAPHY
+    geom = ST_AddPoint(geom :: GEOMETRY, NEW.geom :: GEOMETRY, -1) :: GEOGRAPHY
 WHERE
     track_id = NEW.track_id;
 
 ELSE
-SELECT
-    COUNT(*) INTO point_count
-FROM
-    gps.track_points
-WHERE
-    track_id = NEW.track_id;
-
--- Initial LineString requires at least two points 
-IF point_count >= 2 THEN
 INSERT INTO
     gps.track_lines (track_id, geom)
 SELECT
     NEW.track_id,
     ST_MakeLine(
-        geom :: GEOMETRY
+        geom :: geometry
         ORDER BY
             time_stamp ASC
-    ) :: GEOGRAPHY
+    ) :: geography
 FROM
     gps.track_points
 WHERE
-    track_id = NEW.track_id;
-
-END IF;
+    track_id = NEW.track_id
+HAVING
+    COUNT(*) >= 2 ON CONFLICT (track_id) DO NOTHING;
 
 END IF;
 
