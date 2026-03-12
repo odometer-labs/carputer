@@ -7,6 +7,8 @@ export interface Preferences {
   milesToDiscoverRoads: number;
   nightMode: boolean;
   brightness: number;
+  defaultZoom: number;
+  iconSizeLevel: number;
 }
 
 type PreferencesPatch = Partial<Preferences>;
@@ -16,6 +18,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   milesToDiscoverRoads: 50,
   nightMode: false,
   brightness: 100,
+  defaultZoom: 18,
+  iconSizeLevel: 3,
 };
 
 function clampMiles(value: unknown): number {
@@ -39,6 +43,26 @@ function clampBrightness(value: unknown): number {
   return Math.round(Math.min(100, Math.max(10, numericValue)));
 }
 
+function clampZoom(value: unknown): number {
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return DEFAULT_PREFERENCES.defaultZoom;
+  }
+
+  return Math.round(Math.min(21, Math.max(12, numericValue)));
+}
+
+function clampIconSizeLevel(value: unknown): number {
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return DEFAULT_PREFERENCES.iconSizeLevel;
+  }
+
+  return Math.round(Math.min(5, Math.max(1, numericValue)));
+}
+
 function sanitizePreferences(
   rawPreferences: Partial<Preferences> = {},
 ): Preferences {
@@ -47,6 +71,8 @@ function sanitizePreferences(
     milesToDiscoverRoads: clampMiles(rawPreferences.milesToDiscoverRoads),
     nightMode: Boolean(rawPreferences.nightMode),
     brightness: clampBrightness(rawPreferences.brightness),
+    defaultZoom: clampZoom(rawPreferences.defaultZoom),
+    iconSizeLevel: clampIconSizeLevel(rawPreferences.iconSizeLevel),
   };
 }
 

@@ -25,6 +25,23 @@
     updatePreferences({ brightness: Number(input.value) });
   }
 
+  // defaultZoom stored as 12–21; displayed as 1–10 (display = zoom - 11)
+  function incrementZoom(): void {
+    preferences.update((p) => ({ ...p, defaultZoom: Math.min(21, p.defaultZoom + 1) }));
+  }
+
+  function decrementZoom(): void {
+    preferences.update((p) => ({ ...p, defaultZoom: Math.max(12, p.defaultZoom - 1) }));
+  }
+
+  function incrementIconSize(): void {
+    preferences.update((p) => ({ ...p, iconSizeLevel: Math.min(5, p.iconSizeLevel + 1) }));
+  }
+
+  function decrementIconSize(): void {
+    preferences.update((p) => ({ ...p, iconSizeLevel: Math.max(1, p.iconSizeLevel - 1) }));
+  }
+
 </script>
 
 
@@ -47,7 +64,7 @@
       <h3>Togle something</h3>
       <input
         type="checkbox"
-        style="margin-left: auto;"
+        class="checkbox"
         checked={$preferences.toggleSomething}
         on:change={handleToggleSomethingChange}
       />
@@ -85,7 +102,7 @@
       <h3>Night Mode</h3>
       <input
         type="checkbox"
-        style="margin-left: auto;"
+        class="checkbox"
         checked={$preferences.nightMode}
         on:change={handleNightModeChange}
       />
@@ -105,12 +122,38 @@
         >
         <span style="text-align: right; width: 52px;"><b>{$preferences.brightness}%</b></span>
       </div>
-    </div>    
+    </div>
+
+    <div class="option-box">
+      <h3>Default Lock Zoom</h3>
+      
+      <div class="controls">
+        <button class="zoom-btn" on:click={decrementZoom} disabled={$preferences.defaultZoom <= 12}>−</button>
+        <span class="zoom-value"><b>{$preferences.defaultZoom - 11}</b></span>
+        <button class="zoom-btn" on:click={incrementZoom} disabled={$preferences.defaultZoom >= 21}>+</button>
+      </div>
+    </div>
+
+    <div class="option-box">
+      <h3>Icon Size</h3>
+
+      <div class="controls">
+        <button class="zoom-btn" on:click={decrementIconSize} disabled={$preferences.iconSizeLevel <= 1}>−</button>
+        <span class="zoom-value"><b>{$preferences.iconSizeLevel}</b></span>
+        <button class="zoom-btn" on:click={incrementIconSize} disabled={$preferences.iconSizeLevel >= 5}>+</button>
+      </div>
+    </div>
   </div>
+
+
 </div>
 
 
 <style>
+
+  .checkbox {
+    transform: scale(1.5);
+  }
   .option-box {
     display: flex;
     align-items: center;
@@ -128,7 +171,30 @@
     margin-left: auto;
   }
   .controls input[type="range"] {
-  width: 250px;
-}
+    width: 250px;
+  }
+
+  .zoom-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 1.3rem;
+    -webkit-text-fill-color: black;
+    line-height: 1;
+    background-color: rgb(130, 130, 130);
+    border: 1px solid #ccc; 
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    outline: none;
+  }
+  .zoom-btn:active {
+    background-color: rgb(100, 100, 100);
+  }
+  .zoom-value {
+    min-width: 24px;
+    text-align: center;
+    font-size: 1.1rem;
+  }
 
 </style>
