@@ -20,4 +20,12 @@ export default tseslint.config(
       globals: globals.node,
     },
   },
+  {
+    // Node-specific scripts (e.g. gpsd-ws-bridge)
+    files: ["scripts/**/*.mjs", "scripts/**/*.js"],
+    languageOptions: {
+      globals: globals.node,
+      parserOptions: { sourceType: "module" },
+    },
+  },
 );

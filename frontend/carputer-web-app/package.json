@@ -10,11 +10,15 @@
     "build": "vite build",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
-    "lint": "eslint \"**/*.ts\""
+    "lint": "eslint \"**/*.ts\"",
+    "test": "vitest",
+    "test:watch": "vitest --watch"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "@testing-library/jest-dom": "^6.0.0",
+    "@testing-library/svelte": "^5.0.0",
     "@types/node": "^25.3.0",
     "eslint": "^10.0.3",
     "globals": "^17.4.0",
