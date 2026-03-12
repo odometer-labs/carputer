@@ -9,14 +9,21 @@
     "dev:all": "npm run dev:gps",
     "build": "vite build",
     "preview": "vite preview",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "lint": "eslint \"**/*.ts\""
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@sveltejs/vite-plugin-svelte": "^6.2.1",
     "@types/node": "^25.3.0",
+    "eslint": "^10.0.3",
+    "globals": "^17.4.0",
+    "jsdom": "^28.1.0",
     "svelte": "^5.45.2",
     "typescript": "^5.9.3",
-    "vite": "^7.3.1"
+    "typescript-eslint": "^8.57.0",
+    "vite": "^7.3.1",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "iconoir": "^7.11.0",
