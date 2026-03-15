@@ -1,0 +1,29 @@
+[Unit]
+Description=GPS Carputer Application
+After=network.target postgresql.service gpsd.service
+Wants=postgresql.service gpsd.service
+
+[Service]
+Type=simple
+User=emb_usr
+Group=emb_usr
+WorkingDirectory=/opt/carputer
+Environment=PATH=/opt/carputer/venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/opt/carputer/venv/bin/python -m api.src.main
+Restart=always
+RestartSec=10
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=carputer
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/opt/carputer /var/lib/carputer /var/log/carputer
+# Watchdog
+WatchdogSec=60
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target

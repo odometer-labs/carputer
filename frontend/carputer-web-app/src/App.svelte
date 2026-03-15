@@ -1,53 +1,71 @@
-<script>
-  import OpenlayersMap from './pages/OpenlayersMap.svelte';
+<script lang="ts">
+  import { location } from 'svelte-spa-router';
+  import HomeMapPage from './pages/HomeMapPage.svelte';
+  import SettingPreferencePage from './pages/SettingPreferencePage.svelte';
+  import WifiPage from './pages/WifiPage.svelte'
+  import DashboardPage from './pages/DashboardPage.svelte';
+  import MapDownloadPage from './pages/MapDownloadPage.svelte'
 
-  let openlayersMapComponent;
 
-  function handleSnapToLocation() {
-    if(openlayersMapComponent){
-      openlayersMapComponent.snapToUserLocation();
-    }
-  }
+
+  // this is a list of paths that want to have the HomeMapPage 
+  // in the background.
+  const overlayRoutes = ['/SettingPreference',
+                         '/Wifi', 
+                         '/Dashboard',
+                         '/MapDownload'];
+
+  // Checks if current route needs an overlay
+  // this is reactive, includes() function returns a true or false
+  $: isOverlayRoute = overlayRoutes.includes($location);
 
 </script>
 
-
 <main style="margin: 0; padding: 0; height: 100%; width: 100%;">
-  <OpenlayersMap bind:this={openlayersMapComponent} />
-
-  <div class="header">
-    <button on:click={handleSnapToLocation}>Snap to My Location</button>
+  
+  <!-- Pages are continuously mounted, visibility controlled by CSS. -->
+   
+  <div style:display={$location === '/' || isOverlayRoute ? 'block' : 'none'} style="height: 100%; width: 100%;">
+    <HomeMapPage />
   </div>
+
+
+    <!-- Settings and Preferences page -->
+  {#if $location === '/SettingPreference'}
+    <div style="height: 100%; width: 100%;">
+      <SettingPreferencePage />
+    </div>
+  {/if}
+
+
+    <!-- Wifi Page -->
+  {#if $location === '/Wifi'}
+    <div style="height: 100%; width: 100%;">
+      <WifiPage />
+    </div>
+  {/if}
+
+
+    <!-- Dashboard Page -->
+  {#if $location === '/Dashboard'}
+    <div style="height: 100%; width: 100%;">
+      <DashboardPage />
+    </div>
+  {/if}
+
+
+    <!-- Map DownLoad Page -->
+  {#if $location === '/MapDownload'}
+    <div style="height: 100%; width: 100%;">
+      <MapDownloadPage />
+    </div>
+  {/if}
 
 </main>
 
 <style>
-  .header {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    z-index: 1000;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  button {
-    padding: 10px 20px;
-    font-size: 14px;
-    cursor: pointer;
-    border: none;
-    border-radius: 8px;
-    background-color: rgba(255, 255, 255, 0.9);
-    color: #333;
-    font-weight: 500;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-    transition: all 0.2s;
-  }
-
-  button:hover {
-    background-color: rgba(255, 255, 255, 1);
-    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+  main {
+    font-family: Arial, sans-serif;
   }
 </style>
 
