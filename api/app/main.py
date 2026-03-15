@@ -10,4 +10,4 @@ app.include_router(websocket_server.router, tags=["Websocket"])
 @app.get("/")
 async def root():
     logger.info("GET Root")
-    return "Welcome to the carputer API! Visit http://127.0.0.1:800/docs for a Swaggerdocs of our endpoints!"
+    return "Welcome to the carputer API! Visit http://127.0.0.1:8000/docs for a Swaggerdocs of our endpoints!"

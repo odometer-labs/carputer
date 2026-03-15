@@ -1,11 +1,6 @@
 <script>
-  import { push } from 'svelte-spa-router';
   import arrow from "../arrow-left-bold.svg";
-
-  // Function to navigate back to the home map page
-  function goBack() {
-    push('/');
-  }
+  import { goBack } from "../../utils/navigation";
 </script>
 
 <!-- this is the exit button -->
@@ -19,7 +14,7 @@
   .back-btn {
     background-color: rgba(227, 227, 227, 0.9);
     position:absolute; 
-    top: 1.5%;
+    top: 15px;
     left: 1%;
 
     width: 50px;

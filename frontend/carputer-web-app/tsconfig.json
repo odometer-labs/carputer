@@ -55,13 +55,14 @@
     /**
      * Declaration Files
      */
-    "types": ["vite/client", "node"]
+    "types": ["vite/client", "node", "vitest"]
   },
   "include": [
     "src/**/*.ts",
     "src/**/*.tsx",
     "src/**/*.d.ts",
     "src/**/*.svelte",
+    "src/test/**/*.ts",
     "vite-env.d.ts"
   ],
   "exclude": ["node_modules", "dist"]
