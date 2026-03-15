@@ -18,7 +18,7 @@ def get_connection():
     # Using dict_row makes results look like {'id': 1} instead of (1,)
     return psycopg.connect(conn_info, row_factory=dict_row)
 
-# Test block: Runs only if you execute this file directly
+# Testing connection
 if __name__ == "__main__":
     try:
         with get_connection() as conn:

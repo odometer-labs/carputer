@@ -1,3 +1,5 @@
+#For database, look for README in the backend directory for instructions on how to setup a database and configure
+#the env.
 services:
   db:
     image: postgres:16
@@ -17,7 +19,6 @@ services:
       retries: 5
     volumes:
           - ./backend/geotracker/migrations/gps_functions.sql:/docker-entrypoint-initdb.d/init.sql
-          # CHANGE THIS LINE TO REMOVE /data
           - postgres_data:/var/lib/postgresql
 
 volumes:
