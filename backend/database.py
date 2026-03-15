@@ -11,9 +11,9 @@ def get_connection():
     conn_info = (
         f"host={os.getenv('DB_HOST', 'localhost')} "
         f"port={os.getenv('DB_PORT', '5432')} "
-        f"dbname={os.getenv('DB_NAME')} "
-        f"user={os.getenv('DB_USER')} "
-        f"password={os.getenv('DB_PASSWORD')}"
+        f"dbname={os.getenv('POSTGRES_DB')} "
+        f"user={os.getenv('POSTGRES_USER')} "
+        f"password={os.getenv('POSTGRES_PASSWORD')}"
     )
     # Using dict_row makes results look like {'id': 1} instead of (1,)
     return psycopg.connect(conn_info, row_factory=dict_row)
