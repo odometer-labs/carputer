@@ -1,18 +1,13 @@
-FROM python:3.13-slim
+FROM python:3.13-slim-trixie
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV UV_SYSTEM_PYTHON=1
 
 WORKDIR /app
 
 # Install uv
-RUN apt-get update && apt-get install -y \
-    build-essential libsndfile1 curl \
-    && rm -rf /var/lib/apt/lists/*
-ADD https://astral.sh/uv/install.sh /uv-installer.sh
-RUN sh /uv-installer.sh && rm /uv-installer.sh
-ENV PATH="/root/.local/bin/:$PATH"
-ENV UV_SYSTEM_PYTHON=1
+COPY --from=ghcr.io/astral-sh/uv:0.10.10 /uv /uvx /bin/
 
 # Python project installation
 RUN --mount=type=cache,target=/root/.cache/pip \
