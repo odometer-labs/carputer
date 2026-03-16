@@ -15,6 +15,7 @@
   import { gpsService } from '../fake-api/gpsService';
   import type { GPSPosition } from '../fake-api/types';
   import { push } from 'svelte-spa-router';
+  import { preferences } from '../services/preferences';
 
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
 
@@ -49,7 +50,16 @@
   // device orientation listener (reserved for future compass integration)
   let orientationListener: ((event: DeviceOrientationEvent) => void) | null = null;
 
-  let zoomLevel: number = 18; // default zoom level when centering on user
+  let zoomLevel: number = 18;
+  $: zoomLevel = $preferences.defaultZoom; // default zoom level when centering on user
+
+  function getUserIconScale(): number {
+    return 0.6 + ($preferences.iconSizeLevel * 0.2);
+  }
+
+  function getUserMarkerRadius(): number {
+    return 5 + $preferences.iconSizeLevel;
+  }
 
   // run once when the Svelte component is mounted
   onMount(() => {
@@ -229,7 +239,7 @@
         image: new Icon({
           src: getIconoirArrowUrl(),
           anchor: [0.5, 0.5],
-          scale: 1,
+          scale: getUserIconScale(),
           rotation: (latestHeadingDegrees * Math.PI) / 180,
           rotateWithView: true,
           crossOrigin: 'anonymous',
@@ -238,7 +248,7 @@
     } else {
       userMarker.setStyle(new Style({
         image: new Circle({
-          radius: 8,
+          radius: getUserMarkerRadius(),
           fill: new Fill({ color: '#3399CC' }),
           stroke: new Stroke({ color: '#fff', width: 2 })
         })
@@ -272,7 +282,7 @@
 
             userMarker.setStyle(new Style({
               image: new Circle({
-                radius: 8,
+                radius: getUserMarkerRadius(),
                 fill: new Fill({ color: '#3399CC' }),
                 stroke: new Stroke({ color: '#fff', width: 2 })
               })
@@ -585,6 +595,24 @@
   .hamburger_menu_icon_btn i {
     display: block;
     line-height: 1;
+  }
+
+  :global(.ol-zoom button) {
+    width: 2.25em;
+    height: 2.25em;
+    font-size: 1.4rem;
+    line-height: 1;
+    background-color: rgb(188, 188, 188);
+    border: 1px solid white;
+  }
+
+  :global(.ol-zoom button:hover) {
+    background-color: rgb(225, 225, 225);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+  }
+
+  :global(.ol-zoom) {
+    font-size: 1.1em;
   }
 
 </style>
