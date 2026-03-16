@@ -38,7 +38,15 @@ Install python packages:
 Running locally:
 In the project's root, run: `fastapi dev app/main.py`  
 
-For deployment, a `run.sh` bash script has been provided. This bash script should be ran by the Raspberry Pi's as a systemd service.
+For deployment, a `run.sh` bash script has been provided. This bash script should be ran by the Raspberry Pi's as a systemd service.  
+
+### Running the Docker container
+It's ideal for developers to have a container running our fastapi server. We have provided a docker image that you can build and run. 
+Ensure that you have docker installed and docker buildx installed. Then run the following commands:  
+`docker build -t api .`  
+`docker run -p 8000:8000 api`  
+
+Now similarly to starting the server from the previous section, you can access the swaggerdocs.
 
 ### Running Tests
 Running pytest:  

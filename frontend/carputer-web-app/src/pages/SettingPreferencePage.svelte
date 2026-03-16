@@ -71,7 +71,7 @@
     </div>
     
     <div class="option-box">
-      <h3>Miles to Discover Roads</h3>
+      <h4>Road History</h4>
       
       <div class="controls">
         <input
@@ -158,7 +158,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border: 1px solid rgba(0, 0, 0, 0.5);
+    border-top: 1px solid rgba(0, 0, 0, 0.5);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.5);
     padding-left: 5%;
     padding-right: 5%;
     color: black;

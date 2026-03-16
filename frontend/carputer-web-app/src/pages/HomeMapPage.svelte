@@ -329,7 +329,6 @@
           applyHeadingRotation();
           
           locationStatus = `Location: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
-          // console.log('GPS Position:', lat, lon);
         }
       },
       (error: string) => {

@@ -341,7 +341,7 @@ export class GPSService {
   private parseNMEASentence(sentence: string): GPSPosition | null {
     try {
       // Remove $ and checksum
-      const cleanSentence = sentence.replace(/^\$|[\*\w]{2}$/g, "");
+      const cleanSentence = sentence.replace(/^\$|\*[\da-f]{2}$/gi, "");
       const fields = cleanSentence.split(",");
 
       if (fields[0] !== "GPRMC" || fields.length < 9) {
@@ -387,7 +387,7 @@ export class GPSService {
         accuracy: undefined,
         timestamp: Date.now(),
       };
-    } catch (error) {
+    } catch {
       return null;
     }
   }
@@ -403,8 +403,6 @@ export class GPSService {
       if (!Number.isFinite(value)) return null;
 
       // Extract degrees and minutes
-      const isLongitude = coord.length > 9;
-      const degreeLength = isLongitude ? 3 : 2;
       const degrees = Math.floor(value / 100);
       const minutes = value % 100;
 
@@ -416,7 +414,7 @@ export class GPSService {
       }
 
       return decimal;
-    } catch (error) {
+    } catch {
       return null;
     }
   }
