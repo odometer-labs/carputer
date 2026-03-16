@@ -1,8 +1,13 @@
 #For more information, look for README in the backend subdirectory for instructions on how to setup a database and configure
 #the .env.
 services:
+  api:
+    build: ./api
+    ports:
+      - '8000:8000'
+
   db:
-    image: postgis/postgis:16-3.4
+    image: postgis/postgis:16-3.5
     container_name: carputer_db
     restart: always
     # Docker will look for a .env file in the same directory by default
@@ -20,6 +25,12 @@ services:
     volumes:
       - ./backend/geotracker/migrations/gps_functions.sql:/docker-entrypoint-initdb.d/init.sql
       - postgres_data:/var/lib/postgresql/data
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
 
 volumes:
   postgres_data:
