@@ -91,11 +91,13 @@
     {/if}
   {/if}
 
-  <div class="warning-popup-stack" aria-live="polite" aria-label="Application warnings">
-    {#each $appErrorState.notifications as warning (warning.id)}
-      <ErrorPopup error={warning} onClose={dismissNonVitalError} />
-    {/each}
-  </div>
+  {#if !$appErrorState.fatalError}
+    <div class="warning-popup-stack" aria-live="polite" aria-label="Application warnings">
+      {#each $appErrorState.notifications as warning (warning.id)}
+        <ErrorPopup error={warning} onClose={dismissNonVitalError} />
+      {/each}
+    </div>
+  {/if}
 
 </main>
 
