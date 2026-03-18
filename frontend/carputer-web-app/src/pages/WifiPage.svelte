@@ -15,11 +15,12 @@
 
 <div class="translucent-overlay">
 
-  <!-- this is the exit buttion -->
-  <BackButton />
+
 
   
   <div class="title-box">
+    <!-- this is the exit buttion -->
+    <BackButton />
     <h2>Wifi</h2>
   </div>
 

@@ -132,7 +132,8 @@
     map.on('pointerdrag', () => {
       if (activeTouchPointerIds.size >= 2) return;
 
-      if (!isProgrammaticMove && (isFollowingUser || isFollowingHeading)) {
+      // User intent always wins: dragging should immediately release follow-lock.
+      if (isFollowingUser || isFollowingHeading) {
         isFollowingUser = false;
         isFollowingHeading = false;
         updateUserMarkerStyle();
@@ -297,10 +298,13 @@
             }
 
             userLayer = new VectorLayer({
-              source: vectorSource
+              source: vectorSource,
+              updateWhileAnimating: true,
+              updateWhileInteracting: true
             });
 
             map.addLayer(userLayer);
+            map.render();
           } else {
             // subsequent fixes: move marker and refresh style
             const geometry = userMarker.getGeometry();
@@ -317,6 +321,9 @@
             if (vectorSource) {
               vectorSource.changed();
             }
+
+            // Request a redraw so marker motion remains visible during map drag interactions.
+            map.render();
           }
 
           if (!hasCenteredInitially) {
