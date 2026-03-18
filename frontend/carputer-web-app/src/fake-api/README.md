@@ -64,54 +64,13 @@ npm run dev
 
 The app will connect to `localhost:5173` (or similar).
 
-**Terminal 4 - (Optional) Check browser console:**
-Look for: `Connected to gpsfake server` in browser DevTools → Console.
-
-### Option 3: Test on a Phone / Remote Device
-
-The WebSocket host is resolved dynamically from `window.location.hostname`, so the app automatically connects to the right machine regardless of whether it's opened from `localhost` or a network IP.
-
-**Terminal 1 - Start gpsfake (WSL or Linux):**
-Make sure to cd into frontend/carputer-web-app/src/fake-api to access the NMEA files:
-
-```bash
-cd frontend/carputer-web-app/src/fake-api
-```
-
-Then run:
-
-```bash
-gpsfake -c 0.01 -n kras-en.nmea
-```
-OR
-
-```bash
-gpsfake -c 0.01 -n kras-en-heading-changes.nmea
-```
-
-**Terminal 2 - Start GPS WebSocket bridge:**
-Make sure to cd into frontend/carputer-web-app to access the config:
-
-```bash
-cd frontend/carputer-web-app
-npm run dev:gps
-```
-
-**Terminal 3 - Start frontend with network access:**
-Make sure to cd into frontend/carputer-web-app:
-
+If you want to test on a mobile device, start the dev server with `--host`:
 ```bash
 cd frontend/carputer-web-app
 npm run dev -- --host
 ```
 
 Vite will print a **Network** URL like `http://192.168.x.x:5173`. Open that on your phone (must be on the same Wi-Fi network). The WebSocket bridge and GPS data will work without any extra configuration.
-
-You could also run the simple local host:
-```bash
-cd frontend/carputer-web-app
-npm run dev
-``` 
 
 ## Configuration
 
