@@ -15,6 +15,7 @@
   import { gpsService } from '../fake-api/gpsService';
   import type { GPSPosition } from '../fake-api/types';
   import { push } from 'svelte-spa-router';
+  import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
 
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
 
@@ -53,8 +54,13 @@
 
   // run once when the Svelte component is mounted
   onMount(() => {
-    loadMap();             // create map instance and hook events
-    startGPSTracking();    // begin receiving simulated GPS data
+    try {
+      loadMap();             // create map instance and hook events
+      startGPSTracking();    // begin receiving simulated GPS data
+    } catch (error: unknown) {
+      reportVitalError(error, 'HomeMapPage.onMount');
+
+    }
 
     return () => {
       map?.setTarget(undefined);
@@ -324,6 +330,7 @@
       (error: string) => {
         console.error('GPS error:', error);
         locationStatus = `GPS Error: ${error}`;
+        reportNonVitalError(error, 'HomeMapPage.gpsService');
       }
     );
   }
@@ -449,6 +456,11 @@
       </ul>
     </div>
   {/if}
+
+  <div>
+    <button on:click={() => reportVitalError(new Error("Test Fatal Error"), "home-map-page")}>Fatal Error</button>
+    <button on:click={() => reportNonVitalError(new Error("Test Non-Fatal Error"), "home-map-page")}>Non-Fatal Error</button>
+  </div>
 
   <div class="map-container">
     <div bind:this={mapElement} class="map" style="width: 100%; height: 100%;"></div>

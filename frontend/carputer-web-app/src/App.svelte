@@ -1,12 +1,20 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { location } from 'svelte-spa-router';
   import HomeMapPage from './pages/HomeMapPage.svelte';
   import SettingPreferencePage from './pages/SettingPreferencePage.svelte';
-  import WifiPage from './pages/WifiPage.svelte'
+  import WifiPage from './pages/WifiPage.svelte';
   import DashboardPage from './pages/DashboardPage.svelte';
-  import MapDownloadPage from './pages/MapDownloadPage.svelte'
-
-
+  import MapDownloadPage from './pages/MapDownloadPage.svelte';
+  import ErrorPage from './pages/ErrorPage.svelte';
+  import ErrorPopup from './assets/components/ErrorPopup.svelte';
+  import {
+    appErrorState,
+    clearVitalError,
+    dismissNonVitalError,
+    reportNonVitalError,
+    reportVitalError
+  } from './stores/errorStore';
 
   // this is a list of paths that want to have the HomeMapPage 
   // in the background.
@@ -19,53 +27,97 @@
   // this is reactive, includes() function returns a true or false
   $: isOverlayRoute = overlayRoutes.includes($location);
 
+  onMount(() => {
+    const onWindowError = (event: ErrorEvent): void => {
+      const errorValue = event.error ?? event.message;
+      reportVitalError(errorValue, 'window.error');
+    };
+
+    const onUnhandledRejection = (event: PromiseRejectionEvent): void => {
+      reportNonVitalError(event.reason, 'window.unhandledrejection');
+    };
+
+    window.addEventListener('error', onWindowError);
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('error', onWindowError);
+      window.removeEventListener('unhandledrejection', onUnhandledRejection);
+    };
+  });
+
+  function reloadAfterVitalError(): void {
+    clearVitalError();
+    window.location.reload();
+  }
+
 </script>
 
 <main style="margin: 0; padding: 0; height: 100%; width: 100%;">
-  
-  <!-- Pages are continuously mounted, visibility controlled by CSS. -->
-   
-  <div style:display={$location === '/' || isOverlayRoute ? 'block' : 'none'} style="height: 100%; width: 100%;">
-    <HomeMapPage />
-  </div>
-
+  {#if $appErrorState.fatalError}
+    <ErrorPage error={$appErrorState.fatalError} onReload={reloadAfterVitalError} />
+  {:else}
+    <!-- Pages are continuously mounted, visibility controlled by CSS. -->
+    <div style:display={$location === '/' || isOverlayRoute ? 'block' : 'none'} style="height: 100%; width: 100%;">
+      <HomeMapPage />
+    </div>
 
     <!-- Settings and Preferences page -->
-  {#if $location === '/SettingPreference'}
-    <div style="height: 100%; width: 100%;">
-      <SettingPreferencePage />
-    </div>
-  {/if}
-
+    {#if $location === '/SettingPreference'}
+      <div style="height: 100%; width: 100%;">
+        <SettingPreferencePage />
+      </div>
+    {/if}
 
     <!-- Wifi Page -->
-  {#if $location === '/Wifi'}
-    <div style="height: 100%; width: 100%;">
-      <WifiPage />
-    </div>
-  {/if}
-
+    {#if $location === '/Wifi'}
+      <div style="height: 100%; width: 100%;">
+        <WifiPage />
+      </div>
+    {/if}
 
     <!-- Dashboard Page -->
-  {#if $location === '/Dashboard'}
-    <div style="height: 100%; width: 100%;">
-      <DashboardPage />
-    </div>
-  {/if}
-
+    {#if $location === '/Dashboard'}
+      <div style="height: 100%; width: 100%;">
+        <DashboardPage />
+      </div>
+    {/if}
 
     <!-- Map DownLoad Page -->
-  {#if $location === '/MapDownload'}
-    <div style="height: 100%; width: 100%;">
-      <MapDownloadPage />
-    </div>
+    {#if $location === '/MapDownload'}
+      <div style="height: 100%; width: 100%;">
+        <MapDownloadPage />
+      </div>
+    {/if}
   {/if}
+
+  <div class="warning-popup-stack" aria-live="polite" aria-label="Application warnings">
+    {#each $appErrorState.notifications as warning (warning.id)}
+      <ErrorPopup error={warning} onClose={dismissNonVitalError} />
+    {/each}
+  </div>
 
 </main>
 
 <style>
   main {
     font-family: Arial, sans-serif;
+  }
+
+  .warning-popup-stack {
+    position: fixed;
+    top: 0.9rem;
+    right: 0.9rem;
+    z-index: 2500;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    align-items: flex-end;
+    pointer-events: none;
+  }
+
+  .warning-popup-stack :global(article) {
+    pointer-events: auto;
   }
 </style>
 
