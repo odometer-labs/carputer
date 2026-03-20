@@ -5,6 +5,17 @@ services:
     build: ./api
     ports:
       - '8000:8000'
+    environment:
+        POSTGRES_USER: ${POSTGRES_USER}
+        POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+        POSTGRES_DB: ${POSTGRES_DB}
+    restart: always
+    networks:
+      - carputer
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
 
   db:
     image: postgis/postgis:16-3.5
@@ -25,12 +36,20 @@ services:
     volumes:
       - ./backend/geotracker/migrations/gps_functions.sql:/docker-entrypoint-initdb.d/init.sql
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - carputer
 
   adminer:
     image: adminer
     restart: always
     ports:
       - 8080:8080
+    networks:
+      - carputer
 
 volumes:
   postgres_data:
+
+networks:
+  carputer:
+    driver: bridge
