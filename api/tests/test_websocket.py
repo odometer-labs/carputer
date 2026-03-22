@@ -2,7 +2,7 @@ from datetime import datetime
 from app.main import app
 from fastapi.websockets import WebSocket
 from fastapi.testclient import TestClient
-from app.model.models import Track
+from api.app.models.track import Track
 
 client = TestClient(app)
 
