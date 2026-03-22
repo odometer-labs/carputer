@@ -457,11 +457,6 @@
     </div>
   {/if}
 
-  <div>
-    <button on:click={() => reportVitalError(new Error("Test Fatal Error"), "home-map-page")}>Fatal Error</button>
-    <button on:click={() => reportNonVitalError(new Error("Test Non-Fatal Error"), "home-map-page")}>Non-Fatal Error</button>
-  </div>
-
   <div class="map-container">
     <div bind:this={mapElement} class="map" style="width: 100%; height: 100%;"></div>
   </div>

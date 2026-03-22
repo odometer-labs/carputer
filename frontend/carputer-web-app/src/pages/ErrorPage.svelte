@@ -13,7 +13,7 @@
 <section class="fatal-error-page" role="alert" aria-live="assertive">
   <h1>System Error</h1>
   <p class="fatal-error-page__message">
-    The app hit a vital runtime error and cannot continue safely.
+    The app hit a vital runtime error and cannot continue safely. Check the web remote interface to see more logs.
   </p>
 
   <p class="fatal-error-page__detail"><strong>Message:</strong> {error.message}</p>
