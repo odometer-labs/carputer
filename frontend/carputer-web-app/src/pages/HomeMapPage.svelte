@@ -17,6 +17,7 @@
   import { push } from 'svelte-spa-router';
 
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
+  import SystemIndicators from "../assets/components/SystemIndicators.svelte";
 
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
@@ -450,6 +451,23 @@
     </div>
   {/if}
 
+  
+  <!-- this is the system indicators, but what this does is moves the indicators lower
+        when the hamburger menu is clicked. -->
+  {#if isDropdownOpen}
+    <SystemIndicators style="top: 390px"/>
+  {:else}
+    <SystemIndicators />
+  {/if}
+
+  <div class="speed">
+    <p style="text-align: center;">
+      <b style="font-size:30px;">20</b><br>
+      MPH
+    </p>
+  </div>
+
+
   <div class="map-container">
     <div bind:this={mapElement} class="map" style="width: 100%; height: 100%;"></div>
   </div>
@@ -587,4 +605,26 @@
     line-height: 1;
   }
 
+  .speed {
+    right: 25px;
+    bottom: 35px;
+    position: absolute;
+    z-index: 1000;
+
+    width: 100px;
+    height: 80px;
+    padding: 0px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: 1px solid white;
+    border-radius: 20%;
+    background-color: rgba(188, 188, 188, 0.9);
+    color: #333;
+    font-weight: 500;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s;
+    outline: none;
+  }
 </style>
