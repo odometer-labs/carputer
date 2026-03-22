@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { location } from 'svelte-spa-router';
+  import { preferences } from './services/preferences';
   import HomeMapPage from './pages/HomeMapPage.svelte';
   import SettingPreferencePage from './pages/SettingPreferencePage.svelte';
   import WifiPage from './pages/WifiPage.svelte';
@@ -27,6 +28,7 @@
   // Checks if current route needs an overlay
   // this is reactive, includes() function returns a true or false
   $: isOverlayRoute = overlayRoutes.includes($location);
+
   let nextWarning: AppError | null = null;
   $: nextWarning = $appErrorState.notifications[0] ?? null;
 
@@ -53,16 +55,29 @@
     clearVitalError();
     window.location.reload();
   }
-
+  $: appBrightness = ($preferences.brightness ?? 100) / 100;
 </script>
 
-<main style="margin: 0; padding: 0; height: 100%; width: 100%;">
+<main
+  class:night-mode={$preferences.nightMode}
+  class="app-shell"
+  style={`margin: 0; padding: 0; height: 100%; width: 100%; --app-brightness: ${appBrightness};`}
+>
   {#if $appErrorState.fatalError}
     <ErrorPage error={$appErrorState.fatalError} onReload={reloadAfterVitalError} />
   {:else}
-    <!-- Pages are continuously mounted, visibility controlled by CSS. -->
-    <div style:display={$location === '/' || isOverlayRoute ? 'block' : 'none'} style="height: 100%; width: 100%;">
-      <HomeMapPage />
+  
+  <!-- Pages are continuously mounted, visibility controlled by CSS. -->
+   
+  <div style:display={$location === '/' || isOverlayRoute ? 'block' : 'none'} style="height: 100%; width: 100%;">
+    <HomeMapPage />
+  </div>
+
+
+    <!-- Settings and Preferences page -->
+  {#if $location === '/SettingPreference'}
+    <div style="height: 100%; width: 100%;">
+      <SettingPreferencePage />
     </div>
 
     <!-- Settings and Preferences page -->
@@ -105,8 +120,16 @@
 </main>
 
 <style>
-  main {
+  .app-shell {
     font-family: Arial, sans-serif;
+    background: #ffffff;
+    filter: brightness(var(--app-brightness, 1));
+    transition: filter 0.2s ease, background-color 0.2s ease;
+  }
+
+  .app-shell.night-mode {
+    background: #111111;
+    filter: invert(1) hue-rotate(180deg) brightness(var(--app-brightness, 1));
   }
 
   .warning-popup-stack {
