@@ -15,6 +15,7 @@
     reportNonVitalError,
     reportVitalError
   } from './stores/errorStore';
+  import type { AppError } from './stores/errorStore';
 
   // this is a list of paths that want to have the HomeMapPage 
   // in the background.
@@ -26,6 +27,8 @@
   // Checks if current route needs an overlay
   // this is reactive, includes() function returns a true or false
   $: isOverlayRoute = overlayRoutes.includes($location);
+  let nextWarning: AppError | null = null;
+  $: nextWarning = $appErrorState.notifications[0] ?? null;
 
   onMount(() => {
     const onWindowError = (event: ErrorEvent): void => {
@@ -93,9 +96,9 @@
 
   {#if !$appErrorState.fatalError}
     <div class="warning-popup-stack" aria-live="polite" aria-label="Application warnings">
-      {#each $appErrorState.notifications as warning (warning.id)}
-        <ErrorPopup error={warning} onClose={dismissNonVitalError} />
-      {/each}
+      {#if nextWarning}
+        <ErrorPopup error={nextWarning} onClose={dismissNonVitalError} />
+      {/if}
     </div>
   {/if}
 

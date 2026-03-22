@@ -34,4 +34,24 @@ describe("errorStore", () => {
     expect(state.fatalError?.severity).toBe("vital");
     expect(state.fatalError?.message).toContain("Map renderer crashed");
   });
+
+  it("queues non-vital errors and reveals the next after dismiss", () => {
+    reportNonVitalError("First warning", "gps-service");
+    reportNonVitalError("Second warning", "gps-service");
+    reportNonVitalError("Third warning", "gps-service");
+
+    const initial = get(appErrorState).notifications;
+    expect(initial).toHaveLength(3);
+    expect(initial[0]?.message).toBe("First warning");
+
+    dismissNonVitalError(initial[0]!.id);
+    const afterFirstDismiss = get(appErrorState).notifications;
+    expect(afterFirstDismiss).toHaveLength(2);
+    expect(afterFirstDismiss[0]?.message).toBe("Second warning");
+
+    dismissNonVitalError(afterFirstDismiss[0]!.id);
+    const afterSecondDismiss = get(appErrorState).notifications;
+    expect(afterSecondDismiss).toHaveLength(1);
+    expect(afterSecondDismiss[0]?.message).toBe("Third warning");
+  });
 });

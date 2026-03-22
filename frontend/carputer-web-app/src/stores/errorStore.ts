@@ -106,9 +106,8 @@ export function reportNonVitalError(error: unknown, source?: string): void {
 
   state.update((current) => ({
     ...current,
-    notifications: [appError, ...current.notifications].slice(
-      0,
-      MAX_NOTIFICATIONS,
+    notifications: [...current.notifications, appError].slice(
+      -MAX_NOTIFICATIONS,
     ),
   }));
 }
