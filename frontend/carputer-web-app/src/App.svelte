@@ -55,6 +55,7 @@
     clearVitalError();
     window.location.reload();
   }
+  
   $: appBrightness = ($preferences.brightness ?? 100) / 100;
 </script>
 
@@ -72,13 +73,6 @@
   <div style:display={$location === '/' || isOverlayRoute ? 'block' : 'none'} style="height: 100%; width: 100%;">
     <HomeMapPage />
   </div>
-
-
-    <!-- Settings and Preferences page -->
-  {#if $location === '/SettingPreference'}
-    <div style="height: 100%; width: 100%;">
-      <SettingPreferencePage />
-    </div>
 
     <!-- Settings and Preferences page -->
     {#if $location === '/SettingPreference'}

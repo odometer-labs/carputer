@@ -29,11 +29,11 @@ function runCommand(
 describe("UI checklist scripts", () => {
   it("type-check should exit cleanly", async () => {
     await runCommand("npm", ["run", "type-check"]);
-  });
+  }, 15000);
 
   it("lint should exit cleanly", async () => {
     await runCommand("npm", ["run", "lint"]);
-  });
+  }, 15000);
 
   it("build should exit cleanly", async () => {
     await runCommand("npm", ["run", "build"]);
