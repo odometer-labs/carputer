@@ -156,7 +156,7 @@ CREATE OR REPLACE FUNCTION gps.get_latest_track_point() RETURNS TABLE (
         geom GEOGRAPHY(Point, 4326),
         speed_mph DOUBLE PRECISION,
         heading_deg DOUBLE PRECISION
-    ) LANGUAGE plpgsql AS $$ BEGIN RETURN QUERY
+    ) LANGUAGE plpgsql AS $$ #variable_conflict use_column BEGIN RETURN QUERY
 SELECT point_id,
     track_id,
     time_stamp,
@@ -261,7 +261,7 @@ $$;
 -- 6. TRIGGER SYSTEM
 ---------------------------
 -- Automation: Dynamically builds LineStrings as points are inserted. 
--- Avoids expensive recalculations of the entire track during read operations.\
+-- Avoids expensive recalculations of the entire track during read operations.
 CREATE OR REPLACE FUNCTION gps.update_track_line_trigger() RETURNS TRIGGER LANGUAGE plpgsql AS $$
 DECLARE point_count INTEGER;
 line_exists BOOLEAN;
