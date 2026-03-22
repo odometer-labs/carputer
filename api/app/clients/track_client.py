@@ -6,7 +6,14 @@ from ..models.track_point import TrackPoint
 
 class TrackClient:
     def __init__(self):
-        pass
+        self.latitude: float = 0.0
+        self.longitude: float = 0.0
+
+    def get_lat_long(self):
+        return {
+            "latitude": self.latitude,
+            "longitude": self.longitude
+        }
 
     def list_track(self):
         with get_connection() as conn:
@@ -79,5 +86,7 @@ class TrackClient:
                 cursor.execute("SELECT gps.is_new_road();")
                 conn.commit()
                 result = cursor.fetchone()
-                is_new_road = result[0]
-                return {"is_new_road": is_new_road}
+                return result
+
+# singleton object
+track_client: TrackClient = TrackClient()

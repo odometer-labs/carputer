@@ -5,11 +5,9 @@ from ..logging.handlers import logger
 from ..dependencies import get_connection
 from app.models.track import Track
 from app.models.track_point import TrackPoint
-from app.clients.track_client import TrackClient
+from app.clients.track_client import track_client
 
 router = APIRouter(prefix="/v1", tags=["Tracks"])
-
-track_client = TrackClient()
 
 @router.get("/tracks")
 async def list_track():
