@@ -15,6 +15,7 @@
   import { gpsService } from '../fake-api/gpsService';
   import type { GPSPosition } from '../fake-api/types';
   import { push } from 'svelte-spa-router';
+  import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
   import { preferences } from '../services/preferences';
 
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
@@ -63,8 +64,13 @@
 
   // run once when the Svelte component is mounted
   onMount(() => {
-    loadMap();             // create map instance and hook events
-    startGPSTracking();    // begin receiving simulated GPS data
+    try {
+      loadMap();             // create map instance and hook events
+      startGPSTracking();    // begin receiving simulated GPS data
+    } catch (error: unknown) {
+      reportVitalError(error, 'HomeMapPage.onMount');
+
+    }
 
     return () => {
       map?.setTarget(undefined);
@@ -341,6 +347,7 @@
       (error: string) => {
         console.error('GPS error:', error);
         locationStatus = `GPS Error: ${error}`;
+        reportNonVitalError(error, 'HomeMapPage.gpsService');
       }
     );
   }
