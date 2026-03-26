@@ -1,11 +1,8 @@
 <script lang="ts">
+  // TODO : add a refernce to the preference store so that we can know when the dark/light mode is active.
   //import { systemInfo } from "some place that catches information from backend"
 
   //images to use
-  import wifi0 from "../wifi-signal0-bold.svg";
-  import wifi1 from "../wifi-signal1-bold.svg";
-  import wifi2 from "../wifi-signal2-bold.svg";
-  import wifi3 from "../wifi-signal3-bold.svg";
   import light_mode from "../light-mode-bold.svg";
   import dark_mode from "../dark-mode-bold.svg";
 
@@ -28,9 +25,6 @@
 
 <style>
   .indicator {
-    display: flex;
-    align-items: center;
-    justify-content: space-evenly;
     gap: 5px;
     width: 30px;
   }

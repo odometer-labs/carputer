@@ -1,4 +1,6 @@
 <script lang="ts">
+  //TODO : in the future when we get information about the wifi we need to
+  // access it here to let the user know what the wifi strength is.
   //import { systemInfo } from "some place that catches information from backend"
 
   //images to use
@@ -6,8 +8,6 @@
   import wifi1 from "../wifi-signal1-bold.svg";
   import wifi2 from "../wifi-signal2-bold.svg";
   import wifi3 from "../wifi-signal3-bold.svg";
-  import light_mode from "../light-mode-bold.svg";
-  import dark_mode from "../dark-mode-bold.svg";
 
   // delete this after the indicators are implemented with backend information.
   let wifiConnection:boolean = true
@@ -32,9 +32,6 @@
 
 <style>
   .indicator {
-    display: flex;
-    align-items: center;
-    justify-content: space-evenly;
     gap: 5px;
     width: 30px;
   }

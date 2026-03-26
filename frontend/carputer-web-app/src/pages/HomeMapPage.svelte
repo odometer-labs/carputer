@@ -5,7 +5,7 @@
   import TileLayer from 'ol/layer/Tile.js';
   import OSM from 'ol/source/OSM.js';
   import { defaults as defaultControls } from 'ol/control/defaults.js';
-  import { fromLonLat } from 'ol/proj.js';
+  import { fromLonLat, toLonLat } from 'ol/proj.js';
   import Feature from 'ol/Feature.js';
   import Point from 'ol/geom/Point.js';
   import VectorLayer from 'ol/layer/Vector.js';
@@ -22,6 +22,10 @@
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
   let locationStatus: string = 'Getting location...';
+
+  //APRS locations
+  let aprsLayer: VectorLayer | undefined;
+  let aprsSource: VectorSource | undefined;
 
   // position marker objects
   let userLayer: VectorLayer | undefined;
@@ -56,6 +60,18 @@
   onMount(() => {
     loadMap();             // create map instance and hook events
     startGPSTracking();    // begin receiving simulated GPS data
+
+    // this will be removed in the future but for now this sets up 10 aprs points around the 
+    // the user, to display an aprs icon.
+    const interval = setInterval(() => {
+    if (!latestUserCoords) return;
+
+    for (let i = 0; i < 10; i++) {
+      setRandomAprsPoints();
+    }
+
+    clearInterval(interval); // run once
+  }, 500);
 
     return () => {
       map?.setTarget(undefined);
@@ -100,6 +116,13 @@
         rotate: false, // disable default rotation control since we handle it ourselves
       })
     });
+
+    // this is for making points for APRS locations
+    aprsSource = new VectorSource();
+    aprsLayer = new VectorLayer({
+      source: aprsSource
+    });
+    map.addLayer(aprsLayer);
 
     if (mapElement) {
       pointerDownListener = (event: PointerEvent) => {
@@ -356,6 +379,59 @@
     } else {
       resetMapRotation();
     }
+  }
+
+  // TODO: there are appearently many different kinds of aprs icons so it may need
+  // to be able to shift through different icons for the situation. or if we decided
+  // to not implement different icons for different aprs then that fine, just remove
+  // this comment.
+  function getAprsIcon(): string {
+    return '/src/assets/aprs-bold.svg';
+  }
+
+  /**
+   * Sets up feature points for APRS points, this isn't ment to be the final
+   * version. it simply is putting points onto the map. 
+   * in the future we should make it so that the points can be updated.
+   */
+  function addAprsPoint(lat: number, long: number): void {
+    //if the aprsSource hasn't been set up then don't do anything
+    if (!aprsSource) return;
+
+    //create marker feature and add to map
+    // make the point(feature) using lat and long
+    const aprsMarker = new Feature({
+      geometry: new Point(fromLonLat([long, lat]))
+    });
+
+    aprsMarker.setStyle(new Style({
+      image: new Icon({
+        src: getAprsIcon(),
+        scale: 0.07,
+        anchor: [0.5, 1]
+      })
+    }));
+
+    aprsSource.addFeature(aprsMarker);
+  }
+
+  //This is just for testing purposes and eventually will be removed when we get APRS data
+  // this gets a random location near the user and sends that information to the addAprsPoint()
+  // to make a aprs feature point.
+  function setRandomAprsPoints(): void{
+    if (!latestUserCoords) return;
+
+    const coords = toLonLat(latestUserCoords); //gets the coordnates
+
+    const long = coords[0];
+    const lat = coords[1];
+
+    if (lat === undefined || long === undefined) return; //makes sure it isn't null
+
+    addAprsPoint(
+      lat + (Math.random() - 0.5)* 0.01,
+      long + (Math.random() - 0.5)* 0.01
+    );
   }
 
   // this function changes route to /SettingPreference
