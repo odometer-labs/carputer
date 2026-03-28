@@ -14,6 +14,19 @@
   let wifiConnection_strength:number = 3; // 0-3
 
   const wifiIcons = [wifi0, wifi1, wifi2, wifi3];
+
+  //this just changes the wifi indicator with setinterval 
+  //delete this after getting real data.
+  import { onMount } from "svelte";
+  onMount(() => {
+    const interval = setInterval(() => {
+      // cycle from 0 → 3
+      wifiConnection_strength = (wifiConnection_strength + 1) % 4;
+    }, 3000); // 3 seconds
+
+    return () => clearInterval(interval);
+  });
+
 </script>
 
 
@@ -32,6 +45,9 @@
 
 <style>
   .indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     gap: 5px;
     width: 30px;
   }

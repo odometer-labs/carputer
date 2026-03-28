@@ -5,10 +5,10 @@
   import DarkLightIndicator from "./DarkLightIndicator.svelte";
 
 
-  export let timeActive: boolean = true;
-  export let wifiActive: boolean = true;
-  export let darklightActive: boolean = true;
-  export let roadDiscoverActive: boolean = true;
+  export let isTimeActive: boolean = true;
+  export let isWifiActive: boolean = true;
+  export let isDarklightActive: boolean = true;
+  export let isRoadDiscoverActive: boolean = true;
   export let isActiveBackground: boolean = true;
 
 </script>
@@ -16,22 +16,22 @@
 
 <div class={isActiveBackground? "status-bar": "status-bar-translucent"}>
   <!-- time -->
-  {#if timeActive}
+  {#if isTimeActive}
     <TimeIndicator />
   {/if}
 
   <!-- wifi-->
-  {#if wifiActive}
+  {#if isWifiActive}
     <WifiIndicator />
   {/if}
 
   <!-- dark/light mode-->
-  {#if darklightActive}
+  {#if isDarklightActive}
     <DarkLightIndicator />
   {/if}
 
   <!--on new road or old road-->
-  {#if roadDiscoverActive}
+  {#if isRoadDiscoverActive}
     <RoadDiscoverIndicator />
   {/if}
 </div>
@@ -46,6 +46,7 @@
     z-index: 1000;
 
     display: flex;
+    align-items: center;
     gap: 25px;
     padding: 15px;
 
@@ -63,6 +64,7 @@
     z-index: 1000;
 
     display: flex;
+    align-items: center;
     gap: 25px;
     padding: 15px;
 
