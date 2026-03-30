@@ -21,6 +21,8 @@ markupsafe==3.0.3
 mdurl==0.1.2
 packaging==26.0
 pluggy==1.6.0
+psycopg==3.3.3
+psycopg-binary==3.3.3
 pydantic==2.12.5
 pydantic-core==2.41.5
 pydantic-extra-types==2.11.0

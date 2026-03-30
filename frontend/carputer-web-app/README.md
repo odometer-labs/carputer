@@ -22,14 +22,16 @@ You can also run a fake GPS data source for testing. And you can run this app on
 - OpenLayers map that tracks and recenters on the user's current GPS location.
 - Support for live GPS data (via `gpsfake` bridge) or simulated/mock positions (NMEA playback or random walk).
 - A floating "back" button and navigation between pages: Home, Dashboard, Map Download, Settings, Wifi.
+- Global runtime error handling: fatal errors render a full-screen recovery page, while non-fatal errors appear as dismissible warning popups.
 - Utilities for toggling GPS mode, downloading recorded routes, and adjusting preferences.
 
 ## Project Assets
 
-- **src/assets/components/** – reusable Svelte components such as `BackButton` and other common UI widgets.
+- **src/assets/components/** – reusable Svelte components such as `BackButton`, `ErrorPopup`, and other common UI widgets.
 - **src/assets/styles/** – global CSS, utility classes and theme variables.
 - **src/fake-api/** – development mock services (GPS, config) including types and example NMEA files.
-- **src/pages/** – page components corresponding to router paths (DashboardPage, HomeMapPage, MapDownloadPage, SettingPreferencePage, WifiPage).
+- **src/pages/** – page components corresponding to router paths (DashboardPage, ErrorPage, HomeMapPage, MapDownloadPage, SettingPreferencePage, WifiPage).
+- **src/stores/** – shared client state stores such as `errorStore`, which tracks fatal and non-fatal app errors.
 - **scripts/** – helper scripts such as the `gpsd-ws-bridge` that proxies real GPSD data to WebSockets for the frontend.
 - **tests/** – Vitest tests alongside source code under `src/test` verify functionality and CI health.
 

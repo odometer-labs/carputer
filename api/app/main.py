@@ -1,11 +1,11 @@
 from fastapi import FastAPI
-from .routers import rest_endpoints, websocket_server
+from .routers import tracks, websocket
 from .logging.handlers import logger
 
 app = FastAPI()
 
-app.include_router(rest_endpoints.router, tags=["REST"])
-app.include_router(websocket_server.router, tags=["Websocket"])
+app.include_router(tracks.router)
+app.include_router(websocket.router)
 
 @app.get("/")
 async def root():

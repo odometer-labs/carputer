@@ -7,11 +7,12 @@
 
 <div class="translucent-overlay">
     
-  <!-- this is the exit buttion -->
-  <BackButton />
+
 
   <!-- this is a box to show the title -->
-  <div class="title-box"> 
+  <div class="title-box">   
+    <!-- this is the exit buttion -->
+    <BackButton />
     <h2>Maps</h2>
   </div>
 

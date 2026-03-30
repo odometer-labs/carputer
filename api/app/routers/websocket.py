@@ -1,21 +1,22 @@
+import asyncio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from ..logging.handlers import logger
+from ..clients.track_client import track_client
 
 router = APIRouter(prefix="/ws")
 
-@router.websocket("/hello")
-async def root(websocket: WebSocket):
+@router.websocket("/get-position")
+async def send_position(websocket: WebSocket):
     await websocket.accept()
-    logger.info("Got hello!")
     try:
         while True:
-            data: str = await websocket.receive_text()
-            await websocket.send_text("Hello!")
+            await websocket.send_text("Position")
+            await asyncio.sleep(0.25)
     except WebSocketDisconnect as e:
         pass
 
-@router.websocket("/embedded")
-async def embedded(websocket: WebSocket):
+@router.websocket("/update-position")
+async def recv_position(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
