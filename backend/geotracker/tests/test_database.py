@@ -109,7 +109,7 @@ def test_track_line_creation(db_conn, sample_track_points):
         assert result['total'] == 1
 
 def test_line_creation_one_point(db_conn, sample_track_points):
-    "Tests track line creation with one point and two points."
+    """Tests track line creation with one point and two points."""
     with db_conn.cursor() as cur:
 
         # Create track and add points (which triggers line creation)
@@ -134,46 +134,44 @@ def test_line_creation_one_point(db_conn, sample_track_points):
         assert cur.fetchone()['count'] == 1
 
 def test_is_new_road(db_conn, sample_track_points):
-    "Checks whether a new road alert is made."
+    """Checks whether a new road alert is made."""
     with db_conn.cursor() as cur:
+        cur.execute("SELECT gps.create_track() as id;")
+        track_id = cur.fetchone()['id']
+        
+        point = sample_track_points[0]
+        point2 = sample_track_points[1]
+        
+        #Create line
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+            (track_id, point['timestamp'], point['lat'], point['lon'], 5.0, 0.0)
+        )
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+            (track_id, point2['timestamp'], point2['lat'], point2['lon'], 10.0, 0.0)
+        )
 
-            cur.execute("SELECT gps.create_track() as id;")
-            track_id = cur.fetchone()['id']
-            
+        cur.execute("CALL gps.end_track();")
 
-            point = sample_track_points[0]
-            point2 = sample_track_points[1]
-            
-            #Create line
-            cur.execute(
-                "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
-                (track_id, point['timestamp'], point['lat'], point['lon'], 5.0, 0.0)
-            )
-            cur.execute(
-                "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
-                (track_id, point2['timestamp'], point2['lat'], point2['lon'], 10.0, 0.0)
-            )
+        # Create second line
+        cur.execute("SELECT gps.create_track() as id;")
+        track_id = cur.fetchone()['id']
+        
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+            (track_id, point['timestamp'], 2, 2, 5.0, 0.0)
+        )
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+            (track_id, point2['timestamp'], 5, 5, 10.0, 0.0)
+        )
 
-            cur.execute("CALL gps.end_track();")
-    
-            # Create second line
-            cur.execute("SELECT gps.create_track() as id;")
-            track_id = cur.fetchone()['id']
-            
-            cur.execute(
-                "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
-                (track_id, point['timestamp'], 2, 2, 5.0, 0.0)
-            )
-            cur.execute(
-                "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
-                (track_id, point2['timestamp'], 5, 5, 10.0, 0.0)
-            )
-
-            cur.execute(
-                "SELECT gps.is_new_road() as id;"
-            )
-            # Should be a new road
-            assert cur.fetchone()['id'] == True
+        cur.execute(
+            "SELECT gps.is_new_road() as id;"
+        )
+        # Should be a new road
+        assert cur.fetchone()['id'] == True
 
 def test_is_new_road_false1(db_conn):
     "Negative case where the second track line is not a new road."
@@ -201,41 +199,41 @@ def test_is_new_road_false2(db_conn, sample_track_points):
     "Second negative case with two same exact track lines."
     with db_conn.cursor() as cur:
 
-            #Track 1
-            cur.execute("SELECT gps.create_track() as id;")
-            track_id = cur.fetchone()['id']
-            
-            point = sample_track_points[0]
-            point2 = sample_track_points[1]
-
-            cur.execute(
-                "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
-                (track_id, point['timestamp'], point['lat'], point['lon'], 5.0, 0.0)
-            )
-            cur.execute(
-                "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
-                (track_id, point2['timestamp'], point2['lat'], point2['lon'], 10.0, 0.0)
-            )
-            cur.execute("CALL gps.end_track();")
-
-            #Track 2
-            cur.execute("SELECT gps.create_track() as id;")
-            track_id = cur.fetchone()['id']
-            
-            #Adding same two points as before, just different timestamp.
-            cur.execute(
-                "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
-                (track_id, "2025-01-01 10:00:00+00", point['lat'], point['lon'], 5.0, 0.0)
-            )
-            cur.execute(
-                "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
-                (track_id, "2026-01-01 10:00:00+00", point['lat'], point2['lon'], 10.0, 0.0)
-            )
+        #Track 1
+        cur.execute("SELECT gps.create_track() as id;")
+        track_id = cur.fetchone()['id']
         
-            cur.execute(
-                "SELECT gps.is_new_road() as id;"
-            )
-            assert cur.fetchone()['id'] == False
+        point = sample_track_points[0]
+        point2 = sample_track_points[1]
+
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+            (track_id, point['timestamp'], point['lat'], point['lon'], 5.0, 0.0)
+        )
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+            (track_id, point2['timestamp'], point2['lat'], point2['lon'], 10.0, 0.0)
+        )
+        cur.execute("CALL gps.end_track();")
+
+        #Track 2
+        cur.execute("SELECT gps.create_track() as id;")
+        track_id = cur.fetchone()['id']
+        
+        #Adding same two points as before, just different timestamp.
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+            (track_id, "2025-01-01 10:00:00+00", point['lat'], point['lon'], 5.0, 0.0)
+        )
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+            (track_id, "2026-01-01 10:00:00+00", point['lat'], point2['lon'], 10.0, 0.0)
+        )
+    
+        cur.execute(
+            "SELECT gps.is_new_road() as id;"
+        )
+        assert cur.fetchone()['id'] == False
 
 def test_is_new_road_empty_database(db_conn):
     """If no previous tracks exist, is_new_road should return True."""
@@ -663,7 +661,7 @@ def test_validate_geometry_repairs_invalid_line(db_conn):
     """ Tests whether linestring is repaired by validate_geometry.
         Note: Current linestring creation doesn't allow polygons,
         thus testing if validate_geometry does something.
-"""
+    """
     with db_conn.cursor() as cur:
 
         cur.execute("SELECT gps.create_track() AS track_id;")
@@ -713,18 +711,18 @@ def test_validate_geometry_repairs_invalid_line(db_conn):
 def test_geometry_structure_after_validation(db_conn, sample_track_points):
     """Tests whether validating a track leaves the track line as a line string"""
     with db_conn.cursor() as cur:
-            cur.execute("SELECT gps.create_track() as id;")
-            track_id = cur.fetchone()['id']
+        cur.execute("SELECT gps.create_track() as id;")
+        track_id = cur.fetchone()['id']
 
-            
-            for p in sample_track_points:
-                cur.execute("CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
-                            (track_id, p['timestamp'], p['lat'], p['lon'], 10.0, 0.0))
         
+        for p in sample_track_points:
+            cur.execute("CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+                        (track_id, p['timestamp'], p['lat'], p['lon'], 10.0, 0.0))
 
-            cur.execute("CALL gps.validate_geometry(%s)", (track_id,))
-            
-            cur.execute("SELECT ST_GeometryType(geom::geometry) as geom FROM gps.track_lines WHERE track_id = %s", (track_id,))
-            geom_type = cur.fetchone()['geom']
-            
-            assert "LineString" in geom_type
+
+        cur.execute("CALL gps.validate_geometry(%s)", (track_id,))
+        
+        cur.execute("SELECT ST_GeometryType(geom::geometry) as geom FROM gps.track_lines WHERE track_id = %s", (track_id,))
+        geom_type = cur.fetchone()['geom']
+        
+        assert "LineString" in geom_type
