@@ -84,6 +84,7 @@ VALUES (
     );
 END;
 $$;
+
 -- Marks the current active track as finished
 CREATE OR REPLACE PROCEDURE gps.end_track() LANGUAGE plpgsql AS $$ BEGIN
 UPDATE gps.tracks
@@ -94,12 +95,12 @@ $$;
 -- Fetches a single track as a spatial LineString
 CREATE OR REPLACE FUNCTION gps.retrieve_track(retrieve_track_id INTEGER) RETURNS TABLE (
         track_id BIGINT,
-        geom GEOGRAPHY(LINESTRING, 4326),
+        geom_json JSONB,
         start_time TIMESTAMPTZ,
         end_time TIMESTAMPTZ
     ) LANGUAGE plpgsql AS $$ BEGIN RETURN QUERY
 SELECT t.track_id,
-    tl.geom,
+    ST_AsGeoJSON(tl.geom, 6)::jsonb,
     t.start_time,
     t.end_time
 FROM gps.tracks AS t
@@ -110,12 +111,12 @@ $$;
 -- Fetches all completed and active tracks for map visualization
 CREATE OR REPLACE FUNCTION gps.view_all_tracks() RETURNS TABLE (
         track_id BIGINT,
-        geom GEOGRAPHY(LINESTRING, 4326),
+        geom_json JSONB,
         start_time TIMESTAMPTZ,
         end_time TIMESTAMPTZ
     ) LANGUAGE plpgsql AS $$ BEGIN RETURN QUERY
 SELECT t.track_id,
-    tl.geom,
+    ST_AsGeoJSON(tl.geom, 6)::jsonb,
     t.start_time,
     t.end_time
 FROM gps.tracks AS t
