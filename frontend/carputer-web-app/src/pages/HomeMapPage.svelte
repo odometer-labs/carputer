@@ -5,24 +5,31 @@
   import TileLayer from 'ol/layer/Tile.js';
   import OSM from 'ol/source/OSM.js';
   import { defaults as defaultControls } from 'ol/control/defaults.js';
-  import { fromLonLat } from 'ol/proj.js';
+  import { fromLonLat, toLonLat } from 'ol/proj.js';
   import Feature from 'ol/Feature.js';
   import Point from 'ol/geom/Point.js';
   import VectorLayer from 'ol/layer/Vector.js';
   import VectorSource from 'ol/source/Vector.js';
-  import { Style, Circle, Fill, Stroke, RegularShape, Icon } from 'ol/style.js';
+  import { Style, Circle, Fill, Stroke, RegularShape, Icon, Text } from 'ol/style.js';
   import 'ol/ol.css';
   import { gpsService } from '../fake-api/gpsService';
   import type { GPSPosition } from '../fake-api/types';
   import { push } from 'svelte-spa-router';
+  import { Cluster } from 'ol/source';
   import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
   import { preferences } from '../services/preferences';
 
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
+  import SystemIndicators from "../assets/components/SystemIndicators.svelte";
 
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
   let locationStatus: string = 'Getting location...';
+
+  //APRS locations
+  let aprsLayer: VectorLayer | undefined;
+  let aprCluster: Cluster | undefined;
+  let aprsSource: VectorSource | undefined;
 
   // position marker objects
   let userLayer: VectorLayer | undefined;
@@ -72,6 +79,18 @@
 
     }
 
+    // this will be removed in the future but for now this sets up 10 aprs points around the 
+    // the user, to display an aprs icon.
+    const interval = setInterval(() => {
+    if (!latestUserCoords) return;
+
+    for (let i = 0; i < 10; i++) {
+      setRandomAprsPoints();
+    }
+
+    clearInterval(interval); // run once
+  }, 500);
+
     return () => {
       map?.setTarget(undefined);
       gpsService.stop();
@@ -115,6 +134,51 @@
         rotate: false, // disable default rotation control since we handle it ourselves
       })
     });
+
+    // this is for making points for APRS locations ------------
+    aprsSource = new VectorSource();
+
+    aprCluster = new Cluster({
+      distance: 30, // this is what determines how far from each point before combining.
+      source: aprsSource
+    });
+
+    aprsLayer = new VectorLayer({
+      source: aprCluster,
+      style: (feature) => {
+        // make sure that map exists before doing anything
+        if (!map) return;
+
+        const size = feature.get('features').length;
+        const zoom = map.getView().getZoom() ?? 0;
+
+        //at a certain distance the clusters/points will dissapear
+        if (zoom < 13) {
+          return;
+        }
+
+        // Single point = normal APRS icon
+        if (size === 1) {
+          return getAprsPinStyle(getAprsIcon());
+        }
+
+        // Cluster (circle with number, combined close by points)
+        return new Style({
+          image: new Circle({
+            radius: 12,
+            fill: new Fill({ color: '#3399CC' }),
+            stroke: new Stroke({ color: '#fff', width: 2 })
+          }),
+          text: new Text({
+            text: size.toString(),
+            fill: new Fill({ color: '#fff' })
+          })
+        });
+      }
+    });
+
+    map.addLayer(aprsLayer);
+
 
     if (mapElement) {
       pointerDownListener = (event: PointerEvent) => {
@@ -381,6 +445,89 @@
     }
   }
 
+  // TODO: there are appearently many different kinds of aprs icons so it may need
+  // to be able to shift through different icons for the situation. or if we decided
+  // to not implement different icons for different aprs then that fine, just remove
+  // this comment.
+  function getAprsIcon(): string {
+    return '/src/assets/aprs-bold.svg';
+  }
+
+  /**
+   * Sets up feature points for APRS points, this isn't ment to be the final
+   * version. it simply is putting points onto the map. 
+   * in the future we should make it so that the points can be updated.
+   */
+  function addAprsPoint(lat: number, long: number): void {
+    //if the aprsSource hasn't been set up then don't do anything
+    if (!aprsSource) return;
+
+    //create marker feature and add to map
+    // make the point(feature) using lat and long
+    const aprsMarker = new Feature({
+      geometry: new Point(fromLonLat([long, lat])),
+      name: 'aprs point'
+    });
+
+    aprsSource.addFeature(aprsMarker);
+  }
+
+  // this is the style for the pins, you can insert the image to the pin
+  function getAprsPinStyle(img: string): Style[] {
+    return [
+      // pin stem (triangle)
+      new Style({
+        image: new RegularShape({
+          points: 3,
+          radius: 10,
+          rotation: Math.PI,
+          fill: new Fill({ color: 'black' }),
+          stroke: new Stroke({ color: 'black', width: 1 }),
+          displacement: [0, -12]
+        })
+      }),
+
+      // pin head (circle)
+      new Style({
+        image: new Circle({
+          radius: 13,
+          fill: new Fill({ color: 'white' }),
+          stroke: new Stroke({ color: 'black', width: 2 }),
+          displacement: [0, 26]
+        })
+      }),
+
+      // APRS icon on top
+      new Style({
+        image: new Icon({
+          src: img,
+          scale: 0.05,
+          anchor: [0.5, 0.5],
+          displacement: [0, 26]
+        })
+      })
+    ];
+  }
+
+  //This is just for testing purposes and eventually will be removed when we get APRS data
+  // this gets a random location near the user and sends that information to the addAprsPoint()
+  // to make a aprs feature point.
+  function setRandomAprsPoints(): void{
+    if (!latestUserCoords) return;
+
+    const coords = toLonLat(latestUserCoords); //gets the coordnates
+
+    const long = coords[0];
+    const lat = coords[1];
+
+    if (lat === undefined || long === undefined) return; //makes sure it isn't null
+
+    addAprsPoint(
+      lat + (Math.random() - 0.5)* 0.01,
+      long + (Math.random() - 0.5)* 0.01
+    );
+  }
+
   // this function changes route to /SettingPreference
   function goToSettingPreference() : void {
     push("/SettingPreference");
@@ -473,6 +620,12 @@
       </ul>
     </div>
   {/if}
+
+  
+  <!-- this is the system indicators. -->
+  <SystemIndicators />
+
+
 
   <div class="map-container">
     <div bind:this={mapElement} class="map" style="width: 100%; height: 100%;"></div>
