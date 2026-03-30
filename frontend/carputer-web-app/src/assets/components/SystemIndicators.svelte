@@ -41,14 +41,14 @@
 <style>
   .status-bar {
     position: absolute; 
-    top: 20px; 
+    top: 27px; 
     right: 200px; 
     z-index: 1000;
 
     display: flex;
     align-items: center;
-    gap: 25px;
-    padding: 15px;
+    gap: 20px;
+    padding: 10px 15px 10px 15px;
 
     background-color: rgb(188, 188, 188, 0.9);
     -webkit-text-fill-color: black;
