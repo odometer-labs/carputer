@@ -130,7 +130,16 @@
     aprsLayer = new VectorLayer({
       source: aprCluster,
       style: (feature) => {
+        // make sure that map exists before doing anything
+        if (!map) return;
+
         const size = feature.get('features').length;
+        const zoom = map.getView().getZoom() ?? 0;
+
+        //at a certain distance the clusters/points will dissapear
+        if (zoom < 13) {
+          return;
+        }
 
         // Single point = normal APRS icon
         if (size === 1) {
