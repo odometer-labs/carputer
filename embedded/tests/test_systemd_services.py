@@ -36,11 +36,20 @@ class TestGpsdDropin:
             "gpsd drop-in must specify After=chrony.service"
         )
 
-    def test_dropin_requires_chrony(self, gpsd_dropin):
+    def test_dropin_wants_chrony(self, gpsd_dropin):
+        """Wants= (not Requires=) so gpsd survives if chrony crashes."""
+        parser = _parse_systemd_unit(gpsd_dropin)
+        wants = parser.get("Unit", "Wants", fallback="")
+        assert "chrony.service" in wants, (
+            "gpsd drop-in must specify Wants=chrony.service"
+        )
+
+    def test_dropin_does_not_use_requires(self, gpsd_dropin):
+        """Requires= would kill gpsd if chrony stops — too aggressive."""
         parser = _parse_systemd_unit(gpsd_dropin)
         requires = parser.get("Unit", "Requires", fallback="")
-        assert "chrony.service" in requires, (
-            "gpsd drop-in must specify Requires=chrony.service"
+        assert "chrony.service" not in requires, (
+            "gpsd drop-in must NOT use Requires=chrony.service — gpsd should survive chrony failure"
         )
 
     def test_dropin_is_minimal(self, gpsd_dropin):

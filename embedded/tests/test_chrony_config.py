@@ -23,11 +23,13 @@ class TestSHMRefclocks:
             "SHM 0 refclock should have refid NMEA"
         )
 
-    def test_shm0_is_noselect(self, chrony_conf):
-        """NMEA alone is too coarse — it must be noselect (paired with PPS)."""
+    def test_shm0_is_selectable(self, chrony_conf):
+        """NMEA must be selectable — the u-blox is USB-only so PPS may not
+        be wired. Without a selectable NMEA source, offline operation
+        (no internet → no NTP) would have zero time sources."""
         match = re.search(r"^refclock\s+SHM\s+0\b.*", chrony_conf, re.MULTILINE)
-        assert match and "noselect" in match.group(), (
-            "SHM 0 (NMEA) should be noselect — too coarse to select alone"
+        assert match and "noselect" not in match.group(), (
+            "SHM 0 (NMEA) must NOT be noselect — needed as fallback when PPS is unavailable"
         )
 
     def test_shm1_pps_refclock_present(self, chrony_conf):
