@@ -8,6 +8,8 @@ class TrackClient:
     def __init__(self):
         self.latitude: float = 0.0
         self.longitude: float = 0.0
+        self.speed: float = 0.0
+        self.heading: float = 0.0
 
     def get_lat_long(self):
         return {
