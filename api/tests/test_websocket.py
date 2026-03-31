@@ -5,6 +5,7 @@ from fastapi.websockets import WebSocket
 from fastapi.testclient import TestClient
 from app.models.track import Track
 from app.clients.track_client import TrackClient
+from gpsdclient import GPSDClient
 
 client = TestClient(app)
 
@@ -39,3 +40,8 @@ def test_websocket_embedded():
     with client.websocket_connect("/ws/get-position") as ws:
         greeting = ws.receive_text()
         assert greeting == json.dumps(track_client.__dict__)
+
+# def test_gpsd_client():
+#     with GPSDClient(host="127.0.0.1") as client:
+#         for result in client.json_stream():
+#             print(result)
