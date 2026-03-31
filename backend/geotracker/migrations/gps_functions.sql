@@ -84,7 +84,6 @@ VALUES (
     );
 END;
 $$;
-
 -- Marks the current active track as finished
 CREATE OR REPLACE PROCEDURE gps.end_track() LANGUAGE plpgsql AS $$ BEGIN
 UPDATE gps.tracks
@@ -241,13 +240,14 @@ WHERE t.track_id <> current_track_id
 END;
 $$;
 -- Utility for batch-importing external data sets as completed tracks
-CREATE OR REPLACE FUNCTION gps.import_track() RETURNS INTEGER LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION gps.import_track(geojson_data TEXT) RETURNS INTEGER LANGUAGE plpgsql AS $$
 DECLARE new_track_id INTEGER;
 BEGIN
 INSERT INTO gps.tracks(start_time, end_time)
 VALUES (NOW(), NOW())
 RETURNING track_id INTO new_track_id;
-RETURN new_track_id;
+INSERT INTO gps.track_lines(track_id, geom)
+VALUES ST_SetSRID(ST_GeomFromGeoJSON(geojson_data), 4326) RETURN new_track_id;
 END;
 $$;
 -- Fixes common GPS topology errors (self-intersections) to ensure spatial validity
