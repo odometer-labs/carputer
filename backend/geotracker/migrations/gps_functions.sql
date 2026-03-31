@@ -84,6 +84,7 @@ VALUES (
     );
 END;
 $$;
+
 -- Marks the current active track as finished
 CREATE OR REPLACE PROCEDURE gps.end_track() LANGUAGE plpgsql AS $$ BEGIN
 UPDATE gps.tracks
@@ -94,12 +95,12 @@ $$;
 -- Fetches a single track as a spatial LineString
 CREATE OR REPLACE FUNCTION gps.retrieve_track(retrieve_track_id INTEGER) RETURNS TABLE (
         track_id BIGINT,
-        geom GEOGRAPHY(LINESTRING, 4326),
+        geom JSONB,
         start_time TIMESTAMPTZ,
         end_time TIMESTAMPTZ
     ) LANGUAGE plpgsql AS $$ BEGIN RETURN QUERY
 SELECT t.track_id,
-    tl.geom,
+    ST_AsGeoJSON(tl.geom, 6)::jsonb,
     t.start_time,
     t.end_time
 FROM gps.tracks AS t
@@ -110,12 +111,12 @@ $$;
 -- Fetches all completed and active tracks for map visualization
 CREATE OR REPLACE FUNCTION gps.view_all_tracks() RETURNS TABLE (
         track_id BIGINT,
-        geom GEOGRAPHY(LINESTRING, 4326),
+        geom JSONB,
         start_time TIMESTAMPTZ,
         end_time TIMESTAMPTZ
     ) LANGUAGE plpgsql AS $$ BEGIN RETURN QUERY
 SELECT t.track_id,
-    tl.geom,
+    ST_AsGeoJSON(tl.geom, 6)::jsonb,
     t.start_time,
     t.end_time
 FROM gps.tracks AS t
@@ -192,12 +193,12 @@ $$;
 -- Proximity search: returns historical tracks that pass through the current area
 CREATE OR REPLACE FUNCTION gps.get_track_lines_near_location(p_within_meters DOUBLE PRECISION) RETURNS TABLE (
         track_id BIGINT,
-        geom GEOGRAPHY(LINESTRING, 4326),
+        geom JSONB,
         start_time TIMESTAMPTZ,
         end_time TIMESTAMPTZ
     ) LANGUAGE plpgsql AS $$ BEGIN RETURN QUERY
 SELECT t.track_id,
-    tl.geom,
+    ST_AsGeoJSON(tl.geom, 6)::jsonb,
     t.start_time,
     t.end_time
 FROM gps.tracks AS t
@@ -210,7 +211,7 @@ $$;
 -- Identifies historical tracks that overlap with the current active recording
 CREATE OR REPLACE FUNCTION gps.get_track_lines_using_road() RETURNS TABLE (
         track_id BIGINT,
-        geom GEOGRAPHY(LINESTRING, 4326),
+        geom JSONB,
         start_time TIMESTAMPTZ,
         end_time TIMESTAMPTZ
     ) LANGUAGE plpgsql AS $$
@@ -229,7 +230,7 @@ IF current_track_id IS NULL THEN RETURN;
 END IF;
 RETURN QUERY
 SELECT t.track_id,
-    tl.geom,
+    ST_AsGeoJSON(tl.geom, 6)::jsonb,
     t.start_time,
     t.end_time
 FROM gps.tracks AS t
