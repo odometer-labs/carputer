@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { push } from 'svelte-spa-router';
+
   type SystemHealth = {
     systemHealthStatus: string;
     cpuUsagePercent: number;
@@ -18,6 +20,20 @@
     currentPatchLevel: '0.3.2',
     gpsTrackCount: 147
   };
+
+  function goToLogs() : void {
+    push("/Logs");
+  }
+
+  function goToManageData() : void {
+    push("/ManageData");
+  }
+
+  function goToTracks() : void {
+    push("/Tracks");
+  }
+
+
 </script>
 
 <main class="home-shell">
@@ -40,9 +56,9 @@
     <article class="panel">
       <h3>Quick Actions</h3>
       <div class="action-list">
-        <button class="action-btn" type="button">View Logs</button>
-        <button class="action-btn" type="button">View Tracks</button>
-        <button class="action-btn" type="button">Manage Data</button>
+        <button class="action-btn" type="button" onclick={goToLogs}>View Logs</button>
+        <button class="action-btn" type="button" onclick={goToTracks}>View Tracks</button>
+        <button class="action-btn" type="button" onclick={goToManageData}>Manage Data</button>
       </div>
     </article>
   </section>
