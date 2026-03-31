@@ -16,8 +16,9 @@
 #   1. Installs required packages
 #   2. Configures gpsd
 #   3. Enables and starts required systemd services
-#   4. Deploys carputer.service from the repo
-#   5. Clones the carputer repo to /opt/carputer
+#   4. Clones the carputer repo to /opt/carputer
+#   5. Deploys chrony GPS time discipline config and gpsd drop-in
+#   6. Deploys carputer.service
 # =============================================================================
 
 set -e  # Exit immediately on error
@@ -29,6 +30,13 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
+
+# -----------------------------------------------------------------------------
+# Constants
+# -----------------------------------------------------------------------------
+REPO_URL="https://github.com/odometer-labs/carputer.git"
+DEPLOY_DIR="/opt/carputer"
+CURRENT_USER=$(whoami)
 
 # -----------------------------------------------------------------------------
 # Helper functions
@@ -133,10 +141,6 @@ echo ""
 # -----------------------------------------------------------------------------
 info "Step 4: Setting up carputer repository at /opt/carputer..."
 
-REPO_URL="https://github.com/odometer-labs/carputer.git"
-DEPLOY_DIR="/opt/carputer"
-CURRENT_USER=$(whoami)
-
 if [ -d "$DEPLOY_DIR/.git" ]; then
     info "Repository already exists at $DEPLOY_DIR."
     confirm "Pull latest changes?" && sudo git -C "$DEPLOY_DIR" pull && info "Repository updated."
@@ -151,9 +155,57 @@ fi
 echo ""
 
 # -----------------------------------------------------------------------------
-# Step 5 — Deploy carputer.service
+# Step 5 — Deploy chrony config and gpsd drop-in for GPS time discipline
 # -----------------------------------------------------------------------------
-info "Step 5: Deploying carputer.service..."
+info "Step 5: Deploying chrony + GPSD time sync configuration..."
+
+CHRONY_SRC="$DEPLOY_DIR/embedded/ntp_gps_sync/chrony.conf"
+CHRONY_DST="/etc/chrony/chrony.conf"
+GPSD_DROPIN_SRC="$DEPLOY_DIR/embedded/ntp_gps_sync/gpsd-depends-chrony.conf"
+GPSD_DROPIN_DIR="/etc/systemd/system/gpsd.service.d"
+GPSD_DROPIN_DST="$GPSD_DROPIN_DIR/depends-chrony.conf"
+
+# Deploy chrony.conf (GPS SHM refclocks + NTP fallback)
+if [ -f "$CHRONY_SRC" ]; then
+    if diff -q "$CHRONY_SRC" "$CHRONY_DST" &>/dev/null; then
+        info "chrony.conf is already up to date — skipping."
+    else
+        confirm "Deploy GPS-disciplined chrony.conf to /etc/chrony/?" || { warn "Skipping chrony config."; }
+        sudo cp "$CHRONY_DST" "$CHRONY_DST.bak" 2>/dev/null || true
+        sudo cp "$CHRONY_SRC" "$CHRONY_DST"
+        info "chrony.conf deployed (backup at $CHRONY_DST.bak)."
+    fi
+else
+    warn "chrony.conf not found at $CHRONY_SRC — skipping."
+fi
+
+# Deploy gpsd drop-in (ensures gpsd starts after chrony)
+if [ -f "$GPSD_DROPIN_SRC" ]; then
+    sudo mkdir -p "$GPSD_DROPIN_DIR"
+    if diff -q "$GPSD_DROPIN_SRC" "$GPSD_DROPIN_DST" &>/dev/null; then
+        info "gpsd chrony drop-in already up to date — skipping."
+    else
+        confirm "Deploy gpsd drop-in to ensure chrony starts before gpsd?" || { warn "Skipping gpsd drop-in."; }
+        sudo cp "$GPSD_DROPIN_SRC" "$GPSD_DROPIN_DST"
+        sudo systemctl daemon-reload
+        info "gpsd drop-in deployed: gpsd.service now requires chrony.service."
+    fi
+else
+    warn "gpsd drop-in not found at $GPSD_DROPIN_SRC — skipping."
+fi
+echo ""
+
+# Restart chrony to pick up new config if deployed
+if systemctl is-active chrony &>/dev/null; then
+    sudo systemctl restart chrony
+    info "chrony restarted with updated configuration."
+fi
+echo ""
+
+# -----------------------------------------------------------------------------
+# Step 6 — Deploy carputer.service
+# -----------------------------------------------------------------------------
+info "Step 6: Deploying carputer.service..."
 
 SERVICE_SRC="$DEPLOY_DIR/infrastructure/systemd/carputer.service"
 SERVICE_DST="/etc/systemd/system/carputer.service"
