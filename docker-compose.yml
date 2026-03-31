@@ -18,7 +18,7 @@ services:
         restart: true
 
   db:
-    image: postgis/postgis:16-3.5
+    image: imresamu/postgis:17-3.5-bookworm
     container_name: carputer_db
     restart: always
     # Docker will look for a .env file in the same directory by default
