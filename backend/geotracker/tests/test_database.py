@@ -1,4 +1,5 @@
 import pytest
+import json
 from datetime import datetime
 
 def test_db_connection(db_conn):
@@ -109,7 +110,7 @@ def test_track_line_creation(db_conn, sample_track_points):
         assert result['total'] == 1
 
 def test_line_creation_one_point(db_conn, sample_track_points):
-    "Tests track line creation with one point and two points."
+    """Tests track line creation with one point and two points."""
     with db_conn.cursor() as cur:
 
         # Create track and add points (which triggers line creation)
@@ -134,46 +135,44 @@ def test_line_creation_one_point(db_conn, sample_track_points):
         assert cur.fetchone()['count'] == 1
 
 def test_is_new_road(db_conn, sample_track_points):
-    "Checks whether a new road alert is made."
+    """Checks whether a new road alert is made."""
     with db_conn.cursor() as cur:
+        cur.execute("SELECT gps.create_track() as id;")
+        track_id = cur.fetchone()['id']
+        
+        point = sample_track_points[0]
+        point2 = sample_track_points[1]
+        
+        #Create line
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+            (track_id, point['timestamp'], point['lat'], point['lon'], 5.0, 0.0)
+        )
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+            (track_id, point2['timestamp'], point2['lat'], point2['lon'], 10.0, 0.0)
+        )
 
-            cur.execute("SELECT gps.create_track() as id;")
-            track_id = cur.fetchone()['id']
-            
+        cur.execute("CALL gps.end_track();")
 
-            point = sample_track_points[0]
-            point2 = sample_track_points[1]
-            
-            #Create line
-            cur.execute(
-                "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
-                (track_id, point['timestamp'], point['lat'], point['lon'], 5.0, 0.0)
-            )
-            cur.execute(
-                "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
-                (track_id, point2['timestamp'], point2['lat'], point2['lon'], 10.0, 0.0)
-            )
+        # Create second line
+        cur.execute("SELECT gps.create_track() as id;")
+        track_id = cur.fetchone()['id']
+        
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+            (track_id, point['timestamp'], 2, 2, 5.0, 0.0)
+        )
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+            (track_id, point2['timestamp'], 5, 5, 10.0, 0.0)
+        )
 
-            cur.execute("CALL gps.end_track();")
-    
-            # Create second line
-            cur.execute("SELECT gps.create_track() as id;")
-            track_id = cur.fetchone()['id']
-            
-            cur.execute(
-                "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
-                (track_id, point['timestamp'], 2, 2, 5.0, 0.0)
-            )
-            cur.execute(
-                "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
-                (track_id, point2['timestamp'], 5, 5, 10.0, 0.0)
-            )
-
-            cur.execute(
-                "SELECT gps.is_new_road() as id;"
-            )
-            # Should be a new road
-            assert cur.fetchone()['id'] == True
+        cur.execute(
+            "SELECT gps.is_new_road() as id;"
+        )
+        # Should be a new road
+        assert cur.fetchone()['id'] == True
 
 def test_is_new_road_false1(db_conn):
     "Negative case where the second track line is not a new road."
@@ -201,41 +200,41 @@ def test_is_new_road_false2(db_conn, sample_track_points):
     "Second negative case with two same exact track lines."
     with db_conn.cursor() as cur:
 
-            #Track 1
-            cur.execute("SELECT gps.create_track() as id;")
-            track_id = cur.fetchone()['id']
-            
-            point = sample_track_points[0]
-            point2 = sample_track_points[1]
-
-            cur.execute(
-                "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
-                (track_id, point['timestamp'], point['lat'], point['lon'], 5.0, 0.0)
-            )
-            cur.execute(
-                "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
-                (track_id, point2['timestamp'], point2['lat'], point2['lon'], 10.0, 0.0)
-            )
-            cur.execute("CALL gps.end_track();")
-
-            #Track 2
-            cur.execute("SELECT gps.create_track() as id;")
-            track_id = cur.fetchone()['id']
-            
-            #Adding same two points as before, just different timestamp.
-            cur.execute(
-                "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
-                (track_id, "2025-01-01 10:00:00+00", point['lat'], point['lon'], 5.0, 0.0)
-            )
-            cur.execute(
-                "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
-                (track_id, "2026-01-01 10:00:00+00", point['lat'], point2['lon'], 10.0, 0.0)
-            )
+        #Track 1
+        cur.execute("SELECT gps.create_track() as id;")
+        track_id = cur.fetchone()['id']
         
-            cur.execute(
-                "SELECT gps.is_new_road() as id;"
-            )
-            assert cur.fetchone()['id'] == False
+        point = sample_track_points[0]
+        point2 = sample_track_points[1]
+
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+            (track_id, point['timestamp'], point['lat'], point['lon'], 5.0, 0.0)
+        )
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+            (track_id, point2['timestamp'], point2['lat'], point2['lon'], 10.0, 0.0)
+        )
+        cur.execute("CALL gps.end_track();")
+
+        #Track 2
+        cur.execute("SELECT gps.create_track() as id;")
+        track_id = cur.fetchone()['id']
+        
+        #Adding same two points as before, just different timestamp.
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+            (track_id, "2025-01-01 10:00:00+00", point['lat'], point['lon'], 5.0, 0.0)
+        )
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+            (track_id, "2026-01-01 10:00:00+00", point['lat'], point2['lon'], 10.0, 0.0)
+        )
+    
+        cur.execute(
+            "SELECT gps.is_new_road() as id;"
+        )
+        assert cur.fetchone()['id'] == False
 
 def test_is_new_road_empty_database(db_conn):
     """If no previous tracks exist, is_new_road should return True."""
@@ -339,9 +338,10 @@ def test_delete_track_cascades_multiple_lines(db_conn, sample_track_points):
         assert cur.fetchone()['count'] == 1
 
 def test_view_all_tracks(db_conn, sample_track_points):
-    """Verify we can retrieve all tracks via the view function."""
+    """Verify we can retrieve all tracks via the view function.
+       Also verifies that the geom attribute is return as GEO JSON"""
     with db_conn.cursor() as cur:
-        # Create two separate tracks
+        # Create separate tracks
         for _ in range(4):
             cur.execute("SELECT gps.create_track() as id;")
             tid = cur.fetchone()['id']
@@ -358,8 +358,11 @@ def test_view_all_tracks(db_conn, sample_track_points):
         
         assert len(results) >= 4
         for row in results:
-            assert row['geom'] is not None
-            assert row['start_time'] is not None
+            assert 'geom' in row
+            assert isinstance(row['geom'], dict)
+            assert row['geom']['type'] == 'LineString'
+        
+
 
 def test_prevent_multiple_active_tracks(db_conn):
     """Verify that create_track doesn't create a new record if one is already active."""
@@ -398,10 +401,11 @@ def test_retrieve_track_not_found(db_conn):
 
 
 def test_retrieve_tracks(db_conn, sample_track_points):
-    """Verify we can retrieve tracks via the view function."""
+    """Verify we can retrieve tracks via the view function. 
+       Also verifies whether the function returns a geom GEOJSON attribute."""
     with db_conn.cursor() as cur:
 
-        list = []
+        track_ids = []
         cur.execute("SELECT * FROM gps.retrieve_track(999999);")
         result = cur.fetchone()  
         assert result is None
@@ -409,62 +413,120 @@ def test_retrieve_tracks(db_conn, sample_track_points):
         for _ in range(4):
             cur.execute("SELECT gps.create_track() as id;")
             tid = cur.fetchone()['id']
-            list.append(tid)
+            track_ids.append(tid)
     
             for pt in sample_track_points:
                 cur.execute("CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
                             (tid, pt['timestamp'], pt['lat'], pt['lon'], 0, 0))
             cur.execute("CALL gps.end_track();")
         
-        cur.execute("SELECT * FROM gps.retrieve_track(%s);", (list[0],))
+        cur.execute("SELECT * FROM gps.retrieve_track(%s);", (track_ids[0],))
         result = cur.fetchone()
         assert len(result) == 4
         assert result['geom'] is not None
-        assert result['track_id'] == list[0]
+        assert result['track_id'] == track_ids[0]
 
+        # NOW VERIFY GEOJSON
+        # Extract the geom column
+        geojson = result['geom']
 
-def test_import_track(db_conn):
-    """Verify that import_track creates a track that is already 'closed'."""
-    with db_conn.cursor() as cur:
-        # Act: Call the import function
-        cur.execute("SELECT gps.import_track() as id;")
-        track_id = cur.fetchone()['id']
+        # VERIFY
+        # Check if it's a dictionary (JSONB is auto-parsed by the driver)
+        assert isinstance(geojson, dict), "The geom column should be a dictionary"
         
-        # Assert: Check that it exists and end_time is NOT NULL
-        cur.execute("SELECT start_time, end_time FROM gps.tracks WHERE track_id = %s;", (track_id,))
-        result = cur.fetchone()
+        # Check for standard GeoJSON keys
+        assert geojson['type'] == 'LineString', "GeoJSON type should be LineString"
+        assert 'coordinates' in geojson, "GeoJSON must contain a 'coordinates' key"
         
-        assert result is not None
-        assert result['start_time'] is not None
-        assert result['end_time'] is not None  # Unlike create_track(), this should be filled
-        assert result['start_time'] == result['end_time']
+        # Check if coordinates are a list of points
+        assert isinstance(geojson['coordinates'], list)
+        assert len(geojson['coordinates']) >= 2
+        
+        # Verify the coordinate structure [longitude, latitude]
+        # GeoJSON is ALWAYS [Long, Lat], whereas PostGIS functions often use [Lat, Long]
+        first_coord = geojson['coordinates'][0]
+        assert len(first_coord) == 2
+        assert isinstance(first_coord[0], float) # Longitude
+        assert isinstance(first_coord[1], float) # Latitude
 
+      
 
-def test_import_with_existing_tracks(db_conn, sample_track_points):
-    """Verify we can retrieve all tracks via the view function."""
+def test_import_track(db_conn, sample_track_points):
+    """Verify that import_track can receive a GEOJSON string and imports it into
+       tracks and track lines. Also verifies that data retrieved can be imported back."""
     with db_conn.cursor() as cur:
-        for _ in range(4):
+        track_ids = []
+        cur.execute("SELECT * FROM gps.retrieve_track(999999);")
+        result = cur.fetchone()  
+        assert result is None
+       
+        for _ in range(2):
             cur.execute("SELECT gps.create_track() as id;")
             tid = cur.fetchone()['id']
+            track_ids.append(tid)
+    
             for pt in sample_track_points:
                 cur.execute("CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
                             (tid, pt['timestamp'], pt['lat'], pt['lon'], 0, 0))
             cur.execute("CALL gps.end_track();")
+
+        # Retrieve a track to import 
+        cur.execute("SELECT * FROM gps.retrieve_track(%s);", (track_ids[0],))
+        result = cur.fetchone()
+
+        # --Optional-- delete the track before importing
+        cur.execute("CALL gps.delete_track(%s);", (track_ids[0],))
+        track_to_import = result['geom']
+        geojson_string = json.dumps(track_to_import)
+
+        cur.execute("SELECT gps.import_track(%s) as id;", (geojson_string,))
+        new_track_id = cur.fetchone()['id']
         
-        cur.execute("SELECT gps.import_track() as id;")    
-        track_id = cur.fetchone()['id']
-        
-        # Check that it exists and end_time is NOT NULL
-        cur.execute("SELECT start_time, end_time FROM gps.tracks WHERE track_id = %s;", (track_id,))
+        # Assert: Check that it exists and end_time is NOT NULL
+        cur.execute("SELECT * FROM gps.tracks WHERE track_id = %s;", (new_track_id,))
         result = cur.fetchone()
         
         assert result is not None
         assert result['start_time'] is not None
         assert result['end_time'] is not None  # Unlike create_track(), this should be filled
         assert result['start_time'] == result['end_time']
+        
+        cur.execute("SELECT * FROM gps.retrieve_track(%s);", (new_track_id,))
+        result = cur.fetchone()
 
-        cur.execute("SELECT count(*) from gps.tracks as count;")
-        assert cur.fetchone()['count'] == 5
+        assert result is not None
+        assert 'geom' in result
+        assert result['geom']['type'] == 'LineString'
+        assert isinstance(result['geom'], dict)
+      
+        
+def test_import_track_timing_and_geom(db_conn):
+    """Verifies that imported tracks have matching start/end times 
+       and valid geometry parsing."""
+    with db_conn.cursor() as cur:
+        
+        mock_geojson1 = '{"type": "LineString", "coordinates": [[-122.6, 45.5], [-122.61, 45.51]]}'
+        mock_geojson2 = '{"type": "LineString", "coordinates": [[-12.6, 45.5], [-12.61, 45.51]]}'
+        geojson_list = [mock_geojson1, mock_geojson2]
+    
+        for mock_geojson in geojson_list:
+            cur.execute("SELECT gps.import_track(%s) as id;", (mock_geojson,))
+            new_id = cur.fetchone()['id']
+
+        
+            cur.execute("SELECT start_time, end_time FROM gps.tracks WHERE track_id = %s;", (new_id,))
+            meta = cur.fetchone()
+
+
+            assert meta['start_time'] is not None
+            assert meta['end_time'] is not None
+            assert meta['start_time'] == meta['end_time'], "Start and End times must match for imported tracks"
+
+            cur.execute("SELECT * FROM gps.retrieve_track(%s);", (new_id,))
+            result = cur.fetchone()
+            assert result['geom']['type'] == 'LineString'
+            assert isinstance(result['geom'], dict)
+
         
 def test_update_track_metadata(db_conn):
     """Verify we can manually update the start and end times of a track."""
@@ -487,7 +549,8 @@ def test_update_track_metadata(db_conn):
 
 
 def test_get_tracks_near_location(db_conn):
-    """Verify spatial filtering: find nearby tracks but ignore the current one."""
+    """Verify spatial filtering: find nearby tracks but ignore the current one.
+       Also verifies that the geom attribute returned is GEO JSON"""
     with db_conn.cursor() as cur:
         # 1. SETUP: Create "Old Track A" (Nearby)
         # Location: roughly (0,0)
@@ -528,13 +591,20 @@ def test_get_tracks_near_location(db_conn):
         # Now both Old Track A and Old Track B should be retrieved
         assert len(results_large) == 2
 
+        
         cur.execute("SELECT * FROM gps.get_track_lines_near_location(0);")
         results_zero = cur.fetchall()
         assert len(results_zero) == 0
-
+       
+        # VERIFY GEOJSON 
+        for row in results_large:
+            assert 'geom' in row
+            assert isinstance(row['geom'], dict)
+            assert row['geom']['type'] == 'LineString'      
 
 def test_get_tracks_using_road(db_conn):
-    """Verify spatial filtering: find nearby tracks using the current road."""
+    """Verify spatial filtering: find nearby tracks using the current road.
+       Also verifies whether the geom attribute is returned as GEOJSON."""
     with db_conn.cursor() as cur:
         # 1. SETUP: Create "Old Track A" (Nearby)
         # Location: roughly (0,0)
@@ -581,6 +651,12 @@ def test_get_tracks_using_road(db_conn):
         assert results[0]['track_id'] == id_near
         assert results[0]['end_time'] is not None
 
+        # NOW VERIFY GEOJSON
+        for row in results:
+            assert 'geom' in row
+            assert isinstance(row['geom'], dict)
+            assert row['geom']['type'] == 'LineString'
+
 
 def test_get_tracks_using_no_road(db_conn):
     """Verify spatial filtering: find nearby tracks using the current road.
@@ -620,7 +696,7 @@ def test_validate_geometry_repairs_invalid_line(db_conn):
     """ Tests whether linestring is repaired by validate_geometry.
         Note: Current linestring creation doesn't allow polygons,
         thus testing if validate_geometry does something.
-"""
+    """
     with db_conn.cursor() as cur:
 
         cur.execute("SELECT gps.create_track() AS track_id;")
@@ -670,18 +746,18 @@ def test_validate_geometry_repairs_invalid_line(db_conn):
 def test_geometry_structure_after_validation(db_conn, sample_track_points):
     """Tests whether validating a track leaves the track line as a line string"""
     with db_conn.cursor() as cur:
-            cur.execute("SELECT gps.create_track() as id;")
-            track_id = cur.fetchone()['id']
+        cur.execute("SELECT gps.create_track() as id;")
+        track_id = cur.fetchone()['id']
 
-            
-            for p in sample_track_points:
-                cur.execute("CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
-                            (track_id, p['timestamp'], p['lat'], p['lon'], 10.0, 0.0))
         
+        for p in sample_track_points:
+            cur.execute("CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+                        (track_id, p['timestamp'], p['lat'], p['lon'], 10.0, 0.0))
 
-            cur.execute("CALL gps.validate_geometry(%s)", (track_id,))
-            
-            cur.execute("SELECT ST_GeometryType(geom::geometry) as geom FROM gps.track_lines WHERE track_id = %s", (track_id,))
-            geom_type = cur.fetchone()['geom']
-            
-            assert "LineString" in geom_type
+
+        cur.execute("CALL gps.validate_geometry(%s)", (track_id,))
+        
+        cur.execute("SELECT ST_GeometryType(geom::geometry) as geom FROM gps.track_lines WHERE track_id = %s", (track_id,))
+        geom_type = cur.fetchone()['geom']
+        
+        assert "LineString" in geom_type

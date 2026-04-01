@@ -247,7 +247,11 @@ INSERT INTO gps.tracks(start_time, end_time)
 VALUES (NOW(), NOW())
 RETURNING track_id INTO new_track_id;
 INSERT INTO gps.track_lines(track_id, geom)
-VALUES ST_SetSRID(ST_GeomFromGeoJSON(geojson_data), 4326) RETURN new_track_id;
+VALUES (
+        new_track_id,
+        ST_SetSRID(ST_GeomFromGeoJSON(geojson_data), 4326)
+    );
+RETURN new_track_id;
 END;
 $$;
 -- Fixes common GPS topology errors (self-intersections) to ensure spatial validity
