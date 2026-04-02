@@ -1,5 +1,7 @@
 <script>
   import BackButton from "../assets/components/BackButton.svelte";
+  import SystemIndicators from "../assets/components/SystemIndicators.svelte";
+  import WifiIndicator from "../assets/components/WifiIndicator.svelte";
   
 
   // this is for if the user wishes to turn off the wifi
@@ -22,10 +24,19 @@
     <!-- this is the exit buttion -->
     <BackButton />
     <h2>Wifi</h2>
+
+    <SystemIndicators 
+      isActiveBackground={false} 
+      isWifiActive={false} 
+      isRoadDiscoverActive={false}
+    />
   </div>
 
   <!-- This button is to disable the wifi -->
   <div class="switch-box">
+    <!-- this is the wifi indicator encased in a span so that I can style it.-->
+    <span style="transform: scale(1.3); position:relative; top:-6px;"><WifiIndicator /></span>
+
     <label class="switch">
       <input type="checkbox" bind:checked={isWifiOn} />
       
@@ -66,11 +77,13 @@
     color: rgb(33, 140, 0);
     font-size: 18px;
     margin-left: 5%;
+    width: 50px;
   }
   .wifi_text_off {
     color: rgb(180, 42, 0);
     font-size: 18px;
     margin-left: 5%;
+    width: 50px;
   } 
   .switch {
     cursor: pointer;
@@ -78,6 +91,9 @@
 
     display: inline-block;
     cursor: pointer;
+
+    user-select: none; /* this to make it so the users can't highlight it or the surounding images */
+    -webkit-user-select: none;
   }
 
   .switch input {
@@ -93,10 +109,12 @@
   .switch-box {
     position: absolute;
     top: 1%;
-    right: 0%;
-    display: grid;
-    grid-template-columns: repeat(2, 1fr); 
-    gap: 10px;
+    right: 1%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    gap: 10px; /* controls how close they are */
   }
     
 </style>

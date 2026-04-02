@@ -18,7 +18,6 @@
   import { Cluster } from 'ol/source';
   import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
   import { preferences } from '../services/preferences';
-
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
   import SystemIndicators from "../assets/components/SystemIndicators.svelte";
 
@@ -82,14 +81,14 @@
     // this will be removed in the future but for now this sets up 10 aprs points around the 
     // the user, to display an aprs icon.
     const interval = setInterval(() => {
-    if (!latestUserCoords) return;
+      if (!latestUserCoords) return;
 
-    for (let i = 0; i < 10; i++) {
-      setRandomAprsPoints();
-    }
+      for (let i = 0; i < 10; i++) {
+        setRandomAprsPoints();
+      }
 
-    clearInterval(interval); // run once
-  }, 500);
+      clearInterval(interval); // run once
+    }, 500);
 
     return () => {
       map?.setTarget(undefined);

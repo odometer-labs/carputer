@@ -1,5 +1,6 @@
 <script>
   import BackButton from "../assets/components/BackButton.svelte";
+  import SystemIndicators from "../assets/components/SystemIndicators.svelte";
   import cloud_download from "../assets/cloud-download-bold.svg";
   import cloud_upload from "../assets/cloud-upload-bold.svg";
   import check_mark from "../assets/check-circle-bold.svg";
@@ -14,6 +15,11 @@
       <!-- this is the exit buttion -->
     <BackButton />
     <h2>System Info</h2>
+
+    <SystemIndicators 
+      isActiveBackground={false} 
+      isRoadDiscoverActive={false}
+    />
   </div>
 
 

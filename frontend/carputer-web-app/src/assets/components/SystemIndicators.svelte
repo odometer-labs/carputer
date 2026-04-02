@@ -14,7 +14,8 @@
 </script>
 
 
-<div class={isActiveBackground? "status-bar": "status-bar-translucent"}>
+<div class={isActiveBackground? "status-bar": "status-bar-translucent" + 
+            (!isWifiActive ? " no-wifi" : "")}>
   <!-- time -->
   {#if isTimeActive}
     <TimeIndicator />
@@ -42,7 +43,7 @@
   .status-bar {
     position: absolute; 
     top: 27px; 
-    right: 200px; 
+    right: 20%; 
     z-index: 1000;
 
     display: flex;
@@ -59,8 +60,8 @@
 
  .status-bar-translucent {
     position: absolute; 
-    top: 20px; 
-    right: 200px; 
+    top: 12px; 
+    right: 2%; 
     z-index: 1000;
 
     display: flex;
@@ -69,6 +70,9 @@
     padding: 15px;
 
     -webkit-text-fill-color: black;
- }
+ }.status-bar-translucent.no-wifi {
+  right: 25%; 
+}
+ 
 
 </style>
