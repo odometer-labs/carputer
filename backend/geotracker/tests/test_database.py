@@ -4,7 +4,9 @@ from datetime import datetime
 
 
 def test_db_connection(db_conn):
-    """Verify that db_conn fixture actually works."""
+    """
+    Verify that db_conn fixture actually works.
+    """
     with db_conn.cursor() as cur:
         cur.execute("SELECT 1 as connected;")
         result = cur.fetchone()
@@ -12,7 +14,9 @@ def test_db_connection(db_conn):
 
 
 def test_create_and_end_track(db_conn):
-    """Test track creation and end."""
+    """
+    Test track creation and end.
+    """
     with db_conn.cursor() as cur:
         cur.execute("SELECT gps.create_track() as id;")
         track_id = cur.fetchone()["id"]
@@ -28,7 +32,9 @@ def test_create_and_end_track(db_conn):
 
 
 def test_add_track_point(db_conn, sample_track_points):
-    """Test point insertion."""
+    """
+    Test point insertion.
+    """
     with db_conn.cursor() as cur:
         cur.execute("SELECT gps.create_track() as id;")
         track_id = cur.fetchone()["id"]
@@ -48,7 +54,9 @@ def test_add_track_point(db_conn, sample_track_points):
 
 
 def test_gps_latest_track_point(db_conn, sample_track_points):
-    """Test gps latest track point function."""
+    """
+    Test gps latest track point function.
+    """
     with db_conn.cursor() as cur:
 
         cur.execute("SELECT gps.create_track() as id;")
@@ -89,7 +97,9 @@ def test_gps_latest_track_point(db_conn, sample_track_points):
 
 
 def test_track_line_creation(db_conn, sample_track_points):
-    """Test creation of a track line."""
+    """
+    Test creation of a track line.
+    """
 
     with db_conn.cursor() as cur:
         cur.execute("SELECT gps.create_track() as id;")
@@ -119,7 +129,9 @@ def test_track_line_creation(db_conn, sample_track_points):
 
 
 def test_line_creation_one_point(db_conn, sample_track_points):
-    """Tests track line creation with one point and two points."""
+    """
+    Tests track line creation with one point and two points.
+    """
     with db_conn.cursor() as cur:
 
         # Create track and add points (which triggers line creation)
@@ -152,7 +164,9 @@ def test_line_creation_one_point(db_conn, sample_track_points):
 
 
 def test_is_new_road(db_conn, sample_track_points):
-    """Checks whether a new road alert is made."""
+    """
+    Checks whether a new road alert is made.
+    """
     with db_conn.cursor() as cur:
         cur.execute("SELECT gps.create_track() as id;")
         track_id = cur.fetchone()["id"]
@@ -191,7 +205,7 @@ def test_is_new_road(db_conn, sample_track_points):
 
 
 def test_is_new_road_false1(db_conn):
-    "Negative case where the second track line is not a new road."
+    """Negative case where the second track line is not a new road."""
     with db_conn.cursor() as cur:
 
         # 1. Create track 1
@@ -223,7 +237,7 @@ def test_is_new_road_false1(db_conn):
 
 
 def test_is_new_road_false2(db_conn, sample_track_points):
-    "Second negative case with two same exact track lines."
+    """Second negative case testing is new road function with two same exact track lines."""
     with db_conn.cursor() as cur:
 
         # Track 1
@@ -269,7 +283,9 @@ def test_is_new_road_false2(db_conn, sample_track_points):
 
 
 def test_is_new_road_empty_database(db_conn):
-    """If no previous tracks exist, is_new_road should return True."""
+    """
+    If no previous tracks exist, is_new_road should return True.
+    """
     with db_conn.cursor() as cur:
 
         # Track 1
@@ -283,7 +299,9 @@ def test_is_new_road_empty_database(db_conn):
 
 
 def test_delete_track_cascades(db_conn, sample_track_points):
-    """Verify that deleting a track removes all points and lines."""
+    """
+    Verify that deleting a track removes all points and lines.
+    """
     with db_conn.cursor() as cur:
         # Create track and add points (which triggers line creation)
         cur.execute("SELECT gps.create_track() as id;")
@@ -327,7 +345,9 @@ def test_delete_track_cascades(db_conn, sample_track_points):
 
 
 def test_delete_track_cascades_multiple_lines(db_conn, sample_track_points):
-    """Verify that deleting a track removes all points and lines when there are more than one line."""
+    """
+    Verify that deleting a track removes all points and lines when there are more than one line.
+    """
     with db_conn.cursor() as cur:
         # Create track and add points (which triggers line creation)
         cur.execute("SELECT gps.create_track() as id;")
@@ -401,8 +421,10 @@ def test_delete_track_cascades_multiple_lines(db_conn, sample_track_points):
 
 
 def test_view_all_tracks(db_conn, sample_track_points):
-    """Verify we can retrieve all tracks via the view function.
-    Also verifies that the geom attribute is return as GEO JSON"""
+    """
+    Verify we can retrieve all tracks via the view function.
+    Also verifies that the geom attribute is return as GEO JSON
+    """
     with db_conn.cursor() as cur:
         # Create separate tracks
         for _ in range(4):
@@ -428,7 +450,9 @@ def test_view_all_tracks(db_conn, sample_track_points):
 
 
 def test_prevent_multiple_active_tracks(db_conn):
-    """Verify that create_track doesn't create a new record if one is already active."""
+    """
+    Verify that create_track doesn't create a new record if one is already active.
+    """
     with db_conn.cursor() as cur:
         # Create first track
         cur.execute("SELECT gps.create_track() as id;")
@@ -447,7 +471,9 @@ def test_prevent_multiple_active_tracks(db_conn):
 
 
 def test_latest_point_empty_db(db_conn):
-    """Verify the function returns nothing when no points exist."""
+    """
+    Verify the function returns nothing when no points exist.
+    """
     with db_conn.cursor() as cur:
         cur.execute("SELECT * FROM gps.get_latest_track_point();")
         result = cur.fetchone()
@@ -455,7 +481,9 @@ def test_latest_point_empty_db(db_conn):
 
 
 def test_retrieve_track_not_found(db_conn):
-    """Verify that retrieving a non-existent track returns an empty result set."""
+    """
+    Verify that retrieving a non-existent track returns an empty result set.
+    """
     with db_conn.cursor() as cur:
         # Use an ID that definitely doesn't exist
         cur.execute("SELECT * FROM gps.retrieve_track(999999);")
@@ -465,8 +493,10 @@ def test_retrieve_track_not_found(db_conn):
 
 
 def test_retrieve_tracks(db_conn, sample_track_points):
-    """Verify we can retrieve tracks via the view function.
-    Also verifies whether the function returns a geom GEOJSON attribute."""
+    """
+    Verify we can retrieve tracks via the view function.
+    Also verifies whether the function returns a geom GEOJSON attribute.
+    """
     with db_conn.cursor() as cur:
 
         track_ids = []
@@ -517,8 +547,10 @@ def test_retrieve_tracks(db_conn, sample_track_points):
 
 
 def test_import_track(db_conn, sample_track_points):
-    """Verify that import_track can receive a GEOJSON string and imports it into
-    tracks and track lines. Also verifies that data retrieved can be imported back."""
+    """
+    Verify that import_track can receive a GEOJSON string and imports it into
+    tracks and track lines. Also verifies that data retrieved can be imported back.
+    """
     with db_conn.cursor() as cur:
         track_ids = []
         cur.execute("SELECT * FROM gps.retrieve_track(999999);")
@@ -570,8 +602,10 @@ def test_import_track(db_conn, sample_track_points):
 
 
 def test_import_track_timing_and_geom(db_conn):
-    """Verifies that imported tracks have matching start/end times
-    and valid geometry parsing."""
+    """
+    Verifies that imported tracks have matching start/end times
+    and valid geometry parsing.
+    """
     with db_conn.cursor() as cur:
 
         mock_geojson1 = (
@@ -605,7 +639,9 @@ def test_import_track_timing_and_geom(db_conn):
 
 
 def test_update_track_metadata(db_conn):
-    """Verify we can manually update the start and end times of a track."""
+    """
+    Verify we can manually update the start and end times of a track.
+    """
     with db_conn.cursor() as cur:
 
         cur.execute("SELECT gps.create_track() as id;")
@@ -629,8 +665,10 @@ def test_update_track_metadata(db_conn):
 
 
 def test_get_tracks_near_location(db_conn):
-    """Verify spatial filtering: find nearby tracks but ignore the current one.
-    Also verifies that the geom attribute returned is GEO JSON"""
+    """
+    Verify spatial filtering: find nearby tracks but ignore the current one.
+    Also verifies that the geom attribute returned is GEO JSON
+    """
     with db_conn.cursor() as cur:
         # 1. SETUP: Create "Old Track A" (Nearby)
         # Location: roughly (0,0)
@@ -698,8 +736,10 @@ def test_get_tracks_near_location(db_conn):
 
 
 def test_get_tracks_using_road(db_conn):
-    """Verify spatial filtering: find nearby tracks using the current road.
-    Also verifies whether the geom attribute is returned as GEOJSON."""
+    """
+    Verify spatial filtering: find nearby tracks using the current road.
+    Also verifies whether the geom attribute is returned as GEOJSON.
+    """
     with db_conn.cursor() as cur:
         # 1. SETUP: Create "Old Track A" (Nearby)
         # Location: roughly (0,0)
@@ -784,9 +824,11 @@ def test_get_tracks_using_road(db_conn):
 
 
 def test_get_tracks_using_no_road(db_conn):
-    """Verify spatial filtering: find nearby tracks using the current road.
+    """
+    Verify spatial filtering: find nearby tracks using the current road.
     This test should fail due to only having one point in the current track,
-    thus no road is created to compare with."""
+    thus no road is created to compare with.
+    """
 
     with db_conn.cursor() as cur:
         # 1. SETUP: Create "Old Track A" (Nearby)
@@ -834,7 +876,8 @@ def test_get_tracks_using_no_road(db_conn):
 
 
 def test_validate_geometry_repairs_invalid_line(db_conn):
-    """Tests whether linestring is repaired by validate_geometry.
+    """
+    Tests whether linestring is repaired by validate_geometry.
     Note: Current linestring creation doesn't allow polygons,
     thus testing if validate_geometry does something.
     """
@@ -894,7 +937,9 @@ def test_validate_geometry_repairs_invalid_line(db_conn):
 
 
 def test_geometry_structure_after_validation(db_conn, sample_track_points):
-    """Tests whether validating a track leaves the track line as a line string"""
+    """
+    Tests whether validating a track leaves the track line as a line string
+    """
     with db_conn.cursor() as cur:
         cur.execute("SELECT gps.create_track() as id;")
         track_id = cur.fetchone()["id"]
