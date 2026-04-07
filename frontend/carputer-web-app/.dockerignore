@@ -1,0 +1,19 @@
+# Dependencies - will be installed fresh in container
+node_modules/
+
+# Build output - will be rebuilt in container
+dist/
+
+# Development files
+*.md
+.gitignore
+.vscode/
+*.log
+
+# Test files
+**/*.test.ts
+**/*.spec.ts
+vitest.config.ts
+
+# TypeScript build info
+*.tsbuildinfo
