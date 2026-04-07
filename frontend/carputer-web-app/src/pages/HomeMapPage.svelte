@@ -18,6 +18,9 @@
   import { Cluster } from 'ol/source';
   import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
   import { preferences } from '../services/preferences';
+  import aprsIconUrl from '../assets/aprs-bold.svg';
+  import userArrowIconUrl from '../assets/icons/maps-arrow-blue-white.svg';
+
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
   import SystemIndicators from "../assets/components/SystemIndicators.svelte";
 
@@ -288,7 +291,7 @@
 
 
   function getIconoirArrowUrl(): string {
-    return '/src/assets/icons/maps-arrow-blue-white.svg';
+    return userArrowIconUrl;
   }
 
   /**
@@ -449,7 +452,7 @@
   // to not implement different icons for different aprs then that fine, just remove
   // this comment.
   function getAprsIcon(): string {
-    return '/src/assets/aprs-bold.svg';
+    return aprsIconUrl;
   }
 
   /**

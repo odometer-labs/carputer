@@ -1,6 +1,11 @@
-import pytest
+from time import sleep
 
-import lib.networkmanager as nm
+import pytest
+from fastapi.testclient import TestClient
+
+import wifi_manager as wm
+
+from main import app
 
 
 def pytest_addoption(parser):
@@ -20,15 +25,15 @@ def pytest_addoption(parser):
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_default_bus():
-    nm.setup_system_bus()
+    wm.setup_system_bus()
+
+
+@pytest.fixture(autouse=True)
+def delete_all_connections(pytestconfig, setup_default_bus):
+    wm.delete_all_wifi_connections()
+    sleep(1)
 
 
 @pytest.fixture()
-def device(pytestconfig):
-    interface = pytestconfig.getoption("--interface")
-    device = nm.get_wifi_device_by_interface(interface)
-    if not device:
-        pytest.exit(
-            f"Unable to find device associated with supplied interface: {interface}"
-        )
-    return device
+def client():
+    return TestClient(app)
