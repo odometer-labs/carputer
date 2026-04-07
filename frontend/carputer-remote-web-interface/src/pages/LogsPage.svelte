@@ -6,7 +6,7 @@
 <main class="logs-shell">
   <header class="app-bar">
     <BackButton />
-    <h1>Logs</h1>
+    <h1 style="display: flex; justify-content: center; flex: 1;">Logs</h1>
   </header>
 </main>
 

@@ -5,7 +5,7 @@
 <main class="manage-data-shell">
   <header class="app-bar">
     <BackButton />
-    <h1>Manage Data</h1>
+    <h1 style="display: flex; justify-content: center; flex: 1;">Manage Data</h1>
   </header>
 </main>
 

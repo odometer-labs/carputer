@@ -5,7 +5,7 @@
 <main class="tracks-shell">
   <header class="app-bar">
     <BackButton />
-    <h1>Track Viewer</h1>
+    <h1 style="display: flex; justify-content: center; flex: 1;">Track Viewer</h1>
   </header>
 </main>
 
