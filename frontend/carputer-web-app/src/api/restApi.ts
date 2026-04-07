@@ -2,12 +2,11 @@
     this file holds the rest api calls from back end
 */
 import type { StartTrackResponse, EndTrackResponse} from "./types";
+import { ENDPOINTS } from "../utils/constants";
 
-
-const API_URL = "http://localhost:8000/v1";
 
 export async function startTrack() : Promise<StartTrackResponse> {
-  const res = await fetch(`${API_URL}/tracks-start`, {
+  const res = await fetch(ENDPOINTS.startTrack, {
     method: "POST"
   });
 
@@ -17,7 +16,7 @@ export async function startTrack() : Promise<StartTrackResponse> {
 }
 
 export async function endTrack() : Promise<EndTrackResponse> {
-  const res = await fetch(`${API_URL}/tracks-end`, {
+  const res = await fetch(ENDPOINTS.endTrack, {
     method: "GET"
   });
 

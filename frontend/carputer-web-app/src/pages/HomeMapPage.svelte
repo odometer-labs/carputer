@@ -633,7 +633,7 @@
     on:click={() => $trackStore.isTracking ? trackStore.end() : trackStore.start()}
     style="background-color: {$trackStore.isTracking ? 'lightcoral' : 'lightgreen'}"
   >
-    <strong>{$trackStore.isTracking ? "Stop" : "Start"}</strong>
+    <strong>{$trackStore.isTracking ? "Stop Track" : "Start Track"}</strong>
   </button>
 
   <div class="map-container">
@@ -775,18 +775,18 @@
 
   .start-end-track_butn {
     position: absolute;
-    bottom: 40%;
+    bottom: 20px;
+    right: 25px;
     z-index: 1000;
-    left: 25px;
-    width: 60px;
-    height: 60px;
+    width: 80px;
+    height: 70px;
     padding: 0px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     border: 1px solid white;
-    border-radius: 50%;
+    border-radius: 15%;
     background-color: rgba(188, 188, 188, 0.9);
     color: #333;
     font-weight: 500;
