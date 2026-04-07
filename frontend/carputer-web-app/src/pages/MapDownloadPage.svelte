@@ -1,5 +1,6 @@
 <script>
   import BackButton from "../assets/components/BackButton.svelte";
+  import SystemIndicators from "../assets/components/SystemIndicators.svelte";
   import download_icon from  "../assets/download-bold.svg";
 
 </script>
@@ -14,6 +15,11 @@
     <!-- this is the exit buttion -->
     <BackButton />
     <h2>Maps</h2>
+
+    <SystemIndicators 
+      isActiveBackground={false} 
+      isRoadDiscoverActive={false}
+    />
   </div>
 
   <!-- for now it's just a button to download the map-->

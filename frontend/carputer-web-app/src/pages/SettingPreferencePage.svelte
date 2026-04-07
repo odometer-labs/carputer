@@ -1,9 +1,12 @@
 <script lang="ts">
   import BackButton from "../assets/components/BackButton.svelte";
+  import DarkLightIndicator from "../assets/components/DarkLightIndicator.svelte";
+  import SystemIndicators from "../assets/components/SystemIndicators.svelte";
   import {
     preferences,
     updatePreferences,
   } from "../services/preferences";
+
 
   function handleToggleSomethingChange(event: Event): void {
     const input = event.currentTarget as HTMLInputElement;
@@ -53,6 +56,12 @@
         <!-- this is the exit buttion -->
         <BackButton />
       <h2>Settings</h2>
+
+      <SystemIndicators 
+        isActiveBackground={false} 
+        isDarklightActive={false} 
+        isRoadDiscoverActive={false}
+      />
     </div>
 
     <!-- the box contains a settings functionality 
@@ -98,6 +107,9 @@
         TO BE EMPY                                              -->
     <div class="option-box">
       <h3>Night Mode</h3>
+      <span class="icon">
+        <DarkLightIndicator />
+      </span>
       <input
         type="checkbox"
         class="checkbox"
@@ -161,6 +173,7 @@
     padding-left: 5%;
     padding-right: 5%;
     color: black;
+    gap: 10px;
   }
 
   .controls {
@@ -171,6 +184,12 @@
   }
   .controls input[type="range"] {
     width: 250px;
+  }
+
+  .icon {
+    display: flex;
+    align-items: center;
+    margin-right:auto;
   }
 
   .zoom-btn {
