@@ -1,14 +1,10 @@
 <script lang="ts">
-  import { push } from 'svelte-spa-router';
-
-  function goBack(): void {
-    push('/');
-  }
+  import BackButton from '../assets/components/BackButton.svelte';
 </script>
 
 <main class="tracks-shell">
   <header class="app-bar">
-    <button class="back-btn" type="button" onclick={goBack}>Back</button>
+    <BackButton />
     <h1>Track Viewer</h1>
   </header>
 </main>
@@ -37,15 +33,5 @@
   .app-bar h1 {
     margin: 0;
     font-size: 1.5rem;
-  }
-
-  .back-btn {
-    border: 1px solid #ffffff;
-    border-radius: 6px;
-    background-color: var(--secondary-color, rgb(225, 225, 225));
-    color: #222222;
-    padding: 0.5rem 0.75rem;
-    cursor: pointer;
-    font: inherit;
   }
 </style>
