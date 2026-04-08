@@ -20,7 +20,7 @@
   import { preferences } from '../services/preferences';
   import aprsIconUrl from '../assets/aprs-bold.svg';
   import userArrowIconUrl from '../assets/icons/maps-arrow-blue-white.svg';
-
+  import { trackStore } from '../stores/trackStore'
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
   import SystemIndicators from "../assets/components/SystemIndicators.svelte";
 
@@ -627,7 +627,14 @@
   <!-- this is the system indicators. -->
   <SystemIndicators />
 
-
+  <!-- this is the button for letting backend know when to start/end a track-->
+  <button 
+    class="start-end-track_butn"
+    on:click={() => $trackStore.isTracking ? trackStore.end() : trackStore.start()}
+    style="background-color: {$trackStore.isTracking ? 'lightcoral' : 'lightgreen'}"
+  >
+    <strong>{$trackStore.isTracking ? "Stop Track" : "Start Track"}</strong>
+  </button>
 
   <div class="map-container">
     <div bind:this={mapElement} class="map" style="width: 100%; height: 100%;"></div>
@@ -764,6 +771,28 @@
   .hamburger_menu_icon_btn i {
     display: block;
     line-height: 1;
+  }
+
+  .start-end-track_butn {
+    position: absolute;
+    bottom: 20px;
+    right: 25px;
+    z-index: 1000;
+    width: 80px;
+    height: 70px;
+    padding: 0px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: 1px solid white;
+    border-radius: 15%;
+    background-color: rgba(188, 188, 188, 0.9);
+    color: #333;
+    font-weight: 500;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s;
+    outline: none;
   }
 
   :global(.ol-zoom button) {
