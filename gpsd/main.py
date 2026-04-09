@@ -5,7 +5,7 @@ import json
 from websockets.sync.client import connect
 
 WS_SERVER_URL = os.getenv("WS_SERVER_URL", "ws://api:8000/ws/update-position")
-GPSD_HOST = os.getenv("GPSD_HOST", "127.0.0.1")
+GPSD_HOST = os.getenv("GPSD_HOST", "host-gateway")
 GPSD_PORT = int(os.getenv("GPSD_PORT", "2947"))
 
 def main():
