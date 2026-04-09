@@ -25,6 +25,8 @@ def main():
             for packet in gpsd_client.dict_stream(convert_datetime=True, filter=["TPV"]):
                 ws_client.send(json.dumps(packet))
                 time.sleep(0.1)
+    except Exception as e:
+        print(f"Failed to send data to websocket server: {e}")
     finally:
         ws_client.close()
         gpsd_client.close()
