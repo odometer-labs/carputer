@@ -9,6 +9,8 @@ WORKDIR /app
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:0.10.10 /uv /uvx /bin/
 
+RUN apt-get update && apt-get install -y curl
+
 # Python project installation
 RUN uv pip install "psycopg[binary]"
 RUN --mount=type=cache,target=/root/.cache/pip \

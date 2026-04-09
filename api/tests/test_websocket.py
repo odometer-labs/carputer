@@ -5,7 +5,6 @@ from fastapi.websockets import WebSocket
 from fastapi.testclient import TestClient
 from app.models.track import Track
 from app.clients.track_client import TrackClient
-from gpsdclient import GPSDClient
 
 client = TestClient(app)
 

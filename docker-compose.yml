@@ -29,10 +29,28 @@ services:
       DB_HOST: db
       DB_PORT: 5432
     restart: always
+    healthcheck:
+      test: curl --fail http://localhost:8000/health || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - carputer
     depends_on:
       db:
+        condition: service_healthy
+        restart: true
+  
+  # ---------------------------------------------------------------------------
+  # GPSD Service (GPSD Pytohn Microservice)
+  # ---------------------------------------------------------------------------
+  gpsd-service:
+    build: ./gpsd
+    restart: always
+    networks:
+      - carputer
+    depends_on:
+      api:
         condition: service_healthy
         restart: true
 

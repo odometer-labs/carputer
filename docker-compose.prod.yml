@@ -35,6 +35,19 @@ services:
         restart: true
 
   # ---------------------------------------------------------------------------
+  # GPSD Service (GPSD Pytohn Microservice)
+  # ---------------------------------------------------------------------------
+  gpsd-service:
+    build: ./gpsd
+    restart: always
+    networks:
+      - carputer
+    depends_on:
+      api:
+        condition: service_healthy
+        restart: true
+
+  # ---------------------------------------------------------------------------
   # Frontend (Svelte + nginx) - Pre-built image
   # ---------------------------------------------------------------------------
   frontend:
