@@ -8,15 +8,33 @@
     error: AppError;
     onClose: (id: number) => void;
   } = $props();
+
+  function getPopupLabel(appError: AppError): 'Warning' | 'Error' {
+    if (appError.severity === 'vital') {
+      return 'Error';
+    }
+
+    const source = (appError.source ?? '').toLowerCase();
+    const message = (appError.message ?? '').toLowerCase();
+    const looksLikeError =
+      source.includes('error') ||
+      message.includes('error') ||
+      message.includes('exception') ||
+      message.includes('failed');
+
+    return looksLikeError ? 'Error' : 'Warning';
+  }
+
+  const popupLabel = $derived(getPopupLabel(error));
 </script>
 
 <article class="error-popup" role="alert" aria-live="assertive">
   <div class="error-popup__header">
-    <strong>Warning</strong>
+    <strong>{popupLabel}</strong>
     <button
       type="button"
       class="error-popup__close"
-      aria-label="Dismiss warning"
+      aria-label={`Dismiss ${popupLabel.toLowerCase()}`}
       onclick={() => onClose(error.id)}
     >
       x
