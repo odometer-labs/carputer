@@ -27,9 +27,29 @@ describe("ErrorPopup", () => {
 
     expect(screen.getByRole("alert")).toBeInTheDocument();
     expect(screen.getByText("Warning")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /dismiss warning/i }),
+    ).toBeInTheDocument();
     expect(screen.getByText(error.message)).toBeInTheDocument();
     expect(screen.getByText(`Source: ${error.source}`)).toBeInTheDocument();
     expect(screen.getByText(/^Time:/i)).toBeInTheDocument();
+  });
+
+  it("renders Error label for error-like messages", () => {
+    render(ErrorPopup, {
+      props: {
+        error: createNonFatalError({
+          message: "Start track error: endpoint missing",
+          source: "console.error",
+        }),
+        onClose: vi.fn(),
+      },
+    });
+
+    expect(screen.getByText("Error")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /dismiss error/i }),
+    ).toBeInTheDocument();
   });
 
   it("calls onClose with error id when dismiss button is clicked", async () => {
