@@ -26,6 +26,7 @@ async def main():
         await ws_client.close()
         gpsd_client.close()
         print("Websocket closed")
+
 if __name__ == "__main__":
     try:
         asyncio.run(main())

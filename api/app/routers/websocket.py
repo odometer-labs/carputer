@@ -7,6 +7,10 @@ from ..clients.track_client import track_client
 
 router = APIRouter(prefix="/ws")
 
+@router.get("/get-current-pos")
+async def get_pos():
+    return track_client
+
 @router.websocket("/get-position")
 async def send_position(websocket: WebSocket):
     await websocket.accept()
