@@ -10,8 +10,8 @@ def main():
     try:
         ws_client = connect(WS_SERVER_URL)
         print("Connected to ws server")
-    except Exception:
-        print("Failed to connect to ws server")
+    except Exception as e:
+        print(f"Failed to connect to ws server: {e}")
         exit()
 
     # Send gpsd data
@@ -21,6 +21,8 @@ def main():
             for packet in gpsd_client.dict_stream(convert_datetime=True, filter=["TPV"]):
                 ws_client.send(json.dumps(packet))
                 time.sleep(0.1)
+    except Exception as e:
+        print(f"Failed to send data to wbsocket server: {e}")
     finally:
         ws_client.close()
         gpsd_client.close()
