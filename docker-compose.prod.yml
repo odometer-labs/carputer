@@ -40,7 +40,7 @@ services:
         restart: true
 
   # ---------------------------------------------------------------------------
-  # GPSD Service (GPSD Pytohn Microservice)
+  # GPSD Service (GPSD Python Microservice)
   # ---------------------------------------------------------------------------
   gpsd-service:
     build: ./gpsd
