@@ -1,18 +1,22 @@
 import asyncio
 import json
+from gpsdclient import GPSDClient
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from ..logging.handlers import logger
 from ..clients.track_client import track_client
 
 router = APIRouter(prefix="/ws")
 
+@router.get("/get-current-pos")
+async def get_pos():
+    return track_client
+
 @router.websocket("/get-position")
 async def send_position(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
-            data = json.dumps(track_client.__dict__)
-            await websocket.send_text(data)
+            await websocket.send_text(json.dumps(track_client))
             await asyncio.sleep(0.25)
     except WebSocketDisconnect as e:
         pass

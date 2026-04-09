@@ -12,3 +12,7 @@ app.include_router(websocket.router)
 async def root():
     logger.info("GET Root")
     return "Welcome to the carputer API! Visit http://127.0.0.1:8000/docs for a Swaggerdocs of our endpoints!"
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
