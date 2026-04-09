@@ -46,6 +46,11 @@ services:
   # ---------------------------------------------------------------------------
   gpsd-service:
     build: ./gpsd
+    environment:
+      GPSD_HOST: ${GPSD_HOST:-host-gateway}
+      GPSD_PORT: ${GPSD_PORT:-2947}
+    extra_hosts:
+      - "host-gateway:host-gateway"
     restart: always
     networks:
       - carputer

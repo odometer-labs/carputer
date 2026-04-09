@@ -72,7 +72,7 @@ class _GpsdHandler(socketserver.StreamRequestHandler):
             time_mod.sleep(interval)
 
     def _send_json(self, obj: dict):
-        data = json.dumps(obj) + "\r\n"
+        data = json.dumps(obj, separators=(",", ":")) + "\r\n"
         self.wfile.write(data.encode())
         self.wfile.flush()
 
