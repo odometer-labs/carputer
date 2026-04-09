@@ -27,6 +27,11 @@ services:
       DB_HOST: db
       DB_PORT: 5432
     restart: always
+    healthcheck:
+      test: curl --fail http://localhost:8000/health || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - carputer
     depends_on:
