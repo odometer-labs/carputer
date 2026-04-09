@@ -1,23 +1,26 @@
 from gpsdclient import GPSDClient
+import os
 import time
 import json
 from websockets.sync.client import connect
 
-WS_SERVER_URL = "ws://api:8000/ws/update-position"
-GPSD_HOST = "172.17.0.1"
+WS_SERVER_URL = os.getenv("WS_SERVER_URL", "ws://api:8000/ws/update-position")
+GPSD_HOST = os.getenv("GPSD_HOST", "127.0.0.1")
+GPSD_PORT = int(os.getenv("GPSD_PORT", "2947"))
 
 def main():
     # Connect to fastapi's ws
     try:
         ws_client = connect(WS_SERVER_URL)
-        print("Connected to ws server")
-    except Exception as e:
-        print(f"Failed to connect to ws server: {e}")
+        print(f"Connected to ws server at {WS_SERVER_URL}")
+    except Exception:
+        print(f"Failed to connect to ws server at {WS_SERVER_URL}")
         exit()
 
     # Send gpsd data
     try:
-        gpsd_client = GPSDClient(host=GPSD_HOST)
+        gpsd_client = GPSDClient(host=GPSD_HOST, port=GPSD_PORT)
+        print(f"Connected to gpsd at {GPSD_HOST}:{GPSD_PORT}")
         while True:
             for packet in gpsd_client.dict_stream(convert_datetime=True, filter=["TPV"]):
                 ws_client.send(json.dumps(packet))
