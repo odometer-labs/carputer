@@ -22,7 +22,7 @@ def main():
                 ws_client.send(json.dumps(packet))
                 time.sleep(0.1)
     except Exception as e:
-        print(f"Failed to send data to wbsocket server: {e}")
+        print(f"Failed to send data to websocket server: {e}")
     finally:
         ws_client.close()
         gpsd_client.close()
