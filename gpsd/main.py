@@ -20,7 +20,7 @@ async def main():
         while True:
             for packet in gpsd_client.dict_stream(convert_datetime=True, filter=["TPV"]):
                 latest = packet
-                ws_client.send(json.dumps(latest))
+                await ws_client.send(json.dumps(latest))
                 await asyncio.sleep(0.1)
     finally:
         await ws_client.close()
