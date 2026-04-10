@@ -72,12 +72,13 @@ info "Step 1: Installing required packages..."
 info "  Packages: vim, git, gpsd, gpsd-clients, chrony, curl"
 info "  (PostgreSQL is provided by Docker, not installed on system)"
 echo ""
-confirm "Proceed with package installation?" || { warn "Skipping package installation."; }
-
-sudo apt update
-sudo apt install -y vim git gpsd gpsd-clients chrony curl
-
-info "Packages installed successfully."
+if confirm "Proceed with package installation?"; then
+    sudo apt update
+    sudo apt install -y vim git gpsd gpsd-clients chrony curl
+    info "Packages installed successfully."
+else
+    warn "Skipping package installation."
+fi
 echo ""
 
 # -----------------------------------------------------------------------------
@@ -100,13 +101,15 @@ if command -v docker &>/dev/null; then
     DOCKER_VERSION=$(docker --version | cut -d' ' -f3 | tr -d ',')
     info "Docker is already installed (version $DOCKER_VERSION)."
 else
-    confirm "Install Docker using the official convenience script?" || { warn "Skipping Docker installation."; }
-
-    info "Downloading and running Docker install script..."
-    curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
-    sudo sh /tmp/get-docker.sh
-    rm /tmp/get-docker.sh
-    info "Docker installed successfully."
+    if confirm "Install Docker using the official convenience script?"; then
+        info "Downloading and running Docker install script..."
+        curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+        sudo sh /tmp/get-docker.sh
+        rm /tmp/get-docker.sh
+        info "Docker installed successfully."
+    else
+        warn "Skipping Docker installation."
+    fi
 fi
 
 # Create CLI plugins directory
@@ -169,10 +172,13 @@ fi
 if groups "$CURRENT_USER" | grep -q '\bdocker\b'; then
     info "User $CURRENT_USER is already in the docker group."
 else
-    confirm "Add $CURRENT_USER to the docker group (run docker without sudo)?" || { warn "Skipping docker group."; }
-    sudo usermod -aG docker "$CURRENT_USER"
-    info "User $CURRENT_USER added to docker group."
-    warn "You must log out and back in (or run 'newgrp docker') for this to take effect."
+    if confirm "Add $CURRENT_USER to the docker group (run docker without sudo)?"; then
+        sudo usermod -aG docker "$CURRENT_USER"
+        info "User $CURRENT_USER added to docker group."
+        warn "You must log out and back in (or run 'newgrp docker') for this to take effect."
+    else
+        warn "Skipping docker group."
+    fi
 fi
 
 # Enable Docker to start on boot
@@ -197,14 +203,15 @@ if grep -q 'DEVICES="/dev/ttyACM0"' "$GPSD_CONFIG" && \
    grep -q 'GPSD_OPTIONS="-G -F /var/run/gpsd.sock"' "$GPSD_CONFIG"; then
     info "gpsd is already configured correctly — skipping."
 else
-    confirm "Update $GPSD_CONFIG with correct DEVICES and GPSD_OPTIONS?" || { warn "Skipping gpsd config."; }
-
-    sudo sed -i 's|^DEVICES=.*|DEVICES="/dev/ttyACM0"|' "$GPSD_CONFIG"
-    sudo sed -i 's|^GPSD_OPTIONS=.*|GPSD_OPTIONS="-G -F /var/run/gpsd.sock"|' "$GPSD_CONFIG"
-
-    info "gpsd configuration updated:"
-    info "  DEVICES=/dev/ttyACM0"
-    info "  GPSD_OPTIONS=-G -F /var/run/gpsd.sock"
+    if confirm "Update $GPSD_CONFIG with correct DEVICES and GPSD_OPTIONS?"; then
+        sudo sed -i 's|^DEVICES=.*|DEVICES="/dev/ttyACM0"|' "$GPSD_CONFIG"
+        sudo sed -i 's|^GPSD_OPTIONS=.*|GPSD_OPTIONS="-G -F /var/run/gpsd.sock"|' "$GPSD_CONFIG"
+        info "gpsd configuration updated:"
+        info "  DEVICES=/dev/ttyACM0"
+        info "  GPSD_OPTIONS=-G -F /var/run/gpsd.sock"
+    else
+        warn "Skipping gpsd config."
+    fi
 fi
 echo ""
 
@@ -223,13 +230,15 @@ ListenStream=0.0.0.0:2947"
 if [ -f "$GPSD_SOCKET_DROPIN" ] && echo "$GPSD_SOCKET_CONTENT" | diff -q - "$GPSD_SOCKET_DROPIN" &>/dev/null; then
     info "gpsd.socket remote access override already up to date - skipping."
 else
-    confirm "Deploy gpsd.socket override to allow remote access (required for Docker)?" || { warn "Skipping gpsd.socket override."; }
-
-    sudo mkdir -p "$GPSD_SOCKET_DROPIN_DIR"
-    echo "$GPSD_SOCKET_CONTENT" | sudo tee "$GPSD_SOCKET_DROPIN" > /dev/null
-    sudo systemctl daemon-reload
-    info "gpsd.socket override deployed at $GPSD_SOCKET_DROPIN."
-    info "  gpsd now accepts connections on all interfaces (0.0.0.0:2947)."
+    if confirm "Deploy gpsd.socket override to allow remote access (required for Docker)?"; then
+        sudo mkdir -p "$GPSD_SOCKET_DROPIN_DIR"
+        echo "$GPSD_SOCKET_CONTENT" | sudo tee "$GPSD_SOCKET_DROPIN" > /dev/null
+        sudo systemctl daemon-reload
+        info "gpsd.socket override deployed at $GPSD_SOCKET_DROPIN."
+        info "  gpsd now accepts connections on all interfaces (0.0.0.0:2947)."
+    else
+        warn "Skipping gpsd.socket override."
+    fi
 fi
 echo ""
 
@@ -239,45 +248,49 @@ echo ""
 info "Step 4: Enabling and starting required systemd services..."
 info "  Services: chrony, gpsd, postgresql, docker"
 echo ""
-confirm "Proceed with enabling services?" || { warn "Skipping service setup."; }
+if confirm "Proceed with enabling services?"; then
 
-# chrony — high precision time sync (required by gpsd for RTK)
-if systemctl is-enabled chrony &>/dev/null && systemctl is-active chrony &>/dev/null; then
-    info "chrony is already enabled and running — skipping."
-else
-    sudo systemctl enable chrony
-    sudo systemctl start chrony
-    info "chrony enabled and started."
-fi
-
-# gpsd — GPS daemon
-if systemctl is-enabled gpsd &>/dev/null && systemctl is-active gpsd &>/dev/null; then
-    info "gpsd is already enabled and running — skipping."
-else
-    sudo systemctl enable gpsd
-    sudo systemctl start gpsd
-    info "gpsd enabled and started."
-fi
-
-# postgresql — system postgres NOT needed (using Docker postgres instead)
-# Stop and disable system postgres to avoid port 5432 conflict with Docker
-if systemctl is-active postgresql &>/dev/null 2>&1; then
-    warn "System PostgreSQL is running and will conflict with Docker PostgreSQL on port 5432."
-    if confirm "Stop and disable system PostgreSQL? (Docker will provide PostgreSQL instead)"; then
-        sudo systemctl stop postgresql
-        sudo systemctl disable postgresql
-        info "System PostgreSQL stopped and disabled."
+    # chrony — high precision time sync (required by gpsd for RTK)
+    if systemctl is-enabled chrony &>/dev/null && systemctl is-active chrony &>/dev/null; then
+        info "chrony is already enabled and running — skipping."
     else
-        warn "System PostgreSQL left running. You may need to change DB_PORT in .env to avoid conflicts."
+        sudo systemctl enable chrony
+        sudo systemctl start chrony
+        info "chrony enabled and started."
     fi
-elif systemctl is-enabled postgresql &>/dev/null 2>&1; then
-    info "System PostgreSQL is enabled but not running."
-    if confirm "Disable system PostgreSQL to prevent future conflicts?"; then
-        sudo systemctl disable postgresql
-        info "System PostgreSQL disabled."
+
+    # gpsd — GPS daemon
+    if systemctl is-enabled gpsd &>/dev/null && systemctl is-active gpsd &>/dev/null; then
+        info "gpsd is already enabled and running — skipping."
+    else
+        sudo systemctl enable gpsd
+        sudo systemctl start gpsd
+        info "gpsd enabled and started."
     fi
+
+    # postgresql — system postgres NOT needed (using Docker postgres instead)
+    # Stop and disable system postgres to avoid port 5432 conflict with Docker
+    if systemctl is-active postgresql &>/dev/null 2>&1; then
+        warn "System PostgreSQL is running and will conflict with Docker PostgreSQL on port 5432."
+        if confirm "Stop and disable system PostgreSQL? (Docker will provide PostgreSQL instead)"; then
+            sudo systemctl stop postgresql
+            sudo systemctl disable postgresql
+            info "System PostgreSQL stopped and disabled."
+        else
+            warn "System PostgreSQL left running. You may need to change DB_PORT in .env to avoid conflicts."
+        fi
+    elif systemctl is-enabled postgresql &>/dev/null 2>&1; then
+        info "System PostgreSQL is enabled but not running."
+        if confirm "Disable system PostgreSQL to prevent future conflicts?"; then
+            sudo systemctl disable postgresql
+            info "System PostgreSQL disabled."
+        fi
+    else
+        info "System PostgreSQL is not enabled — good, Docker will provide PostgreSQL."
+    fi
+
 else
-    info "System PostgreSQL is not enabled — good, Docker will provide PostgreSQL."
+    warn "Skipping service setup."
 fi
 echo ""
 
@@ -288,14 +301,16 @@ info "Step 5: Setting up carputer repository at /opt/carputer..."
 
 if [ -d "$DEPLOY_DIR/.git" ]; then
     info "Repository already exists at $DEPLOY_DIR."
-    confirm "Pull latest changes?" && sudo git -C "$DEPLOY_DIR" pull && info "Repository updated."
+    confirm "Pull latest changes?" && git -C "$DEPLOY_DIR" pull && info "Repository updated."
 else
-    confirm "Clone $REPO_URL into $DEPLOY_DIR?" || { warn "Skipping repo clone."; }
-
-    sudo mkdir -p "$DEPLOY_DIR"
-    sudo git clone "$REPO_URL" "$DEPLOY_DIR"
-    sudo chown -R "$CURRENT_USER":"$CURRENT_USER" "$DEPLOY_DIR"
-    info "Repository cloned to $DEPLOY_DIR."
+    if confirm "Clone $REPO_URL into $DEPLOY_DIR?"; then
+        sudo mkdir -p "$DEPLOY_DIR"
+        sudo git clone "$REPO_URL" "$DEPLOY_DIR"
+        sudo chown -R "$CURRENT_USER":"$CURRENT_USER" "$DEPLOY_DIR"
+        info "Repository cloned to $DEPLOY_DIR."
+    else
+        warn "Skipping repo clone."
+    fi
 fi
 echo ""
 
@@ -315,10 +330,13 @@ if [ -f "$CHRONY_SRC" ]; then
     if diff -q "$CHRONY_SRC" "$CHRONY_DST" &>/dev/null; then
         info "chrony.conf is already up to date — skipping."
     else
-        confirm "Deploy GPS-disciplined chrony.conf to /etc/chrony/?" || { warn "Skipping chrony config."; }
-        sudo cp "$CHRONY_DST" "$CHRONY_DST.bak" 2>/dev/null || true
-        sudo cp "$CHRONY_SRC" "$CHRONY_DST"
-        info "chrony.conf deployed (backup at $CHRONY_DST.bak)."
+        if confirm "Deploy GPS-disciplined chrony.conf to /etc/chrony/?"; then
+            sudo cp "$CHRONY_DST" "$CHRONY_DST.bak" 2>/dev/null || true
+            sudo cp "$CHRONY_SRC" "$CHRONY_DST"
+            info "chrony.conf deployed (backup at $CHRONY_DST.bak)."
+        else
+            warn "Skipping chrony config."
+        fi
     fi
 else
     warn "chrony.conf not found at $CHRONY_SRC — skipping."
@@ -330,10 +348,13 @@ if [ -f "$GPSD_DROPIN_SRC" ]; then
     if diff -q "$GPSD_DROPIN_SRC" "$GPSD_DROPIN_DST" &>/dev/null; then
         info "gpsd chrony drop-in already up to date — skipping."
     else
-        confirm "Deploy gpsd drop-in to ensure chrony starts before gpsd?" || { warn "Skipping gpsd drop-in."; }
-        sudo cp "$GPSD_DROPIN_SRC" "$GPSD_DROPIN_DST"
-        sudo systemctl daemon-reload
-        info "gpsd drop-in deployed: gpsd.service now requires chrony.service."
+        if confirm "Deploy gpsd drop-in to ensure chrony starts before gpsd?"; then
+            sudo cp "$GPSD_DROPIN_SRC" "$GPSD_DROPIN_DST"
+            sudo systemctl daemon-reload
+            info "gpsd drop-in deployed: gpsd.service now requires chrony.service."
+        else
+            warn "Skipping gpsd drop-in."
+        fi
     fi
 else
     warn "gpsd drop-in not found at $GPSD_DROPIN_SRC — skipping."
@@ -362,12 +383,14 @@ fi
 if diff -q "$SERVICE_SRC" "$SERVICE_DST" &>/dev/null; then
     info "carputer.service is already up to date — skipping."
 else
-    confirm "Deploy carputer.service to /etc/systemd/system/?" || { warn "Skipping service deployment."; }
-
-    sudo cp "$SERVICE_SRC" "$SERVICE_DST"
-    sudo systemctl daemon-reload
-    sudo systemctl enable carputer
-    info "carputer.service deployed and enabled."
+    if confirm "Deploy carputer.service to /etc/systemd/system/?"; then
+        sudo cp "$SERVICE_SRC" "$SERVICE_DST"
+        sudo systemctl daemon-reload
+        sudo systemctl enable carputer
+        info "carputer.service deployed and enabled."
+    else
+        warn "Skipping service deployment."
+    fi
 fi
 echo ""
 
@@ -383,10 +406,13 @@ if [ -f "$ENV_FILE" ]; then
     info ".env file already exists at $ENV_FILE — skipping."
 else
     if [ -f "$ENV_EXAMPLE" ]; then
-        confirm "Create .env from .env.example? (You can edit credentials later)" || { warn "Skipping .env setup."; }
-        cp "$ENV_EXAMPLE" "$ENV_FILE"
-        info ".env file created at $ENV_FILE"
-        warn "Edit $ENV_FILE to set your database credentials before starting containers."
+        if confirm "Create .env from .env.example? (You can edit credentials later)"; then
+            cp "$ENV_EXAMPLE" "$ENV_FILE"
+            info ".env file created at $ENV_FILE"
+            warn "Edit $ENV_FILE to set your database credentials before starting containers."
+        else
+            warn "Skipping .env setup."
+        fi
     else
         warn ".env.example not found at $ENV_EXAMPLE — skipping .env setup."
     fi
