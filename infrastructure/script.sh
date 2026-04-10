@@ -270,19 +270,19 @@ if confirm "Proceed with enabling services?"; then
 
     # postgresql — system postgres NOT needed (using Docker postgres instead)
     # Stop and disable system postgres to avoid port 5432 conflict with Docker
-    if systemctl is-active postgresql &>/dev/null 2>&1; then
+    if systemctl is-active postgresql@17-main &>/dev/null 2>&1; then
         warn "System PostgreSQL is running and will conflict with Docker PostgreSQL on port 5432."
         if confirm "Stop and disable system PostgreSQL? (Docker will provide PostgreSQL instead)"; then
-            sudo systemctl stop postgresql
-            sudo systemctl disable postgresql
+            sudo systemctl stop postgresql@17-main
+            sudo systemctl disable postgresql@17-main
             info "System PostgreSQL stopped and disabled."
         else
             warn "System PostgreSQL left running. You may need to change DB_PORT in .env to avoid conflicts."
         fi
-    elif systemctl is-enabled postgresql &>/dev/null 2>&1; then
+    elif systemctl is-enabled postgresql@17-main &>/dev/null 2>&1; then
         info "System PostgreSQL is enabled but not running."
         if confirm "Disable system PostgreSQL to prevent future conflicts?"; then
-            sudo systemctl disable postgresql
+            sudo systemctl disable postgresql@17-main
             info "System PostgreSQL disabled."
         fi
     else
