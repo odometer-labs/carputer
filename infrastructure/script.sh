@@ -194,17 +194,42 @@ GPSD_CONFIG="/etc/default/gpsd"
 
 # Check if already configured
 if grep -q 'DEVICES="/dev/ttyACM0"' "$GPSD_CONFIG" && \
-   grep -q 'GPSD_OPTIONS="-F /var/run/gpsd.sock"' "$GPSD_CONFIG"; then
+   grep -q 'GPSD_OPTIONS="-G -F /var/run/gpsd.sock"' "$GPSD_CONFIG"; then
     info "gpsd is already configured correctly — skipping."
 else
     confirm "Update $GPSD_CONFIG with correct DEVICES and GPSD_OPTIONS?" || { warn "Skipping gpsd config."; }
 
     sudo sed -i 's|^DEVICES=.*|DEVICES="/dev/ttyACM0"|' "$GPSD_CONFIG"
-    sudo sed -i 's|^GPSD_OPTIONS=.*|GPSD_OPTIONS="-F /var/run/gpsd.sock"|' "$GPSD_CONFIG"
+    sudo sed -i 's|^GPSD_OPTIONS=.*|GPSD_OPTIONS="-G -F /var/run/gpsd.sock"|' "$GPSD_CONFIG"
 
     info "gpsd configuration updated:"
     info "  DEVICES=/dev/ttyACM0"
-    info "  GPSD_OPTIONS=-F /var/run/gpsd.sock"
+    info "  GPSD_OPTIONS=-G -F /var/run/gpsd.sock"
+fi
+echo ""
+
+# Deploy gpsd.socket override to allow remote access (needed for Docker containers)
+GPSD_SOCKET_DROPIN_DIR="/etc/systemd/system/gpsd.socket.d"
+GPSD_SOCKET_DROPIN="$GPSD_SOCKET_DROPIN_DIR/listen-all.conf"
+GPSD_SOCKET_CONTENT="[Socket]
+# Clear inherited ListenStream, then re-declare with remote access enabled
+ListenStream=
+ListenStream=/run/gpsd.sock
+ListenStream=[::1]:2947
+ListenStream=127.0.0.1:2947
+ListenStream=[::]:2947
+ListenStream=0.0.0.0:2947"
+
+if [ -f "$GPSD_SOCKET_DROPIN" ] && echo "$GPSD_SOCKET_CONTENT" | diff -q - "$GPSD_SOCKET_DROPIN" &>/dev/null; then
+    info "gpsd.socket remote access override already up to date - skipping."
+else
+    confirm "Deploy gpsd.socket override to allow remote access (required for Docker)?" || { warn "Skipping gpsd.socket override."; }
+
+    sudo mkdir -p "$GPSD_SOCKET_DROPIN_DIR"
+    echo "$GPSD_SOCKET_CONTENT" | sudo tee "$GPSD_SOCKET_DROPIN" > /dev/null
+    sudo systemctl daemon-reload
+    info "gpsd.socket override deployed at $GPSD_SOCKET_DROPIN."
+    info "  gpsd now accepts connections on all interfaces (0.0.0.0:2947)."
 fi
 echo ""
 
