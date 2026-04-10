@@ -1,17 +1,17 @@
 [Unit]
 Description=GPS Carputer Application
-After=network.target chrony.service gpsd.service postgresql.service
-Wants=chrony.service gpsd.service postgresql.service
+After=network.target chrony.service gpsd.service docker.service
+Wants=chrony.service gpsd.service
+Requires=docker.service
 
 [Service]
-Type=simple
+Type=oneshot
+RemainAfterExit=yes
 User=emb_usr
 Group=emb_usr
 WorkingDirectory=/opt/carputer
-Environment=PATH=/opt/carputer/venv/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=/opt/carputer/venv/bin/python -m api.src.main
-Restart=always
-RestartSec=10
+ExecStart=/usr/bin/docker compose up -d
+ExecStop=/usr/bin/docker compose down
 # Logging
 StandardOutput=journal
 StandardError=journal

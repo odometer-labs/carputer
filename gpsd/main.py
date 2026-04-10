@@ -23,6 +23,9 @@ def main():
         print(f"Connected to gpsd at {GPSD_HOST}:{GPSD_PORT}")
         while True:
             for packet in gpsd_client.dict_stream(convert_datetime=True, filter=["TPV"]):
+                # Skip TPV packets without a position fix
+                if "lat" not in packet or "lon" not in packet:
+                    continue
                 ws_client.send(json.dumps(packet))
                 time.sleep(0.1)
     except Exception as e:

@@ -169,7 +169,7 @@ gpsd is configured via `/etc/default/gpsd`:
 
 ```bash
 DEVICES="/dev/ttyACM0"
-GPSD_OPTIONS="-F /var/run/gpsd.sock"
+GPSD_OPTIONS="-G -F /var/run/gpsd.sock"
 USBAUTO="true"
 ```
 

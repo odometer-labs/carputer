@@ -222,10 +222,9 @@ GPSD_SOCKET_CONTENT="[Socket]
 # Clear inherited ListenStream, then re-declare with remote access enabled
 ListenStream=
 ListenStream=/run/gpsd.sock
-ListenStream=[::1]:2947
-ListenStream=127.0.0.1:2947
+ListenStream=0.0.0.0:2947
 ListenStream=[::]:2947
-ListenStream=0.0.0.0:2947"
+BindIPv6Only=ipv6-only"
 
 if [ -f "$GPSD_SOCKET_DROPIN" ] && echo "$GPSD_SOCKET_CONTENT" | diff -q - "$GPSD_SOCKET_DROPIN" &>/dev/null; then
     info "gpsd.socket remote access override already up to date - skipping."
