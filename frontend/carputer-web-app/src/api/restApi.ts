@@ -1,10 +1,20 @@
 /*
     this file holds the rest api calls from back end
 */
-import type { StartTrackResponse, EndTrackResponse} from "./types";
+import type { 
+  StartTrackResponse, 
+  EndTrackResponse, 
+  Track, 
+  UpdateTrackResponse,
+  DeleteTrackResponse,
+  TrackPoint,
+  AddTrackPointResponse,
+  LatestTrackPoint,
+  CheckNewRoadResponse,
+} from "./types";
 import { ENDPOINTS } from "../utils/constants";
 
-
+// starts a new track in the database
 export async function startTrack() : Promise<StartTrackResponse> {
   const res = await fetch(ENDPOINTS.startTrack, {
     method: "POST"
@@ -12,9 +22,10 @@ export async function startTrack() : Promise<StartTrackResponse> {
 
   if (!res.ok) throw new Error("Failed to start track");
 
-  return await res.json();
+  return res.json();
 }
 
+// ends a current active track in the database
 export async function endTrack() : Promise<EndTrackResponse> {
   const res = await fetch(ENDPOINTS.endTrack, {
     method: "GET"
@@ -22,5 +33,88 @@ export async function endTrack() : Promise<EndTrackResponse> {
 
   if (!res.ok) throw new Error("Failed to end track");
 
-  return await res.json();
+  return res.json();
+}
+
+// fetches all tracks, which have atleast one geom point
+export async function listTracks() : Promise<Track[]> {
+  const res = await fetch(ENDPOINTS.listTracks, {
+    method: "GET"
+  });
+
+  if (!res.ok) throw new Error("Failed to fetch all tracks");
+
+  return res.json();
+}
+
+// fetches a specific track, could be used if the user is looking for a specific track
+export async function getTrack(trackId: number) : Promise<Track> {
+  const res = await fetch(`${ENDPOINTS.getTrack}/${trackId}`, {
+    method: "GET"
+  });
+
+  if (!res.ok) throw new Error("Failed to fetch a tracks");
+
+  return res.json();
+}
+
+// updates a specified track by id.
+export async function updateTrack(trackId: number, track: Partial<Track>) : Promise<UpdateTrackResponse>{
+  const res = await fetch(`${ENDPOINTS.getTrack}/${trackId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(track)
+  });
+
+  if (!res.ok) throw new Error("Failed to update a track");
+
+  return res.json();
+}
+
+// this will delete a track by it's track id
+export async function deleteTrack(trackId: number) : Promise<DeleteTrackResponse> {
+  const res = await fetch(`${ENDPOINTS.deleteTrack}/${trackId}`, {
+    method: "DELETE",
+  });
+
+  if (!res.ok) throw new Error("Failed to delete a track");
+
+  return res.json();
+}
+
+// this usese the track id and a track point(latitude, longitude, speed, and heading)
+export async function addTrackPoint(trackId: number, point: TrackPoint): Promise<AddTrackPointResponse> {
+  const res = await fetch(`${ENDPOINTS.addTrackPoint}/${trackId}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(point),
+  });
+
+  if (!res.ok) throw new Error("Failed to add track point");
+
+  return res.json();
+}
+
+// this should get the last track point made I believe
+export async function getLatestTrackPoint() : Promise<LatestTrackPoint> {
+  const res = await fetch(`${ENDPOINTS.getLatestTrackPoint}`, {
+    method: "GET"
+  });
+
+  if (!res.ok) throw new Error("Failed to fetch a track point");
+
+  return res.json();
+}
+
+// the should fetch if the road currently on is a new road or not.
+export async function checkNewRoad(): Promise<CheckNewRoadResponse> {
+  const res = await fetch(ENDPOINTS.checkNewRoad);
+
+  if (!res.ok) throw new Error("Failed to check for new road");
+
+  return res.json();
 }
