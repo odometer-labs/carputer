@@ -4,6 +4,7 @@ import json
 from websockets.sync.client import connect
 
 WS_SERVER_URL = "ws://api:8000/ws/update-position"
+GPSD_HOST = "172.17.0.1"
 
 def main():
     # Connect to fastapi's ws
@@ -16,7 +17,7 @@ def main():
 
     # Send gpsd data
     try:
-        gpsd_client = GPSDClient()
+        gpsd_client = GPSDClient(host=GPSD_HOST)
         while True:
             for packet in gpsd_client.dict_stream(convert_datetime=True, filter=["TPV"]):
                 ws_client.send(json.dumps(packet))

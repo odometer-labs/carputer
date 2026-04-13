@@ -27,11 +27,12 @@ async def recv_position(websocket: WebSocket):
     try:
         while True:
             data: str = await websocket.receive_text() # gpsd data should be a json string
-            gpsd = json.loads(data)
+            gpsd: dict = json.loads(data)
 
-            track_client.latitude = gpsd["lat"]
-            track_client.longitude = gpsd["lon"]
-            track_client.speed = gpsd["speed"]
-            track_client.heading = gpsd["track"]
+            # update current position data
+            track_client.latitude = gpsd.get("lat", track_client.latitude)
+            track_client.longitude = gpsd.get("lon", track_client.longitude)
+            track_client.speed = gpsd.get("speed", track_client.speed)
+            track_client.heading = gpsd.get("track", track_client.heading)
     except WebSocketDisconnect as e:
         pass
