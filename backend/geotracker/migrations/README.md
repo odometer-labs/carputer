@@ -6,7 +6,7 @@ NEEDS PostGIS EXTENSION INSTALLED
 * **Coordinate System**: WGS84 (EPSG:4326) using the `GEOGRAPHY` type for high-precision global calculations.
 * **Units of Measure**: 
     * **Distance**: Meters (standardized by PostGIS Geography).
-    * **Speed**: Miles per Hour (MPH).
+    * **Speed**: Meters per second (MPS).
     * **Heading**: Degrees (0-360, where 0 is True North).
         * **New Road Differentiation**: 30 meters - swallows gps errors/drifts and able to distinguish different roads
 * **Spatial Indexing**: GIST (Generalized Search Tree) indexes are applied to all `geom` columns to ensure $O(\log n)$ 
@@ -45,7 +45,7 @@ Standard operations to manage your tracking data:
 
 `gps.delete_track(id)`: Removes a track and all associated spatial data (cascading)
 
-`gps.import_track()`: Creates a new track for application to import track points into.
+`gps.import_track()`: Creates a new track and track line using a GEOJSON text string.
 
 ---------------------------------------------------------------------------------------------------------------
 Spatial Analysis Queries
@@ -62,8 +62,10 @@ Utilities
 
 `gps.validate_geometry(track_id)`: Validates and fixes spatial geometry.
 
+`gps.get_latest_track_point()`: Quick-access helper for last inserted telemetry data
+
 ---------------------------------------------------------------------------------------------------------------
 
 ### Database Only (Not required for application)
 This system uses a PostgreSQL Trigger (`trg_update_track_line`) to manage spatial data automatically after each raw telemetry data insert.
-`gps.get_latest_track_point()`: Quick-access helper for last inserted telemetry data
+
