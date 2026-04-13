@@ -9,6 +9,11 @@
   -webkit-backdrop-filter: blur(1.5px);
   backdrop-filter: blur(1.5px);
   overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 80%;
+   -moz-text-size-adjust: 80%;
+     -o-text-size-adjust: 80%;
+  text-size-adjust: 80%;
 }
 
 .title-box {
@@ -17,4 +22,12 @@
   border-bottom: 2px solid black;
   text-align: center;
   color: black;
+  -webkit-text-size-adjust: 80%;
+   -moz-text-size-adjust: 80%;
+     -o-text-size-adjust: 80%;
+  text-size-adjust: 80%;
+  
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }

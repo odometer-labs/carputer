@@ -724,6 +724,7 @@ def test_get_tracks_near_location(db_conn):
         # Now both Old Track A and Old Track B should be retrieved
         assert len(results_large) == 2
 
+        
         cur.execute("SELECT * FROM gps.get_track_lines_near_location(0);")
         results_zero = cur.fetchall()
         assert len(results_zero) == 0
@@ -821,6 +822,12 @@ def test_get_tracks_using_road(db_conn):
             assert "geom" in row
             assert isinstance(row["geom"], dict)
             assert row["geom"]["type"] == "LineString"
+
+        # NOW VERIFY GEOJSON
+        for row in results:
+            assert 'geom' in row
+            assert isinstance(row['geom'], dict)
+            assert row['geom']['type'] == 'LineString'
 
 
 def test_get_tracks_using_no_road(db_conn):

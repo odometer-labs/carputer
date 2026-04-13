@@ -1,5 +1,6 @@
 <script>
   import BackButton from "../assets/components/BackButton.svelte";
+  import SystemIndicators from "../assets/components/SystemIndicators.svelte";
   import download_icon from  "../assets/download-bold.svg";
 
 </script>
@@ -7,12 +8,18 @@
 
 <div class="translucent-overlay">
     
-  <!-- this is the exit buttion -->
-  <BackButton />
+
 
   <!-- this is a box to show the title -->
-  <div class="title-box"> 
+  <div class="title-box">   
+    <!-- this is the exit buttion -->
+    <BackButton />
     <h2>Maps</h2>
+
+    <SystemIndicators 
+      isActiveBackground={false} 
+      isRoadDiscoverActive={false}
+    />
   </div>
 
   <!-- for now it's just a button to download the map-->

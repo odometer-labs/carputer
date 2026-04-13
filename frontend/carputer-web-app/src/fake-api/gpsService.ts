@@ -272,7 +272,7 @@ export class GPSService {
 
       this.ws.onerror = (error: Event) => {
         if (this.onError) {
-          this.onError(`WebSocket error: ${error}`);
+          this.onError(this.formatWebSocketError(error));
         }
         // Fallback to mock data if gpsfake fails
         console.warn("gpsfake connection failed, falling back to mock data");
@@ -291,6 +291,25 @@ export class GPSService {
       this.config.useMockData = true;
       this.startMockGPS();
     }
+  }
+
+  private formatWebSocketError(error: Event): string {
+    const socket = error.target instanceof WebSocket ? error.target : this.ws;
+    const stateNames = ["CONNECTING", "OPEN", "CLOSING", "CLOSED"];
+    const readyState =
+      socket && Number.isInteger(socket.readyState)
+        ? (stateNames[socket.readyState] ?? String(socket.readyState))
+        : "unknown";
+    const url = socket?.url ? ` (${socket.url})` : "";
+
+    if (typeof ErrorEvent !== "undefined" && error instanceof ErrorEvent) {
+      const eventMessage = error.message?.trim();
+      if (eventMessage) {
+        return `WebSocket error: ${eventMessage}${url} [state=${readyState}]`;
+      }
+    }
+
+    return `WebSocket connection failed${url} [state=${readyState}]. Check gpsfake server availability.`;
   }
 
   /**

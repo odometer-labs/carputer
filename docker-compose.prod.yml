@@ -1,0 +1,113 @@
+# =============================================================================
+# Carputer Docker Compose - Production (Pre-built Images)
+# =============================================================================
+# Use this on the Raspberry Pi to pull pre-built multi-arch images
+# instead of building on-device (much faster deployment!)
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Or set as default:
+#   export COMPOSE_FILE=docker-compose.prod.yml
+#   docker compose up -d
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # API Service (FastAPI) - Pre-built image
+  # ---------------------------------------------------------------------------
+  api:
+    image: ghcr.io/odometer-labs/carputer-api:${VERSION:-latest}
+    ports:
+      - '8000:8000'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      DB_HOST: db
+      DB_PORT: 5432
+    restart: always
+    healthcheck:
+      test: curl --fail http://localhost:8000/health || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - carputer
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+
+  # ---------------------------------------------------------------------------
+  # GPSD Service (GPSD Python Microservice)
+  # ---------------------------------------------------------------------------
+  gpsd-service:
+    build: ./gpsd
+    restart: always
+    networks:
+      - carputer
+    depends_on:
+      api:
+        condition: service_healthy
+        restart: true
+
+  # ---------------------------------------------------------------------------
+  # Frontend (Svelte + nginx) - Pre-built image
+  # ---------------------------------------------------------------------------
+  frontend:
+    image: ghcr.io/odometer-labs/carputer-frontend:${VERSION:-latest}
+    ports:
+      - '3000:80'
+    restart: always
+    networks:
+      - carputer
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL + PostGIS Database
+  # ---------------------------------------------------------------------------
+  db:
+    image: imresamu/postgis:17-3.5-bookworm
+    container_name: carputer_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ./backend/geotracker/migrations/gps_functions.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - carputer
+
+  # ---------------------------------------------------------------------------
+  # Adminer (Database Admin UI)
+  # ---------------------------------------------------------------------------
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
+    networks:
+      - carputer
+
+volumes:
+  postgres_data:
+
+networks:
+  carputer:
+    driver: bridge

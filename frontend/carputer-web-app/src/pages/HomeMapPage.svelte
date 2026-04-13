@@ -5,22 +5,33 @@
   import TileLayer from 'ol/layer/Tile.js';
   import OSM from 'ol/source/OSM.js';
   import { defaults as defaultControls } from 'ol/control/defaults.js';
-  import { fromLonLat } from 'ol/proj.js';
+  import { fromLonLat, toLonLat } from 'ol/proj.js';
   import Feature from 'ol/Feature.js';
   import Point from 'ol/geom/Point.js';
   import VectorLayer from 'ol/layer/Vector.js';
   import VectorSource from 'ol/source/Vector.js';
-  import { Style, Circle, Fill, Stroke, RegularShape, Icon } from 'ol/style.js';
+  import { Style, Circle, Fill, Stroke, RegularShape, Icon, Text } from 'ol/style.js';
   import 'ol/ol.css';
   import { gpsService } from '../fake-api/gpsService';
   import type { GPSPosition } from '../fake-api/types';
   import { push } from 'svelte-spa-router';
-
+  import { Cluster } from 'ol/source';
+  import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
+  import { preferences } from '../services/preferences';
+  import aprsIconUrl from '../assets/aprs-bold.svg';
+  import userArrowIconUrl from '../assets/icons/maps-arrow-blue-white.svg';
+  import { trackStore } from '../stores/trackStore'
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
+  import SystemIndicators from "../assets/components/SystemIndicators.svelte";
 
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
   let locationStatus: string = 'Getting location...';
+
+  //APRS locations
+  let aprsLayer: VectorLayer | undefined;
+  let aprCluster: Cluster | undefined;
+  let aprsSource: VectorSource | undefined;
 
   // position marker objects
   let userLayer: VectorLayer | undefined;
@@ -49,12 +60,38 @@
   // device orientation listener (reserved for future compass integration)
   let orientationListener: ((event: DeviceOrientationEvent) => void) | null = null;
 
-  let zoomLevel: number = 18; // default zoom level when centering on user
+  let zoomLevel: number = 18;
+  $: zoomLevel = $preferences.defaultZoom; // default zoom level when centering on user
+
+  function getUserIconScale(): number {
+    return 0.6 + ($preferences.iconSizeLevel * 0.2);
+  }
+
+  function getUserMarkerRadius(): number {
+    return 5 + $preferences.iconSizeLevel;
+  }
 
   // run once when the Svelte component is mounted
   onMount(() => {
-    loadMap();             // create map instance and hook events
-    startGPSTracking();    // begin receiving simulated GPS data
+    try {
+      loadMap();             // create map instance and hook events
+      startGPSTracking();    // begin receiving simulated GPS data
+    } catch (error: unknown) {
+      reportVitalError(error, 'HomeMapPage.onMount');
+
+    }
+
+    // this will be removed in the future but for now this sets up 10 aprs points around the 
+    // the user, to display an aprs icon.
+    const interval = setInterval(() => {
+      if (!latestUserCoords) return;
+
+      for (let i = 0; i < 10; i++) {
+        setRandomAprsPoints();
+      }
+
+      clearInterval(interval); // run once
+    }, 500);
 
     return () => {
       map?.setTarget(undefined);
@@ -100,6 +137,51 @@
       })
     });
 
+    // this is for making points for APRS locations ------------
+    aprsSource = new VectorSource();
+
+    aprCluster = new Cluster({
+      distance: 30, // this is what determines how far from each point before combining.
+      source: aprsSource
+    });
+
+    aprsLayer = new VectorLayer({
+      source: aprCluster,
+      style: (feature) => {
+        // make sure that map exists before doing anything
+        if (!map) return;
+
+        const size = feature.get('features').length;
+        const zoom = map.getView().getZoom() ?? 0;
+
+        //at a certain distance the clusters/points will dissapear
+        if (zoom < 13) {
+          return;
+        }
+
+        // Single point = normal APRS icon
+        if (size === 1) {
+          return getAprsPinStyle(getAprsIcon());
+        }
+
+        // Cluster (circle with number, combined close by points)
+        return new Style({
+          image: new Circle({
+            radius: 12,
+            fill: new Fill({ color: '#3399CC' }),
+            stroke: new Stroke({ color: '#fff', width: 2 })
+          }),
+          text: new Text({
+            text: size.toString(),
+            fill: new Fill({ color: '#fff' })
+          })
+        });
+      }
+    });
+
+    map.addLayer(aprsLayer);
+
+
     if (mapElement) {
       pointerDownListener = (event: PointerEvent) => {
         if (event.pointerType === 'touch') {
@@ -122,7 +204,8 @@
     map.on('pointerdrag', () => {
       if (activeTouchPointerIds.size >= 2) return;
 
-      if (!isProgrammaticMove && (isFollowingUser || isFollowingHeading)) {
+      // User intent always wins: dragging should immediately release follow-lock.
+      if (isFollowingUser || isFollowingHeading) {
         isFollowingUser = false;
         isFollowingHeading = false;
         updateUserMarkerStyle();
@@ -208,7 +291,7 @@
 
 
   function getIconoirArrowUrl(): string {
-    return '/src/assets/icons/maps-arrow-blue-white.svg';
+    return userArrowIconUrl;
   }
 
   /**
@@ -229,7 +312,7 @@
         image: new Icon({
           src: getIconoirArrowUrl(),
           anchor: [0.5, 0.5],
-          scale: 1,
+          scale: getUserIconScale(),
           rotation: (latestHeadingDegrees * Math.PI) / 180,
           rotateWithView: true,
           crossOrigin: 'anonymous',
@@ -238,7 +321,7 @@
     } else {
       userMarker.setStyle(new Style({
         image: new Circle({
-          radius: 8,
+          radius: getUserMarkerRadius(),
           fill: new Fill({ color: '#3399CC' }),
           stroke: new Stroke({ color: '#fff', width: 2 })
         })
@@ -272,7 +355,7 @@
 
             userMarker.setStyle(new Style({
               image: new Circle({
-                radius: 8,
+                radius: getUserMarkerRadius(),
                 fill: new Fill({ color: '#3399CC' }),
                 stroke: new Stroke({ color: '#fff', width: 2 })
               })
@@ -287,10 +370,13 @@
             }
 
             userLayer = new VectorLayer({
-              source: vectorSource
+              source: vectorSource,
+              updateWhileAnimating: true,
+              updateWhileInteracting: true
             });
 
             map.addLayer(userLayer);
+            map.render();
           } else {
             // subsequent fixes: move marker and refresh style
             const geometry = userMarker.getGeometry();
@@ -307,6 +393,9 @@
             if (vectorSource) {
               vectorSource.changed();
             }
+
+            // Request a redraw so marker motion remains visible during map drag interactions.
+            map.render();
           }
 
           if (!hasCenteredInitially) {
@@ -324,6 +413,7 @@
       (error: string) => {
         console.error('GPS error:', error);
         locationStatus = `GPS Error: ${error}`;
+        reportNonVitalError(error, 'HomeMapPage.gpsService');
       }
     );
   }
@@ -355,6 +445,89 @@
     } else {
       resetMapRotation();
     }
+  }
+
+  // TODO: there are appearently many different kinds of aprs icons so it may need
+  // to be able to shift through different icons for the situation. or if we decided
+  // to not implement different icons for different aprs then that fine, just remove
+  // this comment.
+  function getAprsIcon(): string {
+    return aprsIconUrl;
+  }
+
+  /**
+   * Sets up feature points for APRS points, this isn't ment to be the final
+   * version. it simply is putting points onto the map. 
+   * in the future we should make it so that the points can be updated.
+   */
+  function addAprsPoint(lat: number, long: number): void {
+    //if the aprsSource hasn't been set up then don't do anything
+    if (!aprsSource) return;
+
+    //create marker feature and add to map
+    // make the point(feature) using lat and long
+    const aprsMarker = new Feature({
+      geometry: new Point(fromLonLat([long, lat])),
+      name: 'aprs point'
+    });
+
+    aprsSource.addFeature(aprsMarker);
+  }
+
+  // this is the style for the pins, you can insert the image to the pin
+  function getAprsPinStyle(img: string): Style[] {
+    return [
+      // pin stem (triangle)
+      new Style({
+        image: new RegularShape({
+          points: 3,
+          radius: 10,
+          rotation: Math.PI,
+          fill: new Fill({ color: 'black' }),
+          stroke: new Stroke({ color: 'black', width: 1 }),
+          displacement: [0, -12]
+        })
+      }),
+
+      // pin head (circle)
+      new Style({
+        image: new Circle({
+          radius: 13,
+          fill: new Fill({ color: 'white' }),
+          stroke: new Stroke({ color: 'black', width: 2 }),
+          displacement: [0, 26]
+        })
+      }),
+
+      // APRS icon on top
+      new Style({
+        image: new Icon({
+          src: img,
+          scale: 0.05,
+          anchor: [0.5, 0.5],
+          displacement: [0, 26]
+        })
+      })
+    ];
+  }
+
+  //This is just for testing purposes and eventually will be removed when we get APRS data
+  // this gets a random location near the user and sends that information to the addAprsPoint()
+  // to make a aprs feature point.
+  function setRandomAprsPoints(): void{
+    if (!latestUserCoords) return;
+
+    const coords = toLonLat(latestUserCoords); //gets the coordnates
+
+    const long = coords[0];
+    const lat = coords[1];
+
+    if (lat === undefined || long === undefined) return; //makes sure it isn't null
+
+    addAprsPoint(
+      lat + (Math.random() - 0.5)* 0.01,
+      long + (Math.random() - 0.5)* 0.01
+    );
   }
 
   // this function changes route to /SettingPreference
@@ -449,6 +622,19 @@
       </ul>
     </div>
   {/if}
+
+  
+  <!-- this is the system indicators. -->
+  <SystemIndicators />
+
+  <!-- this is the button for letting backend know when to start/end a track-->
+  <button 
+    class="start-end-track_butn"
+    on:click={() => $trackStore.isTracking ? trackStore.end() : trackStore.start()}
+    style="background-color: {$trackStore.isTracking ? 'lightcoral' : 'lightgreen'}"
+  >
+    <strong>{$trackStore.isTracking ? "Stop Track" : "Start Track"}</strong>
+  </button>
 
   <div class="map-container">
     <div bind:this={mapElement} class="map" style="width: 100%; height: 100%;"></div>
@@ -585,6 +771,46 @@
   .hamburger_menu_icon_btn i {
     display: block;
     line-height: 1;
+  }
+
+  .start-end-track_butn {
+    position: absolute;
+    bottom: 20px;
+    right: 25px;
+    z-index: 1000;
+    width: 80px;
+    height: 70px;
+    padding: 0px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: 1px solid white;
+    border-radius: 15%;
+    background-color: rgba(188, 188, 188, 0.9);
+    color: #333;
+    font-weight: 500;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s;
+    outline: none;
+  }
+
+  :global(.ol-zoom button) {
+    width: 2.25em;
+    height: 2.25em;
+    font-size: 1.4rem;
+    line-height: 1;
+    background-color: rgb(188, 188, 188);
+    border: 1px solid white;
+  }
+
+  :global(.ol-zoom button:hover) {
+    background-color: rgb(225, 225, 225);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+  }
+
+  :global(.ol-zoom) {
+    font-size: 1.1em;
   }
 
 </style>

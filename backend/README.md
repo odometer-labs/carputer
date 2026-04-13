@@ -19,22 +19,29 @@ On your virtual environment:
 
 # Environment Configuration
 
-Before starting the database, update your .env file in this directory to store your credentials.
+Before starting the database, create a `.env` file in the **repository root** (same directory as `docker-compose.yml`).
 
-File: .env
+**Quick Start:**
+```bash
+# From repo root
+cp .env.example .env
+# Edit .env with your preferred values
+```
 
-Example:
+See `.env.example` for all available configuration options. The required variables are:
 
-POSTGRES_USER=user_name_here
-POSTGRES_DB=db_name_here
-POSTGRES_PASSWORD=your_secure_password_here
+| Variable | Description |
+|----------|-------------|
+| `POSTGRES_USER` | PostgreSQL username |
+| `POSTGRES_PASSWORD` | PostgreSQL password |
+| `POSTGRES_DB` | Database name |
 
----
+Optional variables (have sensible defaults):
 
-Connection Settings (Standard for Docker on localhost)
-
-DB_HOST=localhost
-DB_PORT=5432
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_HOST` | `localhost` | Database host |
+| `DB_PORT` | `5432` | Database port |
 
 Note: These variables are automatically loaded by the docker-compose.yml file to initialize your
 database with the correct user and permissions.

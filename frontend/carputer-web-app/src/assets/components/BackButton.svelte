@@ -14,7 +14,6 @@
   .back-btn {
     background-color: rgba(227, 227, 227, 0.9);
     position:absolute; 
-    top: 15px;
     left: 1%;
 
     width: 50px;

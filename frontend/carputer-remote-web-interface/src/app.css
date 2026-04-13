@@ -1,0 +1,25 @@
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --text-color: #111111;
+  --primary-color: rgba(188, 188, 188, 0.9);
+  --secondary-color: rgb(225, 225, 225);
+  --surface-color: #eeeeee;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  background: var(--surface-color);
+  color: var(--text-color);
+}

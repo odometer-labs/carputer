@@ -3,11 +3,15 @@
 
 Service providing basic wifi connection management via NetworkManager using its dbus interface.
 
+Currently this service is limited to WPA2 connections profiles and does not support WEP or WPA3
+- this could be added later if desired
+
 ## Requirements
 
-1. Linux
-2. NetworkManager
-3. [UV](https://docs.astral.sh/uv/guides/install-python/)
+1. Debian/RaspbianOS (should work on other distros but hasn't been tested)
+2. NetworkManager service installed and running and accessible over dbus
+3. Permissions to configure the network such as membership of `netdev`
+4. [UV](https://docs.astral.sh/uv/guides/install-python/)
 
 ## Usage
 

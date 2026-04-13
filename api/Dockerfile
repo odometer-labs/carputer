@@ -9,10 +9,14 @@ WORKDIR /app
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:0.10.10 /uv /uvx /bin/
 
+RUN apt-get update && apt-get install -y curl
+
 # Python project installation
+RUN uv pip install "psycopg[binary]"
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=bind,source=requirements.txt,target=requirements.txt \
     uv pip install -r requirements.txt
+
 
 
 # Add non-root user
@@ -29,4 +33,4 @@ EXPOSE 8000
 # Switch to non-root user
 USER appuser
 
-CMD ["fastapi", "run", "app/main.py"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
