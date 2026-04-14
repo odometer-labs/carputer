@@ -8,6 +8,8 @@
   import { fromLonLat } from 'ol/proj.js';
   import 'ol/ol.css';
   import AppBar from '../assets/components/AppBar.svelte';
+  import trashcan_icon from '../assets/icons/trash.svg';
+  
 
   // --- Types (matches expected backend shape) ---
   interface Track {
@@ -130,7 +132,7 @@
               title="Delete track"
               on:click|stopPropagation={() => promptDelete(track)}
             >
-              &#x2715;
+              <img src={trashcan_icon} alt="Trashcan" style="width: 24px; height: 24px;" />
             </button>
           </li>
         {:else}
