@@ -29,6 +29,9 @@
     { id: 5, name: 'City Loop',        date: '2026-04-09', distanceMi: 15.8,  durationMin: 38  },
     { id: 6, name: 'Mountain Road',    date: '2026-04-08', distanceMi: 62.3,  durationMin: 110 },
     { id: 7, name: 'Night Drive',      date: '2026-04-07', distanceMi: 28.9,  durationMin: 45  },
+    { id: 8, name: 'Work Drive',      date: '2026-04-08', distanceMi: 15,  durationMin: 30  },
+    { id: 9, name: 'Joy Ride',      date: '2026-04-06', distanceMi: 30,  durationMin: 60  },
+    { id: 10, name: 'Date Night',      date: '2026-04-05', distanceMi: 12,  durationMin: 25  },
   ];
 
   let mapElement: HTMLDivElement | undefined;
