@@ -6,6 +6,8 @@ from ..dependencies import get_connection
 from app.models.track import Track
 from app.models.track_point import TrackPoint
 from app.clients.track_client import track_client
+from typing import Dict, Any
+import json
 
 router = APIRouter(prefix="/v1", tags=["Tracks"])
 
@@ -80,3 +82,13 @@ async def check_new_road():
     """
     
     return track_client.check_new_road()
+
+
+
+@router.post("/tracks/import")
+async def import_track(geojson_data: Dict[str, Any]):
+    """
+    Imports a track from GeoJSON data.
+    """
+    geojson_str = json.dumps(geojson_data)
+    return track_client.import_track(geojson_str)
