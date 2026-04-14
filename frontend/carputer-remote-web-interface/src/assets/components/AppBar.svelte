@@ -1,11 +1,12 @@
 
 <script>
   import BackButton from './BackButton.svelte';
+  let { title } = $props();
 </script>
 
 <header class="app-bar">
   <BackButton />
-  <h1 style="display: flex; justify-content: center; flex: 1;">Track Viewer</h1>
+  <h1 style="display: flex; justify-content: center; flex: 1;">{title}</h1>
 </header>
 
 <style>

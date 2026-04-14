@@ -91,7 +91,7 @@
 </script>
 
 <main class="tracks-shell">
-  <AppBar />
+  <AppBar title="Track Viewer" />
 
   <div class="content-area">
     <!-- Map (left 75%) -->

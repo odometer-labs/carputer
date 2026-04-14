@@ -4,7 +4,7 @@
 </script>
 
 <main class="logs-shell">
-  <AppBar />
+  <AppBar title="Logs" />
 </main>
 
 <style>

@@ -3,7 +3,7 @@
 </script>
 
 <main class="manage-data-shell">
-  <AppBar />
+  <AppBar title="Data Manager" />
 </main>
 
 <style>
