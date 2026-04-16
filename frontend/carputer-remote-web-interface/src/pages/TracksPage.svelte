@@ -3,7 +3,15 @@
   import Map from 'ol/Map.js';
   import View from 'ol/View.js';
   import TileLayer from 'ol/layer/Tile.js';
+  import VectorLayer from 'ol/layer/Vector.js';
   import OSM from 'ol/source/OSM.js';
+  import VectorSource from 'ol/source/Vector.js';
+  import Feature from 'ol/Feature.js';
+  import Point from 'ol/geom/Point.js';
+  import Style from 'ol/style/Style.js';
+  import Stroke from 'ol/style/Stroke.js';
+  import CircleStyle from 'ol/style/Circle.js';
+  import Fill from 'ol/style/Fill.js';
   import { defaults as defaultControls } from 'ol/control/defaults.js';
   import { fromLonLat } from 'ol/proj.js';
   import 'ol/ol.css';
@@ -20,6 +28,8 @@
     durationMin: number;
   }
 
+  type LonLatCoordinate = [number, number];
+
   // --- Fake data: swap this out for an API fetch when backend is ready ---
   const FAKE_TRACKS: Track[] = [
     { id: 1, name: 'Morning Commute',  date: '2026-04-13', distanceMi: 8.2,   durationMin: 22  },
@@ -34,8 +44,22 @@
     { id: 10, name: 'Date Night',      date: '2026-04-05', distanceMi: 12,  durationMin: 25  },
   ];
 
+  const FAKE_TRACK_START_POINTS: Record<number, LonLatCoordinate> = {
+    1: [-122.4180, 37.7750],
+    2: [-122.3321, 47.6062],
+    3: [-87.6298, 41.8781],
+    4: [-104.9903, 39.7392],
+    5: [-74.0060, 40.7128],
+    6: [-105.2705, 40.0150],
+    7: [-118.2437, 34.0522],
+    8: [-96.7970, 32.7767],
+    9: [-80.1918, 25.7617],
+    10: [-71.0589, 42.3601]
+  };
+
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
+  let trackLayer: VectorLayer<VectorSource> | undefined;
   let searchQuery: string = '';
   let selectedTrackId: number | null = null;
 
@@ -55,7 +79,35 @@
 
   function selectTrack(track: Track): void {
     selectedTrackId = track.id;
-    // TODO: fetch track geometry from backend and render on map
+    const startPoint = FAKE_TRACK_START_POINTS[track.id];
+    if (!map || !trackLayer || !startPoint) return;
+
+    const source = trackLayer.getSource();
+    if (!source) return;
+
+    const projectedStart = fromLonLat(startPoint);
+
+    const startFeature = new Feature({
+      geometry: new Point(projectedStart)
+    });
+    startFeature.setStyle(
+      new Style({
+        image: new CircleStyle({
+          radius: 7,
+          fill: new Fill({ color: '#2e7d32' }),
+          stroke: new Stroke({ color: '#ffffff', width: 2 })
+        })
+      })
+    );
+
+    source.clear();
+    source.addFeature(startFeature);
+
+    map.getView().animate({
+      center: projectedStart,
+      zoom: 13,
+      duration: 650
+    });
   }
 
   let pendingDeleteTrack: Track | null = null;
@@ -67,7 +119,10 @@
   function confirmDelete(): void {
     if (!pendingDeleteTrack) return;
     // TODO: call DELETE /api/tracks/:id before updating local state
-    if (selectedTrackId === pendingDeleteTrack.id) selectedTrackId = null;
+    if (selectedTrackId === pendingDeleteTrack.id) {
+      selectedTrackId = null;
+      trackLayer?.getSource()?.clear();
+    }
     tracks = tracks.filter(t => t.id !== pendingDeleteTrack!.id);
     pendingDeleteTrack = null;
   }
@@ -77,10 +132,15 @@
   }
 
   onMount(() => {
+    trackLayer = new VectorLayer({
+      source: new VectorSource()
+    });
+
     map = new Map({
       target: mapElement,
       layers: [
-        new TileLayer({ source: new OSM() })
+        new TileLayer({ source: new OSM() }),
+        trackLayer
       ],
       view: new View({
         center: fromLonLat([0, 0]),
@@ -91,6 +151,7 @@
 
     return () => {
       map?.setTarget(undefined);
+      trackLayer = undefined;
     };
   });
 </script>
