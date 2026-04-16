@@ -8,7 +8,6 @@ This allows backend and frontend developers to work without access to the Raspbe
 
 ```bash
 cd embedded
-source .venv/bin/activate
 python -m gpsd_mock
 ```
 
