@@ -14,6 +14,7 @@
   import Fill from 'ol/style/Fill.js';
   import { defaults as defaultControls } from 'ol/control/defaults.js';
   import { fromLonLat } from 'ol/proj.js';
+  import type { FeatureLike } from 'ol/Feature.js';
   import 'ol/ol.css';
   import AppBar from '../assets/components/AppBar.svelte';
   import trashcan_icon from '../assets/icons/trash.svg';
@@ -57,6 +58,8 @@
     10: [-71.0589, 42.3601]
   };
 
+  const POINT_VISIBILITY_MIN_ZOOM = 6;
+
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
   let trackLayer: VectorLayer<VectorSource> | undefined;
@@ -71,6 +74,51 @@
     t.date.includes(searchQuery)
   );
 
+  function getPointStyle(feature: FeatureLike): Style | undefined {
+    const currentZoom = map?.getView().getZoom() ?? 0;
+    if (currentZoom < POINT_VISIBILITY_MIN_ZOOM) return undefined;
+
+    const featureTrackId = feature.get('trackId') as number | undefined;
+    const isSelected = featureTrackId === selectedTrackId;
+
+    return new Style({
+      image: new CircleStyle({
+        radius: isSelected ? 9 : 6,
+        fill: new Fill({ color: isSelected ? '#1565c0' : '#2e7d32' }),
+        stroke: new Stroke({ color: '#ffffff', width: 2 })
+      })
+    });
+  }
+
+  function rebuildTrackPoints(): void {
+    const source = trackLayer?.getSource();
+    if (!source) return;
+
+    source.clear();
+
+    for (const track of tracks) {
+      const startPoint = FAKE_TRACK_START_POINTS[track.id];
+      if (!startPoint) continue;
+
+      const startFeature = new Feature({
+        geometry: new Point(fromLonLat(startPoint)),
+        trackId: track.id
+      });
+
+      source.addFeature(startFeature);
+    }
+  }
+
+  $: if (trackLayer) {
+    tracks;
+    rebuildTrackPoints();
+  }
+
+  $: if (trackLayer) {
+    selectedTrackId;
+    trackLayer.changed();
+  }
+
   function formatDuration(minutes: number): string {
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
@@ -80,28 +128,9 @@
   function selectTrack(track: Track): void {
     selectedTrackId = track.id;
     const startPoint = FAKE_TRACK_START_POINTS[track.id];
-    if (!map || !trackLayer || !startPoint) return;
-
-    const source = trackLayer.getSource();
-    if (!source) return;
+    if (!map || !startPoint) return;
 
     const projectedStart = fromLonLat(startPoint);
-
-    const startFeature = new Feature({
-      geometry: new Point(projectedStart)
-    });
-    startFeature.setStyle(
-      new Style({
-        image: new CircleStyle({
-          radius: 7,
-          fill: new Fill({ color: '#2e7d32' }),
-          stroke: new Stroke({ color: '#ffffff', width: 2 })
-        })
-      })
-    );
-
-    source.clear();
-    source.addFeature(startFeature);
 
     map.getView().animate({
       center: projectedStart,
@@ -133,7 +162,8 @@
 
   onMount(() => {
     trackLayer = new VectorLayer({
-      source: new VectorSource()
+      source: new VectorSource(),
+      style: (feature) => getPointStyle(feature)
     });
 
     map = new Map({
@@ -147,6 +177,28 @@
         zoom: 2
       }),
       controls: defaultControls({ rotate: false })
+    });
+
+    rebuildTrackPoints();
+
+    map.on('singleclick', (event) => {
+      const currentZoom = map?.getView().getZoom() ?? 0;
+      if (currentZoom < POINT_VISIBILITY_MIN_ZOOM || !trackLayer) return;
+
+      const clickedFeature = map?.forEachFeatureAtPixel(
+        event.pixel,
+        (feature, layer) => (layer === trackLayer ? feature : undefined)
+      );
+
+      if (!clickedFeature) return;
+
+      const trackId = clickedFeature.get('trackId') as number | undefined;
+      if (!trackId) return;
+
+      const clickedTrack = tracks.find((t) => t.id === trackId);
+      if (!clickedTrack) return;
+
+      selectedTrackId = clickedTrack.id;
     });
 
     return () => {
