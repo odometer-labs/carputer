@@ -1,10 +1,13 @@
 import { writable, type Writable } from "svelte/store";
-import { startTrack, endTrack } from "../api/restApi";
+import { startTrack, endTrack, listTracks } from "../api/restApi";
+import type { Track } from "../api/types"
 
 
 export interface Tracks {
   isTracking: boolean;
   trackId: number | null;
+
+  tracks: Track[];  // holds the tracks from backend.
 }
 
 
@@ -17,7 +20,9 @@ class TrackStore {
   constructor() {
     this.store = writable<Tracks>({
       isTracking: false,
-      trackId: null
+      trackId: null,
+
+      tracks: []
     });
     
     //this is to make it into a store
@@ -29,12 +34,13 @@ class TrackStore {
     try {
       const res = await startTrack();
 
-      this.store.set({
+      this.store.update(state => ({
+        ...state,
         isTracking: true,
         trackId: res.create_track
-      });
+      }));
     } catch (error) {
-      console.error(error)
+      console.error(error);
     }
   }
 
@@ -44,13 +50,35 @@ class TrackStore {
     try {
       await endTrack();
 
-      this.store.set({
+      this.store.update(state => ({
+        ...state,
         isTracking: false,
         trackId: null
-      });
+      }));
     } catch (error) {
-      console.error(error)
+      console.error(error);
     }
+  }
+
+  async loadTracks() {
+    try {
+      const tracks = await listTracks();
+
+      this.store.update(state => ({
+        ...state,
+        tracks
+      }));
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  //this might be deleted later, for now it helps showcase tracks on the map
+  setTrack(tracks: Track[]) {
+    this.store.update(state => ({
+      ...state, 
+      tracks
+    }));
   }
 }
 

@@ -8,6 +8,7 @@
   import { fromLonLat, toLonLat } from 'ol/proj.js';
   import Feature from 'ol/Feature.js';
   import Point from 'ol/geom/Point.js';
+  import LineString from 'ol/geom/LineString.js'
   import VectorLayer from 'ol/layer/Vector.js';
   import VectorSource from 'ol/source/Vector.js';
   import { Style, Circle, Fill, Stroke, RegularShape, Icon, Text } from 'ol/style.js';
@@ -23,10 +24,20 @@
   import { trackStore } from '../stores/trackStore'
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
   import SystemIndicators from "../assets/components/SystemIndicators.svelte";
+  import { listTracks } from '../api/restApi';
+  //remove this later
+  import type { Track } from '../api/types';
 
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
   let locationStatus: string = 'Getting location...';
+
+  // roadhistory and current track line
+  let oldTrackLayer: VectorLayer | undefined;
+  let oldTrackSource: VectorSource | undefined;
+  let currentTrackLayer: VectorLayer | undefined;
+  let currentTrackSource: VectorSource | undefined;
+  let currentTrackFeature: Feature<LineString> | undefined;
 
   //APRS locations
   let aprsLayer: VectorLayer | undefined;
@@ -81,6 +92,7 @@
 
     }
 
+    ///TODO: remove this after getting real APRS data.
     // this will be removed in the future but for now this sets up 10 aprs points around the 
     // the user, to display an aprs icon.
     const interval = setInterval(() => {
@@ -93,7 +105,19 @@
       clearInterval(interval); // run once
     }, 500);
 
+    // subscribes to track changes
+    const unsubscribe = trackStore.subscribe(({ tracks }) => { 
+      renderTracks(tracks);
+    });
+    //TODO: uncomment this for real data from back end
+    //trackStore.loadTracks();  //this loads in the old tracks from backend.
+
+    //TODO: remove this line when we don't want mock data anymore
+    trackStore.setTrack(mockTracks);
+
     return () => {
+      unsubscribe();
+
       map?.setTarget(undefined);
       gpsService.stop();
 
@@ -181,6 +205,36 @@
 
     map.addLayer(aprsLayer);
 
+
+    // ------this is the track layer----------
+    oldTrackSource = new VectorSource();
+
+    // this determines the color/shape/size of the old tracks
+    oldTrackLayer = new VectorLayer({
+      source: oldTrackSource,
+      style: new Style({
+        stroke: new Stroke({
+          color: "#4aaeff",
+          width: 4
+        })
+      })
+    });
+
+    currentTrackSource = new VectorSource();
+
+    // this determines the color/shape/size of the current track the user is making
+    currentTrackLayer = new VectorLayer({
+      source: currentTrackSource,
+      style: new Style({
+        stroke: new Stroke({
+          color: "#ff4d4a",
+          width: 4
+        })
+      })
+    });
+
+    map.addLayer(oldTrackLayer);
+    map.addLayer(currentTrackLayer);
 
     if (mapElement) {
       pointerDownListener = (event: PointerEvent) => {
@@ -408,6 +462,24 @@
           applyHeadingRotation();
           
           locationStatus = `Location: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+
+          // this adds a line (red line) so the user can see where they have been
+          if ($trackStore.isTracking) {
+              //this determines if this is the beggining of a new line
+            if (!currentTrackFeature) {
+              currentTrackFeature = new Feature({
+                geometry: new LineString([coords])
+              });
+
+              currentTrackSource?.addFeature(currentTrackFeature);
+            }
+            else {
+              const geom = currentTrackFeature.getGeometry();
+              if (geom) {
+                geom.appendCoordinate(coords);
+              }
+            }
+          }
         }
       },
       (error: string) => {
@@ -446,6 +518,79 @@
       resetMapRotation();
     }
   }
+
+  //TODO remove this when we have working tracks to recieve from the database
+  export const mockTracks: Track[] = [
+    {
+      track_id: 1,
+      start_time: "2026-04-15T10:00:00Z",
+      end_time: "2026-04-15T10:20:00Z",
+      geom: {
+        type: "LineString",
+        coordinates: [
+          [-122.6865, 45.5120],
+          [-122.6862, 45.5125],
+          [-122.6859, 45.5130],
+          [-122.6850, 45.5147],
+          [-122.6825, 45.5140]
+        ]
+      }
+    },
+    {
+      track_id: 2,
+      start_time: "2026-04-16T14:00:00Z",
+      end_time: "2026-04-16T14:35:00Z",
+      geom: {
+        type: "LineString",
+        coordinates: [
+          [-122.6855, 45.5115],
+          [-122.6805, 45.5120],
+          [-122.6835, 45.5125],
+          [-122.6815, 45.5130],
+          [-122.6815, 45.5135],
+          [-122.6805, 45.5140]
+        ]
+      }
+    }
+  ];
+
+  // set up the old tracks that the user has been on previously
+  function renderTracks(tracks: Track[]) : void {
+    //check if the trackSource exists
+    if (!oldTrackSource) return;
+
+    // remove any of the old tracks on the map to prevent duplicates
+    oldTrackSource.clear();
+
+    tracks.forEach((track) => {
+      const coords = track.geom.coordinates.map(([lon, lat]) =>
+        fromLonLat([lon, lat])
+      );
+
+      const feature = new Feature({
+        geometry: new LineString(coords)
+      });
+
+      oldTrackSource?.addFeature(feature);
+    });
+  }
+
+  // this function helps start the tracking for backend and end
+  // it also refreshes the TrackLayer from the current track when the user 
+  // presses end track
+  async function startEndTracking() : Promise<void> {
+    if ($trackStore.isTracking) {
+      await trackStore.end();
+      currentTrackSource?.clear(); // remove the current user track (red line)
+      currentTrackFeature = undefined;
+
+      await trackStore.loadTracks(); //this way when the new track was made it will
+                                // be added to the track list from backend.
+    } else {
+      await trackStore.start();
+    }
+  }
+
 
   // TODO: there are appearently many different kinds of aprs icons so it may need
   // to be able to shift through different icons for the situation. or if we decided
@@ -630,7 +775,7 @@
   <!-- this is the button for letting backend know when to start/end a track-->
   <button 
     class="start-end-track_butn"
-    on:click={() => $trackStore.isTracking ? trackStore.end() : trackStore.start()}
+    on:click={() => startEndTracking()}
     style="background-color: {$trackStore.isTracking ? 'lightcoral' : 'lightgreen'}"
   >
     <strong>{$trackStore.isTracking ? "Stop Track" : "Start Track"}</strong>
