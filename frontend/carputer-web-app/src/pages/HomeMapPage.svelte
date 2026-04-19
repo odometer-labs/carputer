@@ -161,6 +161,36 @@
       })
     });
 
+    // ------this is the track layer----------
+    oldTrackSource = new VectorSource();
+
+    // this determines the color/shape/size of the old tracks
+    oldTrackLayer = new VectorLayer({
+      source: oldTrackSource,
+      style: new Style({
+        stroke: new Stroke({
+          color: "#FF746C",
+          width: 4
+        })
+      })
+    });
+
+    currentTrackSource = new VectorSource();
+
+    // this determines the color/shape/size of the current track the user is making
+    currentTrackLayer = new VectorLayer({
+      source: currentTrackSource,
+      style: new Style({
+        stroke: new Stroke({
+          color: "#1c91ff",
+          width: 4
+        })
+      })
+    });
+
+    map.addLayer(oldTrackLayer);
+    map.addLayer(currentTrackLayer);
+
     // this is for making points for APRS locations ------------
     aprsSource = new VectorSource();
 
@@ -204,37 +234,7 @@
     });
 
     map.addLayer(aprsLayer);
-
-
-    // ------this is the track layer----------
-    oldTrackSource = new VectorSource();
-
-    // this determines the color/shape/size of the old tracks
-    oldTrackLayer = new VectorLayer({
-      source: oldTrackSource,
-      style: new Style({
-        stroke: new Stroke({
-          color: "#4aaeff",
-          width: 4
-        })
-      })
-    });
-
-    currentTrackSource = new VectorSource();
-
-    // this determines the color/shape/size of the current track the user is making
-    currentTrackLayer = new VectorLayer({
-      source: currentTrackSource,
-      style: new Style({
-        stroke: new Stroke({
-          color: "#ff4d4a",
-          width: 4
-        })
-      })
-    });
-
-    map.addLayer(oldTrackLayer);
-    map.addLayer(currentTrackLayer);
+    
 
     if (mapElement) {
       pointerDownListener = (event: PointerEvent) => {
