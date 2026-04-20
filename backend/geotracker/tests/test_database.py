@@ -3,7 +3,6 @@ import json
 from datetime import datetime
 import mapbox_vector_tile
 
-
 def test_db_connection(db_conn):
     """
     Verify that db_conn fixture actually works.
