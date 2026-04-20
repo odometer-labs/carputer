@@ -321,6 +321,26 @@ WHERE track_id = p_track_id;
 END IF;
 END;
 $$;
+CREATE OR REPLACE FUNCTION gps.get_track_tiles(z integer, x integer, y integer) RETURNS bytea LANGUAGE plpgsql AS $$
+DECLARE mvt bytea;
+BEGIN --  binary MVT format
+SELECT ST_AsMVT(tile, 'tracks_layer', 4096, 'geom') INTO mvt
+FROM (
+        SELECT track_id,
+            -- Condition the geometry (Clip, Simplify, Quantize)
+            ST_AsMVTGeom(
+                ST_Simplify(geom_wm, ST_LevelScale(z)),
+                ST_TileEnvelope(z, x, y),
+                4096,
+                64,
+                true -- Extent, Buffer, Clip
+            ) AS geom
+        FROM gps.track_lines -- filter using the Envelope to find lines in this tile
+        WHERE geom_wm && ST_TileEnvelope(z, x, y)
+    ) AS tile;
+RETURN mvt;
+END;
+$$;
 ---------------------------
 -- 5. SPATIAL LOGIC & UTILITIES
 ---------------------------
