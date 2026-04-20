@@ -25,7 +25,8 @@ CREATE TABLE gps.track_points (
 );
 CREATE TABLE gps.track_lines (
     track_id BIGINT PRIMARY KEY REFERENCES gps.tracks(track_id) ON DELETE CASCADE,
-    geom GEOGRAPHY(LINESTRING, 4326) NOT NULL
+    geom GEOGRAPHY(LINESTRING, 4326) NOT NULL,
+    geom_wm GEOMETRY(LINESTRING, 3857) -- For Vector Tiles (Web Mercator)
 );
 ---------------------------
 -- 3. INDEXES & CONSTRAINTS
@@ -35,6 +36,7 @@ CREATE UNIQUE INDEX one_active_track ON gps.tracks ((end_time IS NULL))
 WHERE end_time IS NULL;
 -- Spatial GIST indexes for fast proximity searches (ST_DWithin, ST_Distance)
 CREATE INDEX IF NOT EXISTS idx_track_points_geom ON gps.track_points USING GIST (geom);
+CREATE INDEX idx_track_lines_wm ON gps.track_lines USING GIST (geom_wm);
 CREATE INDEX IF NOT EXISTS idx_track_points_track_time ON gps.track_points(track_id, time_stamp);
 CREATE INDEX IF NOT EXISTS idx_track_points_geom_track ON gps.track_points USING GIST(geom, track_id);
 CREATE INDEX IF NOT EXISTS idx_track_points_timestamp ON gps.track_points(time_stamp DESC);
@@ -59,7 +61,7 @@ RETURN new_track_id;
 END;
 $$;
 --- Standard entry point for raw GPS telemetry
--- Units: Lat/Long (Decimal), Speed (MPH), Heading (0-360 deg)
+-- Units: Lat/Long (Decimal), Speed (m/s), Heading (0-360 deg)
 CREATE OR REPLACE PROCEDURE gps.add_track_point(
         p_track_id BIGINT,
         p_time_stamp TIMESTAMPTZ,
@@ -143,6 +145,26 @@ CREATE OR REPLACE PROCEDURE gps.delete_track(p_track_id BIGINT) LANGUAGE plpgsql
 DELETE FROM gps.tracks
 WHERE track_id = p_track_id;
 END IF;
+END;
+$$;
+CREATE OR REPLACE FUNCTION gps.get_track_tiles(z integer, x integer, y integer) RETURNS bytea LANGUAGE plpgsql AS $$
+DECLARE mvt bytea;
+BEGIN --  binary MVT format
+SELECT ST_AsMVT(tile, 'tracks_layer', 4096, 'geom') INTO mvt
+FROM (
+        SELECT track_id,
+            -- Condition the geometry (Clip, Simplify, Quantize)
+            ST_AsMVTGeom(
+                ST_Simplify(geom_wm, ST_LevelScale(z)),
+                ST_TileEnvelope(z, x, y),
+                4096,
+                64,
+                true -- Extent, Buffer, Clip
+            ) AS geom
+        FROM gps.track_lines -- filter using the Envelope to find lines in this tile
+        WHERE geom_wm && ST_TileEnvelope(z, x, y)
+    ) AS tile;
+RETURN mvt;
 END;
 $$;
 ---------------------------
@@ -257,9 +279,13 @@ $$;
 -- Fixes common GPS topology errors (self-intersections) to ensure spatial validity
 CREATE OR REPLACE PROCEDURE gps.validate_geometry(finished_track_id BIGINT) LANGUAGE plpgsql AS $$ BEGIN
 UPDATE gps.track_lines
-SET geom = ST_LineMerge(ST_MakeValid(geom::GEOMETRY))::GEOGRAPHY
+SET geom_wm = ST_CollectionExtract(ST_MakeValid(geom_wm), 2)
 WHERE track_id = finished_track_id
-    AND NOT ST_IsValid(geom::GEOMETRY);
+    AND NOT ST_IsValid(geom_wm);
+-- 2. Sync the Geography column by transforming back to 4326 first
+UPDATE gps.track_lines
+SET geom = ST_Transform(geom_wm::geometry, 4326)::geography
+WHERE track_id = finished_track_id;
 END;
 $$;
 ---------------------------
@@ -267,31 +293,36 @@ $$;
 ---------------------------
 -- Automation: Dynamically builds LineStrings as points are inserted. 
 -- Avoids expensive recalculations of the entire track during read operations.
-CREATE OR REPLACE FUNCTION gps.update_track_line_trigger() RETURNS TRIGGER LANGUAGE plpgsql AS $$
-DECLARE point_count INTEGER;
-line_exists BOOLEAN;
-BEGIN
-SELECT EXISTS(
-        SELECT 1
-        FROM gps.track_lines
-        WHERE track_id = NEW.track_id
-    ) INTO line_exists;
-IF line_exists THEN
-UPDATE gps.track_lines
-SET geom = ST_AddPoint(geom::GEOMETRY, NEW.geom::GEOMETRY, -1)::GEOGRAPHY
-WHERE track_id = NEW.track_id;
--- Line is created if there are at least two track points.
-ELSE
-INSERT INTO gps.track_lines (track_id, geom)
+CREATE OR REPLACE FUNCTION gps.update_track_line_trigger() RETURNS TRIGGER LANGUAGE plpgsql AS $$ BEGIN -- Try to create the line assuming it's the 2nd point.
+    -- If it's the 1st point, this query returns 0 rows and does nothing.
+    -- If the line already exists, it hits the EXCLUDED conflict.
+INSERT INTO gps.track_lines (track_id, geom, geom_wm)
 SELECT NEW.track_id,
     ST_MakeLine(
         geom::geometry
         ORDER BY time_stamp ASC
-    )::geography
+    )::geography,
+    ST_Transform(
+        ST_MakeLine(
+            geom::geometry
+            ORDER BY time_stamp ASC
+        ),
+        3857
+    )
 FROM gps.track_points
 WHERE track_id = NEW.track_id
-HAVING COUNT(*) >= 2 ON CONFLICT (track_id) DO NOTHING;
-END IF;
+HAVING COUNT(*) = 2 ON CONFLICT (track_id) DO
+UPDATE
+SET geom = ST_AddPoint(
+        gps.track_lines.geom::geometry,
+        NEW.geom::geometry,
+        -1
+    )::geography,
+    geom_wm = ST_AddPoint(
+        gps.track_lines.geom_wm,
+        ST_Transform(NEW.geom::geometry, 3857),
+        -1
+    );
 RETURN NEW;
 END;
 $$;
