@@ -277,15 +277,25 @@ RETURN new_track_id;
 END;
 $$;
 -- Fixes common GPS topology errors (self-intersections) to ensure spatial validity
-CREATE OR REPLACE PROCEDURE gps.validate_geometry(finished_track_id BIGINT) LANGUAGE plpgsql AS $$ BEGIN
-UPDATE gps.track_lines
-SET geom_wm = ST_CollectionExtract(ST_MakeValid(geom_wm), 2)
-WHERE track_id = finished_track_id
-    AND NOT ST_IsValid(geom_wm);
--- 2. Sync the Geography column by transforming back to 4326 first
-UPDATE gps.track_lines
-SET geom = ST_Transform(geom_wm::geometry, 4326)::geography
+CREATE OR REPLACE PROCEDURE gps.validate_geometry(finished_track_id BIGINT) LANGUAGE plpgsql AS $$
+DECLARE cleaned_geom geometry;
+BEGIN --  Attempt to clean and extract only the line parts (type 2)
+SELECT ST_CollectionExtract(ST_MakeValid(geom_wm), 2) INTO cleaned_geom
+FROM gps.track_lines
 WHERE track_id = finished_track_id;
+-- 2. Only update if the result is a valid, non-empty LineString/MultiLineString
+IF cleaned_geom IS NOT NULL
+AND NOT ST_IsEmpty(cleaned_geom) THEN
+UPDATE gps.track_lines
+SET geom_wm = cleaned_geom,
+    geom = ST_Transform(cleaned_geom, 4326)::geography
+WHERE track_id = finished_track_id;
+END IF;
+END;
+$$;
+CREATE OR REPLACE FUNCTION ST_LevelScale(z integer) RETURNS float8 LANGUAGE plpgsql AS $$ BEGIN -- 40075016.68 is the Earth's circumference in meters (EPSG:3857)
+    -- 256 is the standard tile pixel width
+    RETURN 40075016.68 / (256 * |/ 2 ^ z);
 END;
 $$;
 ---------------------------
