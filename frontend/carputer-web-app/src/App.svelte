@@ -6,7 +6,6 @@
   import SettingPreferencePage from './pages/SettingPreferencePage.svelte';
   import WifiPage from './pages/WifiPage.svelte';
   import DashboardPage from './pages/DashboardPage.svelte';
-  import MapDownloadPage from './pages/MapDownloadPage.svelte';
   import ErrorPage from './pages/ErrorPage.svelte';
   import ErrorPopup from './assets/components/ErrorPopup.svelte';
   import {
@@ -22,8 +21,7 @@
   // in the background.
   const overlayRoutes = ['/SettingPreference',
                          '/Wifi', 
-                         '/Dashboard',
-                         '/MapDownload'];
+                         '/Dashboard',];
 
   // Checks if current route needs an overlay
   // this is reactive, includes() function returns a true or false
@@ -128,13 +126,7 @@
         <DashboardPage />
       </div>
     {/if}
-
-    <!-- Map DownLoad Page -->
-    {#if $location === '/MapDownload'}
-      <div style="height: 100%; width: 100%;">
-        <MapDownloadPage />
-      </div>
-    {/if}
+    
   {/if}
 
   {#if !$appErrorState.fatalError}

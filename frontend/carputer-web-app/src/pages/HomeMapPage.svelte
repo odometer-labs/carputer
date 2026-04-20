@@ -544,11 +544,6 @@
   function goToDashboard() : void {
     push("/Dashboard");
   }
-  
-  // this function changes route to /Dashboard
-  function goToMapDownload() : void {
-    push("/MapDownload");
-  }
 
   let isDropdownOpen: boolean = false;
 </script>
@@ -589,15 +584,6 @@
               Wifi
               <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
                 <sub class="sub_text">Connected to PSU-Guest</sub>
-              </div>  
-            </button>
-        </li>
-        <li style="padding: 0;">
-            <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false; goToMapDownload()}}>
-              <i class="iconoir-download dropdown-menu_btn_icons"></i>
-              Download Map
-              <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
-                <sub class="sub_text">2GB free</sub>
               </div>  
             </button>
         </li>
