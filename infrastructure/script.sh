@@ -82,43 +82,46 @@ info "  RTL-SDR: rtl-sdr"
 info "  Direwolf deps: cmake, gcc, g++, make, libasound2-dev"
 info "  Python: python3-requests"
 echo ""
-confirm "Proceed with package installation?" || { warn "Skipping package installation."; }
+confirm Proceed with package installation?" || { warn "Skipping package installation."; }
 
-sudo apt update
-sudo apt install -y vim git gpsd gpsd-clients chrony curl \
-    rtl-sdr cmake gcc g++ make libasound2-dev \
-    python3-requests python3-pip
+sudo aptupdate
+sudo aptinstall -y vim git gpsd gpsd-clients chrony curl \
+    rtl-dr cmake gcc g++ make libasound2-dev \
+    pythn3-requests python3-pip
 
-info "Packages installed successfully."
+info "Pakages installed successfully."
+
 echo ""
 
-# -----------------------------------------------------------------------------
-# Step 2 — Install Docker
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
+# Step 2— Install Docker
+# ----------------------------------------------------------------------------
 info "Step 2: Installing Docker and plugins..."
 
-# Detect architecture for plugin downloads
-ARCH=$(uname -m)
-case "$ARCH" in
-    aarch64) DOCKER_ARCH="linux-arm64" ;;
-    x86_64)  DOCKER_ARCH="linux-amd64" ;;
-    armv7l)  DOCKER_ARCH="linux-armv7" ;;
-    *)       DOCKER_ARCH="linux-amd64" ;;
+# Detectarchitecture for plugin downloads
+ARCH=$(uame -m)
+case "$ACH" in
+    aarc64) DOCKER_ARCH="linux-arm64" ;;
+    x86_4)  DOCKER_ARCH="linux-amd64" ;;
+    armvl)  DOCKER_ARCH="linux-armv7" ;;
+    *)      DOCKER_ARCH="linux-amd64" ;;
 esac
-info "Detected architecture: $ARCH -> $DOCKER_ARCH"
+info "Deected architecture: $ARCH -> $DOCKER_ARCH"
 
 # Install Docker if not present
 if command -v docker &>/dev/null; then
     DOCKER_VERSION=$(docker --version | cut -d' ' -f3 | tr -d ',')
     info "Docker is already installed (version $DOCKER_VERSION)."
 else
-    confirm "Install Docker using the official convenience script?" || { warn "Skipping Docker installation."; }
-
-    info "Downloading and running Docker install script..."
-    curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
-    sudo sh /tmp/get-docker.sh
-    rm /tmp/get-docker.sh
-    info "Docker installed successfully."
+    if confirm "Install Docker using the official convenience script?"; then
+        info "Downloading and running Docker install script..."
+        curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+        sudo sh /tmp/get-docker.sh
+        rm /tmp/get-docker.sh
+        info "Docker installed successfully."
+    else
+        warn "Skipping Docker installation."
+    fi
 fi
 
 # Create CLI plugins directory
@@ -179,10 +182,13 @@ fi
 if groups "$CURRENT_USER" | grep -q '\bdocker\b'; then
     info "User $CURRENT_USER is already in the docker group."
 else
-    confirm "Add $CURRENT_USER to the docker group (run docker without sudo)?" || { warn "Skipping docker group."; }
-    sudo usermod -aG docker "$CURRENT_USER"
-    info "User $CURRENT_USER added to docker group."
-    warn "You must log out and back in (or run 'newgrp docker') for this to take effect."
+    if confirm "Add $CURRENT_USER to the docker group (run docker without sudo)?"; then
+        sudo usermod -aG docker "$CURRENT_USER"
+        info "User $CURRENT_USER added to docker group."
+        warn "You must log out and back in (or run 'newgrp docker') for this to take effect."
+    else
+        warn "Skipping docker group."
+    fi
 fi
 
 # Enable Docker to start on boot
@@ -204,25 +210,44 @@ GPSD_CONFIG="/etc/default/gpsd"
 
 # Check if already configured
 if grep -q 'DEVICES="/dev/ttyACM0"' "$GPSD_CONFIG" && \
-   grep -q 'GPSD_OPTIONS="-n"' "$GPSD_CONFIG" && \
-   grep -q 'START_DAEMON="true"' "$GPSD_CONFIG"; then
-    info "gpsd is already configured."
+   grep -q 'GPSD_OPTIONS="-G -F /var/run/gpsd.sock"' "$GPSD_CONFIG"; then
+    info "gpsd is already configured correctly — skipping."
 else
-    confirm "Configure gpsd for /dev/ttyACM0?" || { warn "Skipping gpsd configuration."; }
+    if confirm "Update $GPSD_CONFIG with correct DEVICES and GPSD_OPTIONS?"; then
+        sudo sed -i 's|^DEVICES=.*|DEVICES="/dev/ttyACM0"|' "$GPSD_CONFIG"
+        sudo sed -i 's|^GPSD_OPTIONS=.*|GPSD_OPTIONS="-G -F /var/run/gpsd.sock"|' "$GPSD_CONFIG"
+        info "gpsd configuration updated:"
+        info "  DEVICES=/dev/ttyACM0"
+        info "  GPSD_OPTIONS=-G -F /var/run/gpsd.sock"
+    else
+        warn "Skipping gpsd config."
+    fi
+fi
+echo ""
 
-    # Backup existing config
-    sudo cp "$GPSD_CONFIG" "$GPSD_CONFIG.bak" 2>/dev/null || true
+# Deploy gpsd.socket override to allow remote access (needed for Docker containers)
+GPSD_SOCKET_DROPIN_DIR="/etc/systemd/system/gpsd.socket.d"
+GPSD_SOCKET_DROPIN="$GPSD_SOCKET_DROPIN_DIR/listen-all.conf"
+GPSD_SOCKET_CONTENT="[Socket]
+# Clear inherited ListenStream, then re-declare with remote access enabled
+ListenStream=
+ListenStream=/run/gpsd.sock
+ListenStream=0.0.0.0:2947
+ListenStream=[::]:2947
+BindIPv6Only=ipv6-only"
 
-    # Write new config
-    sudo tee "$GPSD_CONFIG" > /dev/null <<'EOF'
-# Default settings for gpsd
-START_DAEMON="true"
-DEVICES="/dev/ttyACM0"
-GPSD_OPTIONS="-n"
-USBAUTO="false"
-EOF
-
-    info "gpsd configured for /dev/ttyACM0 (backup at $GPSD_CONFIG.bak)."
+if [ -f "$GPSD_SOCKET_DROPIN" ] && echo "$GPSD_SOCKET_CONTENT" | diff -q - "$GPSD_SOCKET_DROPIN" &>/dev/null; then
+    info "gpsd.socket remote access override already up to date - skipping."
+else
+    if confirm "Deploy gpsd.socket override to allow remote access (required for Docker)?"; then
+        sudo mkdir -p "$GPSD_SOCKET_DROPIN_DIR"
+        echo "$GPSD_SOCKET_CONTENT" | sudo tee "$GPSD_SOCKET_DROPIN" > /dev/null
+        sudo systemctl daemon-reload
+        info "gpsd.socket override deployed at $GPSD_SOCKET_DROPIN."
+        info "  gpsd now accepts connections on all interfaces (0.0.0.0:2947)."
+    else
+        warn "Skipping gpsd.socket override."
+    fi
 fi
 echo ""
 
@@ -643,14 +668,39 @@ if systemctl is-active postgresql &>/dev/null 2>&1; then
     else
         warn "System PostgreSQL left running. You may need to change DB_PORT in .env."
     fi
-elif systemctl is-enabled postgresql &>/dev/null 2>&1; then
-    info "System PostgreSQL is enabled but not running."
-    if confirm "Disable system PostgreSQL to prevent future conflicts?"; then
-        sudo systemctl disable postgresql
-        info "System PostgreSQL disabled."
+
+    # gpsd — GPS daemon
+    if systemctl is-enabled gpsd &>/dev/null && systemctl is-active gpsd &>/dev/null; then
+        info "gpsd is already enabled and running — skipping."
+    else
+        sudo systemctl enable gpsd
+        sudo systemctl start gpsd
+        info "gpsd enabled and started."
     fi
+
+    # postgresql — system postgres NOT needed (using Docker postgres instead)
+    # Stop and disable system postgres to avoid port 5432 conflict with Docker
+    if systemctl is-active postgresql@17-main &>/dev/null 2>&1; then
+        warn "System PostgreSQL is running and will conflict with Docker PostgreSQL on port 5432."
+        if confirm "Stop and disable system PostgreSQL? (Docker will provide PostgreSQL instead)"; then
+            sudo systemctl stop postgresql@17-main
+            sudo systemctl disable postgresql@17-main
+            info "System PostgreSQL stopped and disabled."
+        else
+            warn "System PostgreSQL left running. You may need to change DB_PORT in .env to avoid conflicts."
+        fi
+    elif systemctl is-enabled postgresql@17-main &>/dev/null 2>&1; then
+        info "System PostgreSQL is enabled but not running."
+        if confirm "Disable system PostgreSQL to prevent future conflicts?"; then
+            sudo systemctl disable postgresql@17-main
+            info "System PostgreSQL disabled."
+        fi
+    else
+        info "System PostgreSQL is not enabled — good, Docker will provide PostgreSQL."
+    fi
+
 else
-    info "System PostgreSQL is not enabled — good, Docker will provide PostgreSQL."
+    warn "Skipping service setup."
 fi
 echo ""
 
@@ -661,14 +711,16 @@ info "Step 10: Setting up carputer repository at /opt/carputer..."
 
 if [ -d "$DEPLOY_DIR/.git" ]; then
     info "Repository already exists at $DEPLOY_DIR."
-    confirm "Pull latest changes?" && sudo git -C "$DEPLOY_DIR" pull && info "Repository updated."
+    confirm "Pull latest changes?" && git -C "$DEPLOY_DIR" pull && info "Repository updated."
 else
-    confirm "Clone $REPO_URL into $DEPLOY_DIR?" || { warn "Skipping repo clone."; }
-
-    sudo mkdir -p "$DEPLOY_DIR"
-    sudo git clone "$REPO_URL" "$DEPLOY_DIR"
-    sudo chown -R "$CURRENT_USER":"$CURRENT_USER" "$DEPLOY_DIR"
-    info "Repository cloned to $DEPLOY_DIR."
+    if confirm "Clone $REPO_URL into $DEPLOY_DIR?"; then
+        sudo mkdir -p "$DEPLOY_DIR"
+        sudo git clone "$REPO_URL" "$DEPLOY_DIR"
+        sudo chown -R "$CURRENT_USER":"$CURRENT_USER" "$DEPLOY_DIR"
+        info "Repository cloned to $DEPLOY_DIR."
+    else
+        warn "Skipping repo clone."
+    fi
 fi
 echo ""
 

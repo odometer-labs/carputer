@@ -32,7 +32,39 @@
   let nextWarning: AppError | null = null;
   $: nextWarning = $appErrorState.notifications[0] ?? null;
 
+  function consoleArgsToPayload(args: unknown[]): unknown {
+    if (args.length === 1) {
+      return args[0];
+    }
+
+    return args
+      .map((value) => {
+        if (typeof value === 'string') return value;
+        if (value instanceof Error) return value.stack ?? value.message;
+
+        try {
+          return JSON.stringify(value);
+        } catch {
+          return String(value);
+        }
+      })
+      .join(' ');
+  }
+
   onMount(() => {
+    const originalConsoleError = console.error.bind(console);
+    const originalConsoleWarn = console.warn.bind(console);
+
+    console.error = (...args: unknown[]) => {
+      originalConsoleError(...args);
+      reportNonVitalError(consoleArgsToPayload(args), 'console.error');
+    };
+
+    console.warn = (...args: unknown[]) => {
+      originalConsoleWarn(...args);
+      reportNonVitalError(consoleArgsToPayload(args), 'console.warn');
+    };
+
     const onWindowError = (event: ErrorEvent): void => {
       const errorValue = event.error ?? event.message;
       reportVitalError(errorValue, 'window.error');
@@ -46,6 +78,8 @@
     window.addEventListener('unhandledrejection', onUnhandledRejection);
 
     return () => {
+      console.error = originalConsoleError;
+      console.warn = originalConsoleWarn;
       window.removeEventListener('error', onWindowError);
       window.removeEventListener('unhandledrejection', onUnhandledRejection);
     };

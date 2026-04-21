@@ -19,7 +19,7 @@ CREATE TABLE gps.track_points (
     time_stamp TIMESTAMPTZ NOT NULL,
     geom GEOGRAPHY(Point, 4326) NOT NULL,
     -- WGS84 Standard
-    speed_mph DOUBLE PRECISION,
+    speed_mps DOUBLE PRECISION,
     -- Units: Miles per Hour
     heading_deg DOUBLE PRECISION -- Units: 0-360 Degrees (0 = North)
 );
@@ -65,26 +65,25 @@ CREATE OR REPLACE PROCEDURE gps.add_track_point(
         p_time_stamp TIMESTAMPTZ,
         p_latitude DOUBLE PRECISION,
         p_longitude DOUBLE PRECISION,
-        p_speed_mph DOUBLE PRECISION,
+        p_speed_mps DOUBLE PRECISION,
         p_heading_deg DOUBLE PRECISION
     ) LANGUAGE plpgsql AS $$ BEGIN
 INSERT INTO gps.track_points (
         track_id,
         time_stamp,
         geom,
-        speed_mph,
+        speed_mps,
         heading_deg
     )
 VALUES (
         p_track_id,
         p_time_stamp,
         ST_Point(p_longitude, p_latitude, 4326)::GEOGRAPHY,
-        p_speed_mph,
+        p_speed_mps,
         p_heading_deg
     );
 END;
 $$;
-
 -- Marks the current active track as finished
 CREATE OR REPLACE PROCEDURE gps.end_track() LANGUAGE plpgsql AS $$ BEGIN
 UPDATE gps.tracks
@@ -155,14 +154,14 @@ CREATE OR REPLACE FUNCTION gps.get_latest_track_point() RETURNS TABLE (
         track_id BIGINT,
         time_stamp TIMESTAMPTZ,
         geom GEOGRAPHY(Point, 4326),
-        speed_mph DOUBLE PRECISION,
+        speed_mps DOUBLE PRECISION,
         heading_deg DOUBLE PRECISION
     ) LANGUAGE plpgsql AS $$ #variable_conflict use_column BEGIN RETURN QUERY
 SELECT point_id,
     track_id,
     time_stamp,
     geom,
-    speed_mph,
+    speed_mps,
     heading_deg
 FROM gps.track_points
 ORDER BY time_stamp DESC
@@ -241,12 +240,17 @@ WHERE t.track_id <> current_track_id
 END;
 $$;
 -- Utility for batch-importing external data sets as completed tracks
-CREATE OR REPLACE FUNCTION gps.import_track() RETURNS INTEGER LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION gps.import_track(geojson_data TEXT) RETURNS INTEGER LANGUAGE plpgsql AS $$
 DECLARE new_track_id INTEGER;
 BEGIN
 INSERT INTO gps.tracks(start_time, end_time)
 VALUES (NOW(), NOW())
 RETURNING track_id INTO new_track_id;
+INSERT INTO gps.track_lines(track_id, geom)
+VALUES (
+        new_track_id,
+        ST_SetSRID(ST_GeomFromGeoJSON(geojson_data), 4326)
+    );
 RETURN new_track_id;
 END;
 $$;
