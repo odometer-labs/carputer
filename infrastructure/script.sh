@@ -236,23 +236,30 @@ fi
 
 # postgresql — system postgres NOT needed (using Docker postgres instead)
 # Stop and disable system postgres to avoid port 5432 conflict with Docker
-if systemctl is-active postgresql &>/dev/null 2>&1; then
-    warn "System PostgreSQL is running and will conflict with Docker PostgreSQL on port 5432."
-    if confirm "Stop and disable system PostgreSQL? (Docker will provide PostgreSQL instead)"; then
-        sudo systemctl stop postgresql
-        sudo systemctl disable postgresql
-        info "System PostgreSQL stopped and disabled."
-    else
-        warn "System PostgreSQL left running. You may need to change DB_PORT in .env to avoid conflicts."
-    fi
-elif systemctl is-enabled postgresql &>/dev/null 2>&1; then
-    info "System PostgreSQL is enabled but not running."
-    if confirm "Disable system PostgreSQL to prevent future conflicts?"; then
-        sudo systemctl disable postgresql
-        info "System PostgreSQL disabled."
-    fi
+# Check for both generic 'postgresql' and versioned services like 'postgresql@14-main'
+POSTGRES_SERVICES=$(systemctl list-units --type=service --all 2>/dev/null | grep -E 'postgresql' | awk '{print $1}' | tr '\n' ' ')
+
+if [ -n "$POSTGRES_SERVICES" ]; then
+    for svc in $POSTGRES_SERVICES; do
+        if systemctl is-active "$svc" &>/dev/null 2>&1; then
+            warn "System PostgreSQL service '$svc' is running and will conflict with Docker on port 5432."
+            if confirm "Stop and disable $svc? (Docker will provide PostgreSQL instead)"; then
+                sudo systemctl stop "$svc"
+                sudo systemctl disable "$svc"
+                info "$svc stopped and disabled."
+            else
+                warn "$svc left running. Docker PostgreSQL will fail to bind port 5432."
+            fi
+        elif systemctl is-enabled "$svc" &>/dev/null 2>&1; then
+            info "System PostgreSQL service '$svc' is enabled but not running."
+            if confirm "Disable $svc to prevent future conflicts?"; then
+                sudo systemctl disable "$svc"
+                info "$svc disabled."
+            fi
+        fi
+    done
 else
-    info "System PostgreSQL is not enabled — good, Docker will provide PostgreSQL."
+    info "No system PostgreSQL services found — good, Docker will provide PostgreSQL."
 fi
 echo ""
 
@@ -377,6 +384,24 @@ if command -v docker &>/dev/null && [ -f "$ENV_FILE" ]; then
         info "Docker containers built successfully."
         echo ""
         if confirm "Start Docker containers now?"; then
+            # Check if port 5432 is already in use before attempting to start
+            if ss -tlnp 2>/dev/null | grep -q ':5432 ' || lsof -i :5432 &>/dev/null 2>&1; then
+                PORT_PROCESS=$(ss -tlnp 2>/dev/null | grep ':5432 ' | head -1 || lsof -i :5432 2>/dev/null | tail -1)
+                error "Port 5432 is already in use! Docker PostgreSQL cannot start.
+
+Process using port 5432:
+  $PORT_PROCESS
+
+To fix this:
+  1. Stop the conflicting service:
+     sudo systemctl stop postgresql
+     sudo systemctl disable postgresql
+  2. Or check for all postgres services:
+     systemctl list-units --type=service | grep postgres
+  3. Then re-run: docker compose up -d
+
+Aborting to prevent container startup failure."
+            fi
             docker compose up -d
             info "Docker containers started."
             info "  Frontend at: http://localhost:3000"

@@ -366,5 +366,4 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
-# Github Copilot Agentic files
-.github/copilot-instructions.md
+CapstoneReview/

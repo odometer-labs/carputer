@@ -7,7 +7,7 @@
 # Run `make` or `make help` to see available targets
 # =============================================================================
 
-.PHONY: help up down build rebuild logs shell db-shell test lint clean deploy \
+.PHONY: help check-ports up down build rebuild logs shell db-shell test lint clean deploy \
         buildx-setup buildx-api buildx-frontend buildx-backend buildx-all
 
 # Default target
@@ -59,7 +59,35 @@ help: ## Show this help message
 # -----------------------------------------------------------------------------
 # Docker Commands
 # -----------------------------------------------------------------------------
-up: ## Start all services (api, frontend, db, adminer)
+check-ports: ## Check if required ports are available
+	@if command -v ss >/dev/null 2>&1; then \
+		if ss -tlnp 2>/dev/null | grep -q ':5432 '; then \
+			echo "$(RED)ERROR: Port 5432 is already in use!$(RESET)"; \
+			echo ""; \
+			echo "Something is already listening on the PostgreSQL port."; \
+			echo "Docker cannot start the database container."; \
+			echo ""; \
+			echo "$(YELLOW)To fix on Linux/Pi:$(RESET)"; \
+			echo "  sudo systemctl stop postgresql"; \
+			echo "  sudo systemctl disable postgresql"; \
+			echo ""; \
+			echo "$(YELLOW)To fix on macOS:$(RESET)"; \
+			echo "  brew services stop postgresql"; \
+			echo ""; \
+			exit 1; \
+		fi; \
+	elif command -v lsof >/dev/null 2>&1; then \
+		if lsof -i :5432 >/dev/null 2>&1; then \
+			echo "$(RED)ERROR: Port 5432 is already in use!$(RESET)"; \
+			echo ""; \
+			lsof -i :5432 2>/dev/null || true; \
+			echo ""; \
+			echo "$(YELLOW)Stop the process above before running 'make up'$(RESET)"; \
+			exit 1; \
+		fi; \
+	fi
+
+up: check-ports ## Start all services (api, frontend, db, adminer)
 	$(DOCKER_COMPOSE) up -d
 	@echo ""
 	@echo "$(GREEN)Services started:$(RESET)"
