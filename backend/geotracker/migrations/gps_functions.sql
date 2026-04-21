@@ -11,7 +11,8 @@ CREATE SCHEMA IF NOT EXISTS gps;
 CREATE TABLE gps.tracks (
     track_id BIGSERIAL PRIMARY KEY,
     start_time TIMESTAMPTZ NOT NULL,
-    end_time TIMESTAMPTZ
+    end_time TIMESTAMPTZ,
+    track_name VARCHAR(50)
 );
 CREATE TABLE gps.track_points (
     point_id BIGSERIAL PRIMARY KEY,
@@ -47,6 +48,7 @@ CREATE INDEX IF NOT EXISTS idx_track_lines_geom ON gps.track_lines USING GIST (g
 -- Handles logic to either start a new track or return the currently active one
 CREATE OR REPLACE FUNCTION gps.create_track() RETURNS BIGINT LANGUAGE plpgsql AS $$
 DECLARE new_track_id BIGINT;
+generated_name VARCHAR(50);
 BEGIN
 SELECT track_id INTO new_track_id
 FROM gps.tracks
@@ -54,8 +56,24 @@ WHERE end_time IS NULL
 LIMIT 1;
 IF new_track_id IS NOT NULL THEN RETURN new_track_id;
 END IF;
-INSERT INTO gps.tracks(start_time)
-VALUES (NOW())
+generated_name := 'Track ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI');
+INSERT INTO gps.tracks(start_time, track_name)
+VALUES (NOW(), generated_name)
+RETURNING track_id INTO new_track_id;
+RETURN new_track_id;
+END;
+$$;
+CREATE OR REPLACE FUNCTION gps.create_track(p_track_name VARCHAR(50)) RETURNS BIGINT LANGUAGE plpgsql AS $$
+DECLARE new_track_id BIGINT;
+BEGIN
+SELECT track_id INTO new_track_id
+FROM gps.tracks
+WHERE end_time IS NULL
+LIMIT 1;
+IF new_track_id IS NOT NULL THEN RETURN new_track_id;
+END IF;
+INSERT INTO gps.tracks(start_time, track_name)
+VALUES (NOW(), p_track_name)
 RETURNING track_id INTO new_track_id;
 RETURN new_track_id;
 END;
@@ -124,26 +142,29 @@ FROM gps.tracks AS t
     INNER JOIN gps.track_lines AS tl ON t.track_id = tl.track_id;
 END;
 $$;
--- Allows manual correction of track start/end timestamps
+-- Allows manual correction of track metadata
 CREATE OR REPLACE PROCEDURE gps.update_track(
         update_track_id BIGINT,
         p_start_time TIMESTAMPTZ,
-        p_end_time TIMESTAMPTZ
+        p_end_time TIMESTAMPTZ,
+        p_track_name VARCHAR(50)
     ) LANGUAGE plpgsql AS $$ BEGIN
 UPDATE gps.tracks
 SET start_time = p_start_time,
-    end_time = p_end_time
+    end_time = p_end_time,
+    track_name = p_track_name
 WHERE track_id = update_track_id;
 END;
 $$;
 CREATE OR REPLACE FUNCTION gps.view_all_tracks_mvt(z integer, x integer, y integer) RETURNS bytea LANGUAGE plpgsql AS $$
 DECLARE mvt bytea;
-BEGIN -- We use ST_AsMVT to aggregate all rows into a single binary tile
+BEGIN --ST_AsMVT to aggregate all rows into a single binary tile
 SELECT ST_AsMVT(tile, 'tracks_layer') INTO mvt
 FROM (
         SELECT t.track_id,
             t.start_time,
             t.end_time,
+            t.track_name,
             -- Convert the geometry into the local coordinate system of the tile
             ST_AsMVTGeom(
                 tl.geom_wm,
@@ -155,7 +176,7 @@ FROM (
                 true -- Extent, Buffer, Clip
             ) AS geom
         FROM gps.tracks AS t
-            INNER JOIN gps.track_lines AS tl ON t.track_id = tl.track_id -- Crucial: Only process tracks that are actually inside this tile's area
+            INNER JOIN gps.track_lines AS tl ON t.track_id = tl.track_id -- Only process tracks that are actually inside this tile's area
         WHERE tl.geom_wm && ST_TileEnvelope(z, x, y)
     ) AS tile;
 RETURN mvt;
