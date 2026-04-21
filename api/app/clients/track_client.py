@@ -25,7 +25,19 @@ class TrackClient:
                 conn.commit()
                 result = cursor.fetchall()
                 return result
-    
+            
+    def list_track_mvt(self, z: int, x: int, y: int):
+            with get_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT gps.view_all_tracks_mvt(%s, %s, %s);", 
+                        (z, x, y)
+                    )
+                    row = cursor.fetchone()
+                    if row:
+                        return row[0] if isinstance(row, tuple) else row.get('view_all_tracks_mvt')
+                    return b""
+        
     def get_track(self, track_id: int):
         with get_connection() as conn:
             with conn.cursor() as cursor:

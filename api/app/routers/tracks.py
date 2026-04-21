@@ -19,6 +19,14 @@ async def list_track():
     
     return track_client.list_track()
 
+@router.get("/tracks/{z}{x}{y}")
+async def list_track_mvt():
+    """
+    Lists all the tracks in mapbox vector tile format.
+    """
+    
+    return track_client.list_track_mvt()
+
 @router.get("/tracks/{track_id}")
 async def get_track(track_id: int):
     """
