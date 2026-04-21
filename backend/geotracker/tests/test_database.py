@@ -67,6 +67,28 @@ def test_track_name(db_conn):
         )
         assert cur.fetchone()["track_name"] == "Hello"
 
+        
+
+def test_track_name(db_conn):
+    """
+    Test track creation with name parameter.
+    """
+
+    with db_conn.cursor() as cur:
+        cur.execute("SELECT gps.create_track(%s) as id", ("Hello",))
+        track_id = cur.fetchone()["id"]
+        assert track_id is not None
+
+        cur.execute("SELECT count(*) from gps.tracks as id;")
+        assert cur.fetchone()["count"] == 1
+
+        cur.execute("CALL gps.end_track();")
+
+        cur.execute("SELECT end_time FROM gps.tracks WHERE track_id = %s;", (track_id,))
+        assert cur.fetchone()["end_time"] is not None
+
+        cur.execute("SELECT track_name FROM gps.tracks WHERE track_id = %s;", (track_id,))
+        assert cur.fetchone()["track_name"] == "Hello"
 
 def test_add_track_point(db_conn, sample_track_points):
     """
@@ -731,7 +753,6 @@ def test_update_track_metadata(db_conn):
         assert str(updated["start_time"]).startswith("2026-01-01 08:00:00")
         assert str(updated["end_time"]).startswith("2026-01-01 09:00:00")
         assert str(updated["track_name"]) == "Hello"
-
 
 def test_get_tracks_near_location(db_conn):
     """

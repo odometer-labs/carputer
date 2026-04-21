@@ -312,12 +312,13 @@ END;
 $$;
 CREATE OR REPLACE FUNCTION gps.view_all_tracks_mvt(z integer, x integer, y integer) RETURNS bytea LANGUAGE plpgsql AS $$
 DECLARE mvt bytea;
-BEGIN -- We use ST_AsMVT to aggregate all rows into a single binary tile
+BEGIN --ST_AsMVT to aggregate all rows into a single binary tile
 SELECT ST_AsMVT(tile, 'tracks_layer') INTO mvt
 FROM (
         SELECT t.track_id,
             t.start_time,
             t.end_time,
+            t.track_name,
             -- Convert the geometry into the local coordinate system of the tile
             ST_AsMVTGeom(
                 tl.geom_wm,
@@ -329,7 +330,7 @@ FROM (
                 true -- Extent, Buffer, Clip
             ) AS geom
         FROM gps.tracks AS t
-            INNER JOIN gps.track_lines AS tl ON t.track_id = tl.track_id -- Crucial: Only process tracks that are actually inside this tile's area
+            INNER JOIN gps.track_lines AS tl ON t.track_id = tl.track_id -- Only process tracks that are actually inside this tile's area
         WHERE tl.geom_wm && ST_TileEnvelope(z, x, y)
     ) AS tile;
 RETURN mvt;

@@ -8,8 +8,6 @@ from app.models.track_point import TrackPoint
 from app.clients.track_client import track_client
 from typing import Dict, Any, Optional
 import json
-import Response
-import status
 
 router = APIRouter(prefix="/v1", tags=["Tracks"])
 
@@ -80,7 +78,11 @@ async def start_track(name: Optional[str] = None):
     """
     Starts track for the trip. If no name is provided, it defaults to NULL.
     """
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> 5ba82e6 (supporting track name tests and endpoints)
     return track_client.start_track(name)
 
 
