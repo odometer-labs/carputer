@@ -123,7 +123,8 @@ async def get_latest_track_point():
 async def check_new_road():
     """
     Checks if the latest point is a new road
-    """
+    """import Response
+import status
 
     return track_client.check_new_road()
 
