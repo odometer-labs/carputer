@@ -968,7 +968,7 @@ def test_geometry_structure_after_validation(db_conn, sample_track_points):
         assert "LineString" in geom_type
 
 def test_get_track_tiles_returns_valid_mvt(db_conn):
-    # 1. ARRANGE: Create a dummy track that crosses the 0,0 tile
+    #  Create a dummy track that crosses the 0,0 tile
     with db_conn.cursor() as cur:
         cur.execute("""
             INSERT INTO gps.tracks (track_id, start_time) VALUES (123, NOW());
@@ -980,16 +980,14 @@ def test_get_track_tiles_returns_valid_mvt(db_conn):
             );
         """)
 
-        # 2. ACT: Use an alias 'tile' to avoid KeyError and index confusion
+ 
         cur.execute("SELECT gps.get_track_tiles(0, 0, 0) AS tile;")
         row = cur.fetchone()
         
         # Determine if row is a dict or tuple and extract accordingly
         #if isinstance(row, dict):
         tile_binary = row['tile']
-        #else:
-            #tile_binary = row[0]
-
+     
         # 3. ASSERT: 
         assert tile_binary is not None, "Function returned None"
         assert len(tile_binary) > 0, "MVT binary is empty"
@@ -1006,3 +1004,55 @@ def test_get_track_tiles_returns_valid_mvt(db_conn):
         # Check if our specific track_id is in the properties
         # Note: Depending on your PostGIS version, BIGINT might come back as int or string
         assert int(features[0]['properties']['track_id']) == 123
+
+import mapbox_vector_tile
+
+def test_view_all_tracks_mvt_returns_valid_binary(db_conn):
+    # 1. Setup: Insert a dummy track near the 0,0 coordinate
+    with db_conn.cursor() as cur:
+    
+        
+        # Insert track metadata
+        cur.execute("INSERT INTO gps.tracks (track_id, start_time, end_time) VALUES (999, NOW(), NOW());")
+        
+        # Insert geometry
+        # We transform a 4326 (WGS84) LineString to 3857 (Web Mercator) for the MVT function
+        cur.execute("""
+            INSERT INTO gps.track_lines (track_id, geom, geom_wm) 
+            VALUES (
+                999, 
+                ST_GeogFromText('LINESTRING(0 0, 1 1)'), 
+                ST_Transform(ST_GeomFromText('LINESTRING(0 0, 1 1)', 4326), 3857)
+            );
+        """)
+     
+
+    # 2. Execution: Call the MVT function for Zoom 0 (the entire world)
+    with db_conn.cursor() as cur:
+        # get_track_tiles logic: Z=0, X=0, Y=0
+        cur.execute("SELECT gps.view_all_tracks_mvt(0, 0, 0) AS tile_data;")
+        row = cur.fetchone()
+        
+        # Use row index or key depending on your cursor factory
+        tile_binary = row['tile_data']
+
+    # 3. Validation
+    assert tile_binary is not None, "Function returned None instead of a bytea"
+    assert len(tile_binary) > 0, "MVT binary is empty"
+
+    # Decode the MVT binary to inspect internal properties
+    decoded_tile = mapbox_vector_tile.decode(tile_binary)
+
+    # Check that the layer name used in ST_AsMVT exists
+    assert 'tracks_layer' in decoded_tile, f"Layer 'tracks_layer' missing. Found: {decoded_tile.keys()}"
+    
+    features = decoded_tile['tracks_layer']['features']
+    assert len(features) > 0, "No features found in the MVT layer"
+    
+    # Check if our specific track_id made it into the properties
+    # Note: track_id is often cast to string or int depending on the decoder/OS
+    found_id = features[0]['properties'].get('track_id')
+    assert int(found_id) == 999, f"Expected track_id 999, got {found_id}"
+
+    # Check geometry structure
+    assert features[0]['geometry']['type'] == 'LineString'
