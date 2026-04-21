@@ -18,8 +18,9 @@
   import { Style, Fill, Stroke, Text, Circle } from 'ol/style.js';
   import { fromLonLat } from 'ol/proj.js';
   import { createXYZ } from 'ol/tilegrid.js';
-  import { gpsService } from '../fake-api/gpsService';
-  import type { GPSPosition } from '../fake-api/types';
+  import { getCurrentPosition, listTracks, subscribeToPositionStream } from '../api/restApi';
+  import type { GPSData } from '../api/types';
+  import { reportNonVitalError } from '../stores/errorStore';
   import 'ol/ol.css';
 
   // TODO: These values should be fetched from the backend, currently they are just placeholders for display.
@@ -37,6 +38,7 @@
   let userSource: VectorSource | undefined;
   let hasCenteredOnGpsFix: boolean = false;
   let gridRenderRaf: number | null = null;
+  let stopGPSSubscription: (() => void) | null = null;
   const GRID_ZOOM_OFFSET = 1;
   const tileGrid = createXYZ({ maxZoom: 22 });
 
@@ -67,7 +69,7 @@
     }),
   });
 
-  function updateUserMarker(position: GPSPosition): void {
+  function updateUserMarker(position: GPSData): void {
     if (!map) return;
 
     const lon = position.longitude;
@@ -165,6 +167,32 @@
   // re-render grid whenever select mode changes
   $: if (map && gridSource) updateGrid();
 
+  async function loadDashboardInfo(): Promise<void> {
+    try {
+      const tracks = await listTracks();
+      num_tracks = Array.isArray(tracks) ? tracks.length : 0;
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'DashboardPage.listTracks');
+    }
+  }
+
+  function startGPSTracking(): void {
+    getCurrentPosition()
+      .then((position) => updateUserMarker(position))
+      .catch((error: unknown) => {
+        reportNonVitalError(error, 'DashboardPage.getCurrentPosition');
+      });
+
+    stopGPSSubscription = subscribeToPositionStream(
+      (position: GPSData) => {
+        updateUserMarker(position);
+      },
+      (error: string) => {
+        reportNonVitalError(error, 'DashboardPage.subscribeToPositionStream');
+      }
+    );
+  }
+
   onMount(() => {
     gridSource = new VectorSource();
     selectionSource = new VectorSource();
@@ -195,14 +223,8 @@
     map.getView().on('change:resolution', scheduleGridUpdate);
     map.on('moveend', scheduleGridUpdate);
 
-    gpsService.start(
-      (position: GPSPosition) => {
-        updateUserMarker(position);
-      },
-      (error: string) => {
-        console.error('GPS error:', error);
-      }
-    );
+    loadDashboardInfo();
+    startGPSTracking();
 
     // TODO: Replace this with backend response data when tile-download status API is ready.
     const downloadedTilesFromBackend: DownloadedTile[] = [];
@@ -285,7 +307,8 @@
       cancelAnimationFrame(gridRenderRaf);
       gridRenderRaf = null;
     }
-    gpsService.stop();
+    stopGPSSubscription?.();
+    stopGPSSubscription = null;
     map?.setTarget(undefined);
   });
 
