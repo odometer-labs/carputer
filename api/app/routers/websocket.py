@@ -16,7 +16,13 @@ async def send_position(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
-            await websocket.send_text(json.dumps(track_client.__dict__))
+            payload = {
+                "latitude": track_client.latitude,
+                "longitude": track_client.longitude,
+                "speed": track_client.speed,
+                "heading": track_client.heading
+            }
+            await websocket.send_text(json.dumps(payload))
             await asyncio.sleep(0.25)
     except WebSocketDisconnect as e:
         pass
