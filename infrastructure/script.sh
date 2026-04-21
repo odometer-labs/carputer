@@ -98,15 +98,15 @@ echo ""
 # ----------------------------------------------------------------------------
 info "Step 2: Installing Docker and plugins..."
 
-# Detectarchitecture for plugin downloads
-ARCH=$(uame -m)
-case "$ACH" in
-    aarc64) DOCKER_ARCH="linux-arm64" ;;
-    x86_4)  DOCKER_ARCH="linux-amd64" ;;
-    armvl)  DOCKER_ARCH="linux-armv7" ;;
-    *)      DOCKER_ARCH="linux-amd64" ;;
+# Detect architecture for plugin downloads
+ARCH=$(uname -m)
+case "$ARCH" in
+    aarch64) DOCKER_ARCH="linux-arm64" ;;
+    x86_64)  DOCKER_ARCH="linux-amd64" ;;
+    armv7l)  DOCKER_ARCH="linux-armv7" ;;
+    *)       DOCKER_ARCH="linux-amd64" ;;
 esac
-info "Deected architecture: $ARCH -> $DOCKER_ARCH"
+info "Detected architecture: $ARCH -> $DOCKER_ARCH"
 
 # Install Docker if not present
 if command -v docker &>/dev/null; then
