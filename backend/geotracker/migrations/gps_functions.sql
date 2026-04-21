@@ -310,6 +310,31 @@ SET start_time = p_start_time,
 WHERE track_id = update_track_id;
 END;
 $$;
+CREATE OR REPLACE FUNCTION gps.view_all_tracks_mvt(z integer, x integer, y integer) RETURNS bytea LANGUAGE plpgsql AS $$
+DECLARE mvt bytea;
+BEGIN -- We use ST_AsMVT to aggregate all rows into a single binary tile
+SELECT ST_AsMVT(tile, 'tracks_layer') INTO mvt
+FROM (
+        SELECT t.track_id,
+            t.start_time,
+            t.end_time,
+            -- Convert the geometry into the local coordinate system of the tile
+            ST_AsMVTGeom(
+                tl.geom_wm,
+                -- Web Mercator geometry
+                ST_TileEnvelope(z, x, y),
+                -- The bounding box of the requested tile
+                4096,
+                256,
+                true -- Extent, Buffer, Clip
+            ) AS geom
+        FROM gps.tracks AS t
+            INNER JOIN gps.track_lines AS tl ON t.track_id = tl.track_id -- Crucial: Only process tracks that are actually inside this tile's area
+        WHERE tl.geom_wm && ST_TileEnvelope(z, x, y)
+    ) AS tile;
+RETURN mvt;
+END;
+$$;
 -- Cascading delete: removing a track removes all associated points and lines
 CREATE OR REPLACE PROCEDURE gps.delete_track(p_track_id BIGINT) LANGUAGE plpgsql AS $$ BEGIN IF EXISTS (
         SELECT 1
