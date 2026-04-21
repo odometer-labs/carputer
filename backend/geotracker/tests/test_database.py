@@ -29,7 +29,40 @@ def test_create_and_end_track(db_conn):
 
         cur.execute("SELECT end_time FROM gps.tracks WHERE track_id = %s;", (track_id,))
         assert cur.fetchone()["end_time"] is not None
+        cur.execute("SELECT track_name FROM gps.tracks WHERE track_id = %s;", (track_id,))
+        generated_name = cur.fetchone()["track_name"]
+        assert generated_name.startswith("Track ")
+    
+        # Check that it contains today's date (YYYY-MM-DD)
+        cur.execute("SELECT TO_CHAR(NOW(), 'YYYY-MM-DD') as time;")
+        today_str = cur.fetchone()['time']
+        assert today_str in generated_name
+        
+        # Verify length (Track + Space + YYYY-MM-DD + Space + HH:MM = 22 characters)
+        assert len(generated_name) == 22
 
+        
+
+def test_track_name(db_conn):
+    """
+    Test track creation with name parameter.
+    """
+
+    with db_conn.cursor() as cur:
+        cur.execute("SELECT gps.create_track(%s) as id", ("Hello",))
+        track_id = cur.fetchone()["id"]
+        assert track_id is not None
+
+        cur.execute("SELECT count(*) from gps.tracks as id;")
+        assert cur.fetchone()["count"] == 1
+
+        cur.execute("CALL gps.end_track();")
+
+        cur.execute("SELECT end_time FROM gps.tracks WHERE track_id = %s;", (track_id,))
+        assert cur.fetchone()["end_time"] is not None
+
+        cur.execute("SELECT track_name FROM gps.tracks WHERE track_id = %s;", (track_id,))
+        assert cur.fetchone()["track_name"] == "Hello"
 
 def test_add_track_point(db_conn, sample_track_points):
     """
@@ -209,7 +242,7 @@ def test_is_new_road_false1(db_conn):
     with db_conn.cursor() as cur:
 
         # 1. Create track 1
-        cur.execute("SELECT gps.create_track() as id;")
+        cur.execute("SELECT gps.create_track(%s) as id;", ("Hello",))
         tid1 = cur.fetchone()["id"]
 
         cur.execute(
@@ -649,20 +682,21 @@ def test_update_track_metadata(db_conn):
 
         new_start = "2026-01-01 08:00:00+00"
         new_end = "2026-01-01 09:00:00+00"
+        new_track_name = "Hello"
 
         cur.execute(
-            "CALL gps.update_track(%s, %s, %s);", (track_id, new_start, new_end)
+            "CALL gps.update_track(%s, %s, %s, %s);", (track_id, new_start, new_end, new_track_name)
         )
 
         cur.execute(
-            "SELECT start_time, end_time FROM gps.tracks WHERE track_id = %s;",
+            "SELECT start_time, end_time, track_name FROM gps.tracks WHERE track_id = %s;",
             (track_id,),
         )
         updated = cur.fetchone()
 
         assert str(updated["start_time"]).startswith("2026-01-01 08:00:00")
         assert str(updated["end_time"]).startswith("2026-01-01 09:00:00")
-
+        assert str(updated["track_name"]) == "Hello"
 
 def test_get_tracks_near_location(db_conn):
     """
@@ -1005,7 +1039,6 @@ def test_get_track_tiles_returns_valid_mvt(db_conn):
         # Note: Depending on your PostGIS version, BIGINT might come back as int or string
         assert int(features[0]['properties']['track_id']) == 123
 
-import mapbox_vector_tile
 
 def test_view_all_tracks_mvt_returns_valid_binary(db_conn):
     # 1. Setup: Insert a dummy track near the 0,0 coordinate

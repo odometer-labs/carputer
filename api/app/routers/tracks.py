@@ -6,8 +6,9 @@ from ..dependencies import get_connection
 from app.models.track import Track
 from app.models.track_point import TrackPoint
 from app.clients.track_client import track_client
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import json
+import Response
 
 router = APIRouter(prefix="/v1", tags=["Tracks"])
 
@@ -19,13 +20,17 @@ async def list_track():
     
     return track_client.list_track()
 
-@router.get("/tracks/{z}{x}{y}")
-async def list_track_mvt():
+@router.get("/tracks/{z}/{x}/{y}.mvt")
+async def list_track_mvt(z: int, x: int, y: int):
     """
-    Lists all the tracks in mapbox vector tile format.
+    Returns mapbox vector tiles for a specific zoom and coordinate.
     """
+    tile_data = track_client.list_track_mvt(z, x, y)
     
-    return track_client.list_track_mvt()
+    return Response(
+        content=tile_data, 
+        media_type="application/vnd.mapbox-vector-tile"
+    )
 
 @router.get("/tracks/{track_id}")
 async def get_track(track_id: int):
@@ -52,12 +57,13 @@ async def delete_track(track_id: int):
     return track_client.delete_track(track_id)
 
 @router.post("/tracks-start")
-async def start_track():
+async def start_track(name: Optional[str] = None):
     """
-    Starts track for the trip
+    Starts track for the trip. If no name is provided, it defaults to NULL.
     """
     
-    return track_client.start_track()
+    return track_client.start_track(name)
+
 
 @router.get("/tracks-end")
 async def end_track():
