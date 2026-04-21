@@ -35,7 +35,7 @@ export interface Track {
   track_id: number;
   geom: LineString;
   start_time: string; //ISO format
-  end_time: string | null;  //ISO format, also it can be null incase it is the current track.
+  end_time: string | null; //ISO format, also it can be null incase it is the current track.
 }
 
 // this if for addding a point on the track, used with the addTrackPoint api call
@@ -51,7 +51,15 @@ export interface LatestTrackPoint {
   point_id: number; // this is track point
   track_id: number;
   time_stamp: string;
-  geom: string;        // strangely this isn't in geojson but a string? might have to ask backend to change this
+  geom: string; // strangely this isn't in geojson but a string? might have to ask backend to change this
   speed_mph: number;
   heading_deg: number;
+}
+
+// GPS payload returned by backend websocket /ws/get-position
+export interface GPSData {
+  latitude: number;
+  longitude: number;
+  heading: number;
+  speed: number;
 }
