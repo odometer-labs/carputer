@@ -1,23 +1,24 @@
 /*
     this file holds the rest api calls from back end
 */
-import type { 
-  StartTrackResponse, 
-  EndTrackResponse, 
-  Track, 
+import type {
+  StartTrackResponse,
+  EndTrackResponse,
+  Track,
   UpdateTrackResponse,
   DeleteTrackResponse,
   TrackPoint,
   AddTrackPointResponse,
   LatestTrackPoint,
   CheckNewRoadResponse,
+  GPSData,
 } from "./types";
 import { ENDPOINTS } from "../utils/constants";
 
 // starts a new track in the database
-export async function startTrack() : Promise<StartTrackResponse> {
+export async function startTrack(): Promise<StartTrackResponse> {
   const res = await fetch(ENDPOINTS.startTrack, {
-    method: "POST"
+    method: "POST",
   });
 
   if (!res.ok) throw new Error("Failed to start track");
@@ -26,9 +27,9 @@ export async function startTrack() : Promise<StartTrackResponse> {
 }
 
 // ends a current active track in the database
-export async function endTrack() : Promise<EndTrackResponse> {
+export async function endTrack(): Promise<EndTrackResponse> {
   const res = await fetch(ENDPOINTS.endTrack, {
-    method: "GET"
+    method: "GET",
   });
 
   if (!res.ok) throw new Error("Failed to end track");
@@ -37,9 +38,9 @@ export async function endTrack() : Promise<EndTrackResponse> {
 }
 
 // fetches all tracks, which have atleast one geom point
-export async function listTracks() : Promise<Track[]> {
+export async function listTracks(): Promise<Track[]> {
   const res = await fetch(ENDPOINTS.listTracks, {
-    method: "GET"
+    method: "GET",
   });
 
   if (!res.ok) throw new Error("Failed to fetch all tracks");
@@ -48,9 +49,9 @@ export async function listTracks() : Promise<Track[]> {
 }
 
 // fetches a specific track, could be used if the user is looking for a specific track
-export async function getTrack(trackId: number) : Promise<Track> {
+export async function getTrack(trackId: number): Promise<Track> {
   const res = await fetch(`${ENDPOINTS.getTrack}/${trackId}`, {
-    method: "GET"
+    method: "GET",
   });
 
   if (!res.ok) throw new Error("Failed to fetch a tracks");
@@ -59,13 +60,16 @@ export async function getTrack(trackId: number) : Promise<Track> {
 }
 
 // updates a specified track by id.
-export async function updateTrack(trackId: number, track: Partial<Track>) : Promise<UpdateTrackResponse>{
+export async function updateTrack(
+  trackId: number,
+  track: Partial<Track>,
+): Promise<UpdateTrackResponse> {
   const res = await fetch(`${ENDPOINTS.getTrack}/${trackId}`, {
     method: "PUT",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
     },
-    body: JSON.stringify(track)
+    body: JSON.stringify(track),
   });
 
   if (!res.ok) throw new Error("Failed to update a track");
@@ -74,7 +78,9 @@ export async function updateTrack(trackId: number, track: Partial<Track>) : Prom
 }
 
 // this will delete a track by it's track id
-export async function deleteTrack(trackId: number) : Promise<DeleteTrackResponse> {
+export async function deleteTrack(
+  trackId: number,
+): Promise<DeleteTrackResponse> {
   const res = await fetch(`${ENDPOINTS.deleteTrack}/${trackId}`, {
     method: "DELETE",
   });
@@ -85,7 +91,10 @@ export async function deleteTrack(trackId: number) : Promise<DeleteTrackResponse
 }
 
 // this usese the track id and a track point(latitude, longitude, speed, and heading)
-export async function addTrackPoint(trackId: number, point: TrackPoint): Promise<AddTrackPointResponse> {
+export async function addTrackPoint(
+  trackId: number,
+  point: TrackPoint,
+): Promise<AddTrackPointResponse> {
   const res = await fetch(`${ENDPOINTS.addTrackPoint}/${trackId}`, {
     method: "POST",
     headers: {
@@ -100,9 +109,9 @@ export async function addTrackPoint(trackId: number, point: TrackPoint): Promise
 }
 
 // this should get the last track point made I believe
-export async function getLatestTrackPoint() : Promise<LatestTrackPoint> {
+export async function getLatestTrackPoint(): Promise<LatestTrackPoint> {
   const res = await fetch(`${ENDPOINTS.getLatestTrackPoint}`, {
-    method: "GET"
+    method: "GET",
   });
 
   if (!res.ok) throw new Error("Failed to fetch a track point");
@@ -117,4 +126,76 @@ export async function checkNewRoad(): Promise<CheckNewRoadResponse> {
   if (!res.ok) throw new Error("Failed to check for new road");
 
   return res.json();
+}
+
+// gets the most recent position snapshot from the backend.
+export async function getCurrentPosition(): Promise<GPSData> {
+  const res = await fetch(ENDPOINTS.getCurrentPosition, {
+    method: "GET",
+  });
+
+  if (!res.ok) throw new Error("Failed to fetch current GPS position");
+
+  return res.json();
+}
+
+// subscribes to backend websocket stream of live GPS data.
+export function subscribeToPositionStream(
+  onMessage: (position: GPSData) => void,
+  onError?: (error: string) => void,
+): () => void {
+  const ws = new WebSocket(getPositionWebSocketUrl());
+
+  ws.onmessage = (event: MessageEvent) => {
+    try {
+      const raw = JSON.parse(event.data);
+      const latitude = Number(raw.latitude);
+      const longitude = Number(raw.longitude);
+      const heading = Number(raw.heading);
+      const speed = Number(raw.speed);
+
+      if (
+        !Number.isFinite(latitude) ||
+        !Number.isFinite(longitude) ||
+        !Number.isFinite(heading) ||
+        !Number.isFinite(speed)
+      ) {
+        return;
+      }
+
+      onMessage({ latitude, longitude, heading, speed });
+    } catch (error: unknown) {
+      if (onError)
+        onError(`Failed to parse GPS websocket payload: ${String(error)}`);
+    }
+  };
+
+  ws.onerror = () => {
+    if (onError) onError("GPS websocket connection failed");
+  };
+
+  return () => {
+    if (
+      ws.readyState === WebSocket.OPEN ||
+      ws.readyState === WebSocket.CONNECTING
+    ) {
+      ws.close();
+    }
+  };
+}
+
+function getPositionWebSocketUrl(): string {
+  const env = import.meta.env as Record<string, string | undefined>;
+  if (env.VITE_GPS_WS_URL) {
+    return env.VITE_GPS_WS_URL;
+  }
+
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+
+  // Vite dev server commonly runs on :5173 while API runs on :8000.
+  if (window.location.port === "5173") {
+    return `${protocol}//${window.location.hostname}:8000${ENDPOINTS.getPositionStream}`;
+  }
+
+  return `${protocol}//${window.location.host}${ENDPOINTS.getPositionStream}`;
 }
