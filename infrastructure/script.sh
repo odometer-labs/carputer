@@ -82,14 +82,14 @@ info "  RTL-SDR: rtl-sdr"
 info "  Direwolf deps: cmake, gcc, g++, make, libasound2-dev"
 info "  Python: python3-requests"
 echo ""
-confirm Proceed with package installation?" || { warn "Skipping package installation."; }
+confirm "Proceed with package installation?" || { warn "Skipping package installation."; }
 
-sudo aptupdate
-sudo aptinstall -y vim git gpsd gpsd-clients chrony curl \
-    rtl-dr cmake gcc g++ make libasound2-dev \
-    pythn3-requests python3-pip
+sudo apt update
+sudo apt install -y vim git gpsd gpsd-clients chrony curl \
+    rtl-sdr cmake gcc g++ make libasound2-dev \
+    python3-requests python3-pip
 
-info "Pakages installed successfully."
+info "Packages installed successfully."
 
 echo ""
 
@@ -99,14 +99,27 @@ echo ""
 info "Step 2: Installing Docker and plugins..."
 
 # Detect architecture for plugin downloads
+# Note: Compose and Buildx use different arch naming conventions
 ARCH=$(uname -m)
 case "$ARCH" in
-    aarch64) DOCKER_ARCH="linux-arm64" ;;
-    x86_64)  DOCKER_ARCH="linux-amd64" ;;
-    armv7l)  DOCKER_ARCH="linux-armv7" ;;
-    *)       DOCKER_ARCH="linux-amd64" ;;
+    aarch64)
+        COMPOSE_ARCH="linux-aarch64"
+        BUILDX_ARCH="linux-arm64"
+        ;;
+    x86_64)
+        COMPOSE_ARCH="linux-x86_64"
+        BUILDX_ARCH="linux-amd64"
+        ;;
+    armv7l)
+        COMPOSE_ARCH="linux-armv7"
+        BUILDX_ARCH="linux-armv7"
+        ;;
+    *)
+        COMPOSE_ARCH="linux-x86_64"
+        BUILDX_ARCH="linux-amd64"
+        ;;
 esac
-info "Detected architecture: $ARCH -> $DOCKER_ARCH"
+info "Detected architecture: $ARCH (Compose: $COMPOSE_ARCH, Buildx: $BUILDX_ARCH)"
 
 # Install Docker if not present
 if command -v docker &>/dev/null; then
@@ -133,7 +146,7 @@ if docker compose version &>/dev/null 2>&1; then
     info "Docker Compose plugin is installed (version $COMPOSE_VERSION)."
 else
     info "Installing Docker Compose plugin..."
-    sudo curl -SL "https://github.com/docker/compose/releases/latest/download/docker-compose-${DOCKER_ARCH}" \
+    sudo curl -SL "https://github.com/docker/compose/releases/latest/download/docker-compose-${COMPOSE_ARCH}" \
         -o /usr/local/lib/docker/cli-plugins/docker-compose
     sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
     info "Docker Compose plugin installed."
@@ -145,7 +158,7 @@ BUILDX_INSTALL_VERSION="0.17.1"
 
 install_buildx() {
     info "Installing Docker Buildx plugin v${BUILDX_INSTALL_VERSION}..."
-    sudo curl -SL "https://github.com/docker/buildx/releases/download/v${BUILDX_INSTALL_VERSION}/buildx-v${BUILDX_INSTALL_VERSION}.${DOCKER_ARCH}" \
+    sudo curl -SL "https://github.com/docker/buildx/releases/download/v${BUILDX_INSTALL_VERSION}/buildx-v${BUILDX_INSTALL_VERSION}.${BUILDX_ARCH}" \
         -o /usr/local/lib/docker/cli-plugins/docker-buildx
     sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
     info "Docker Buildx plugin installed."
@@ -650,8 +663,8 @@ else
 fi
 
 # gpsd — GPS daemon
-if systemctl is-enabled gpsd &>/dev/null; then
-    info "gpsd is already enabled."
+if systemctl is-enabled gpsd &>/dev/null && systemctl is-active gpsd &>/dev/null; then
+    info "gpsd is already enabled and running."
 else
     sudo systemctl enable gpsd
     sudo systemctl start gpsd
@@ -659,6 +672,7 @@ else
 fi
 
 # postgresql — stop system postgres (Docker will provide it)
+# Check for both generic 'postgresql' service and versioned 'postgresql@17-main'
 if systemctl is-active postgresql &>/dev/null 2>&1; then
     warn "System PostgreSQL is running and will conflict with Docker PostgreSQL on port 5432."
     if confirm "Stop and disable system PostgreSQL? (Docker will provide PostgreSQL instead)"; then
@@ -668,39 +682,24 @@ if systemctl is-active postgresql &>/dev/null 2>&1; then
     else
         warn "System PostgreSQL left running. You may need to change DB_PORT in .env."
     fi
-
-    # gpsd — GPS daemon
-    if systemctl is-enabled gpsd &>/dev/null && systemctl is-active gpsd &>/dev/null; then
-        info "gpsd is already enabled and running — skipping."
+elif systemctl is-active postgresql@17-main &>/dev/null 2>&1; then
+    warn "System PostgreSQL (17-main) is running and will conflict with Docker PostgreSQL on port 5432."
+    if confirm "Stop and disable system PostgreSQL? (Docker will provide PostgreSQL instead)"; then
+        sudo systemctl stop postgresql@17-main
+        sudo systemctl disable postgresql@17-main
+        info "System PostgreSQL stopped and disabled."
     else
-        sudo systemctl enable gpsd
-        sudo systemctl start gpsd
-        info "gpsd enabled and started."
+        warn "System PostgreSQL left running. You may need to change DB_PORT in .env."
     fi
-
-    # postgresql — system postgres NOT needed (using Docker postgres instead)
-    # Stop and disable system postgres to avoid port 5432 conflict with Docker
-    if systemctl is-active postgresql@17-main &>/dev/null 2>&1; then
-        warn "System PostgreSQL is running and will conflict with Docker PostgreSQL on port 5432."
-        if confirm "Stop and disable system PostgreSQL? (Docker will provide PostgreSQL instead)"; then
-            sudo systemctl stop postgresql@17-main
-            sudo systemctl disable postgresql@17-main
-            info "System PostgreSQL stopped and disabled."
-        else
-            warn "System PostgreSQL left running. You may need to change DB_PORT in .env to avoid conflicts."
-        fi
-    elif systemctl is-enabled postgresql@17-main &>/dev/null 2>&1; then
-        info "System PostgreSQL is enabled but not running."
-        if confirm "Disable system PostgreSQL to prevent future conflicts?"; then
-            sudo systemctl disable postgresql@17-main
-            info "System PostgreSQL disabled."
-        fi
-    else
-        info "System PostgreSQL is not enabled — good, Docker will provide PostgreSQL."
+elif systemctl is-enabled postgresql &>/dev/null 2>&1 || systemctl is-enabled postgresql@17-main &>/dev/null 2>&1; then
+    info "System PostgreSQL is enabled but not running."
+    if confirm "Disable system PostgreSQL to prevent future conflicts?"; then
+        sudo systemctl disable postgresql 2>/dev/null || true
+        sudo systemctl disable postgresql@17-main 2>/dev/null || true
+        info "System PostgreSQL disabled."
     fi
-
 else
-    warn "Skipping service setup."
+    info "System PostgreSQL is not enabled — good, Docker will provide PostgreSQL."
 fi
 echo ""
 
