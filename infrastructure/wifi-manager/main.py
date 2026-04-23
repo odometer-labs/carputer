@@ -17,14 +17,13 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("wifi-manager.log", "a"),
     ],
 )
 
 log = logging.getLogger(__name__)
 
 
-_env_wifi_interface = os.environ.get("CARPUTER_WIFI_INTERFACE")
+_env_wifi_interface = os.environ.get("WIFI_INTERFACE")
 if not _env_wifi_interface:
     WIFI_INTERFACE: str = "wlan0"
 else:
@@ -38,9 +37,9 @@ def open_system_bus():
     yield wm.setup_system_bus()
 
 
-@app.get("/wifi")
-def get_version_info():
-    raise NotImplementedError("TODO implement this")
+@app.get("/wifi/version")
+def get_version_info() -> dict:
+    return {"version": "0.1.0", "service": "wifi-manager"}
 
 
 @app.put("/wifi/connection")
@@ -100,4 +99,3 @@ def get_internet_connectivity(_=Depends(open_system_bus)) -> bool:
 
 @app.get("/wifi/access-points")
 def get_access_points(_=Depends(open_system_bus)) -> list[WifiAccessPoint]:
-    return wm.get_access_points(WIFI_INTERFACE)
