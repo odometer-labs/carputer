@@ -4,10 +4,10 @@
   //import { systemInfo } from "some place that catches information from backend"
 
   //images to use
-  import wifi0 from "../wifi-signal0-bold.svg";
-  import wifi1 from "../wifi-signal1-bold.svg";
-  import wifi2 from "../wifi-signal2-bold.svg";
-  import wifi3 from "../wifi-signal3-bold.svg";
+  import wifi0 from "../icons/wifi-signal0-bold.svg";
+  import wifi1 from "../icons/wifi-signal1-bold.svg";
+  import wifi2 from "../icons/wifi-signal2-bold.svg";
+  import wifi3 from "../icons/wifi-signal3-bold.svg";
 
   // delete this after the indicators are implemented with backend information.
   let wifiConnection:boolean = true
