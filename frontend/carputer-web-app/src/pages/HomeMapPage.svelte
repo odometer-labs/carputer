@@ -18,7 +18,7 @@
   import { Cluster } from 'ol/source';
   import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
   import { preferences } from '../services/preferences';
-  import aprsIconUrl from '../assets/aprs-bold.svg';
+  import aprsIconUrl from '../assets/icons/aprs-bold.svg';
   import userArrowIconUrl from '../assets/icons/maps-arrow-blue-white.svg';
   import { trackStore } from '../stores/trackStore'
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)

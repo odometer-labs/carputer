@@ -2,9 +2,9 @@
   import { onMount, onDestroy } from 'svelte';
   import BackButton from "../assets/components/BackButton.svelte";
   import SystemIndicators from "../assets/components/SystemIndicators.svelte";
-  import check_mark from "../assets/check-circle-bold.svg";
-  import download_icon from  "../assets/download-bold.svg";
-
+  import check_mark from "../assets/icons/check-circle-bold.svg";
+  import download_icon from  "../assets/icons/download-bold.svg";
+  import update_icon from "../assets/icons/refresh-circle-bold.svg";
   import OLMap from 'ol/Map.js';
   import View from 'ol/View.js';
   import TileLayer from 'ol/layer/Tile.js';
@@ -30,7 +30,7 @@
   let storage_amount_left: number = 1;
 
   // update checking state
-  type UpdateState = 'idle' | 'checking' | 'no-updates' | 'updates-available';
+  type UpdateState = 'idle' | 'checking' | 'no-updates' | 'updates-available' | 'updating' | 'updated';
   let updateCheckState: UpdateState = 'idle';
 
   // map state
@@ -219,10 +219,16 @@
     }
   }
 
-  function handleUpdate(): void {
-    // TODO: Replace with actual backend API call to initiate update
-    console.log('Update initiated');
-    updateCheckState = 'idle';
+  async function handleUpdate(): Promise<void> {
+    updateCheckState = 'updating';
+    try {
+      // TODO: Replace with actual backend API call to initiate update
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      updateCheckState = 'updated';
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'DashboardPage.handleUpdate');
+      updateCheckState = 'updates-available';
+    }
   }
 
   function resetUpdateState(): void {
@@ -482,9 +488,18 @@
         <div class="no-updates-text">No updates available</div>
       {:else if updateCheckState === 'updates-available'}
         <button class="button-color button-color--update" on:click={handleUpdate}>
+          <img src={update_icon} alt="Update" class="icons" />
           Update
         </button>
-      {/if}
+      {:else if updateCheckState === 'updating'}
+        <div class="checking-text">Updating...</div>
+      {:else if updateCheckState === 'updated'}
+        <button class="button-color" on:click={handleCheckForUpdates}>
+          <img src={check_mark} alt="Check" class="icons" />
+          Check for Updates
+        </button>
+        <div class="done-text">Done!</div>
+      {/if}       
     </div>
   </div>
 
@@ -633,6 +648,13 @@
   }
 
   .no-updates-text {
+    color: rgba(0, 0, 0, 0.7);
+    font-size: 0.85rem;
+    text-align: left;
+    padding-left: 2px;
+  }
+
+  .done-text {
     color: rgba(0, 0, 0, 0.7);
     font-size: 0.85rem;
     text-align: left;
