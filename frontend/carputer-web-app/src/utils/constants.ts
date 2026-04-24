@@ -10,4 +10,6 @@ export const ENDPOINTS = {
   addTrackPoint: `${API_BASE}/tracks/point`,
   getLatestTrackPoint: `${API_BASE}/tracks-latest-point`,
   checkNewRoad: `${API_BASE}/tracks-check-new-road`,
+  getCurrentPosition: "/ws/get-current-pos",
+  getPositionStream: "/ws/get-position",
 };
