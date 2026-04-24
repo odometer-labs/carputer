@@ -4,7 +4,7 @@
   import SystemIndicators from "../assets/components/SystemIndicators.svelte";
   import check_mark from "../assets/icons/check-circle-bold.svg";
   import download_icon from  "../assets/icons/download-bold.svg";
-  import update_icon from "../assets/icons/refresh-circle-bold.svg";
+  import update_icon from "../assets/icons/refresh-circle.svg";
   import OLMap from 'ol/Map.js';
   import View from 'ol/View.js';
   import TileLayer from 'ol/layer/Tile.js';
