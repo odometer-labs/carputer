@@ -417,7 +417,7 @@
   <div class="title-box"> 
       <!-- this is the exit button -->
     <BackButton />
-    <h2>System Info</h2>
+    <h2>System Data</h2>
 
     <SystemIndicators 
       isActiveBackground={false} 

@@ -562,7 +562,7 @@
 
   // this function changes route to /Dashboard
   function goToDashboard() : void {
-    push("/Dashboard");
+    push("/SystemData");
   }
 
   let isDropdownOpen: boolean = false;
@@ -619,7 +619,7 @@
         <li style="padding: 0;">
           <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false; goToDashboard()}}>
             <i class="iconoir-info-circle dropdown-menu_btn_icons"></i>
-            System Info
+            System Data
             <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
                 <sub class="sub_text">Patch Level: 0.0.0</sub>
             </div>  
