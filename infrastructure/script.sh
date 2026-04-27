@@ -19,13 +19,11 @@
 #   3. Configures gpsd for u-blox GPS module
 #   4. Installs RTL-SDR drivers and blacklists conflicting modules
 #   5. Builds and installs Direwolf (APRS decoder)
-#   6. Configures APRS reception pipeline
-#   7. Creates APRS bridge to backend
-#   8. Enables and starts required systemd services
-#   9. Clones the carputer repo to /opt/carputer
-#  10. Deploys chrony GPS time discipline config and gpsd drop-in
-#  11. Deploys carputer.service
-#  12. Sets up Docker environment (.env) and pulls containers
+#   6. Clones the carputer repo to /opt/carputer
+#   7. Deploys chrony GPS time discipline config and gpsd drop-in
+#   8. Deploys carputer.service
+#   9. Deploys APRS infrastructure (services + database)
+#  10. Sets up Docker environment (.env) and pulls containers
 # =============================================================================
 
 set -e  # Exit immediately on error
@@ -43,7 +41,6 @@ NC='\033[0m' # No Color
 # -----------------------------------------------------------------------------
 REPO_URL="https://github.com/odometer-labs/carputer.git"
 DEPLOY_DIR="/opt/carputer"
-APRS_DIR="/opt/carputer/aprs"
 CURRENT_USER=$(whoami)
 
 # -----------------------------------------------------------------------------
@@ -90,16 +87,14 @@ sudo apt install -y vim git gpsd gpsd-clients chrony curl \
     python3-requests python3-pip
 
 info "Packages installed successfully."
-
 echo ""
 
-# ----------------------------------------------------------------------------
-# Step 2— Install Docker
-# ----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Step 2 — Install Docker
+# -----------------------------------------------------------------------------
 info "Step 2: Installing Docker and plugins..."
 
 # Detect architecture for plugin downloads
-# Note: Compose and Buildx use different arch naming conventions
 ARCH=$(uname -m)
 case "$ARCH" in
     aarch64)
@@ -223,44 +218,25 @@ GPSD_CONFIG="/etc/default/gpsd"
 
 # Check if already configured
 if grep -q 'DEVICES="/dev/ttyACM0"' "$GPSD_CONFIG" && \
-   grep -q 'GPSD_OPTIONS="-G -F /var/run/gpsd.sock"' "$GPSD_CONFIG"; then
-    info "gpsd is already configured correctly — skipping."
+   grep -q 'GPSD_OPTIONS="-n"' "$GPSD_CONFIG" && \
+   grep -q 'START_DAEMON="true"' "$GPSD_CONFIG"; then
+    info "gpsd is already configured."
 else
-    if confirm "Update $GPSD_CONFIG with correct DEVICES and GPSD_OPTIONS?"; then
-        sudo sed -i 's|^DEVICES=.*|DEVICES="/dev/ttyACM0"|' "$GPSD_CONFIG"
-        sudo sed -i 's|^GPSD_OPTIONS=.*|GPSD_OPTIONS="-G -F /var/run/gpsd.sock"|' "$GPSD_CONFIG"
-        info "gpsd configuration updated:"
-        info "  DEVICES=/dev/ttyACM0"
-        info "  GPSD_OPTIONS=-G -F /var/run/gpsd.sock"
-    else
-        warn "Skipping gpsd config."
-    fi
-fi
-echo ""
+    confirm "Configure gpsd for /dev/ttyACM0?" || { warn "Skipping gpsd configuration."; }
 
-# Deploy gpsd.socket override to allow remote access (needed for Docker containers)
-GPSD_SOCKET_DROPIN_DIR="/etc/systemd/system/gpsd.socket.d"
-GPSD_SOCKET_DROPIN="$GPSD_SOCKET_DROPIN_DIR/listen-all.conf"
-GPSD_SOCKET_CONTENT="[Socket]
-# Clear inherited ListenStream, then re-declare with remote access enabled
-ListenStream=
-ListenStream=/run/gpsd.sock
-ListenStream=0.0.0.0:2947
-ListenStream=[::]:2947
-BindIPv6Only=ipv6-only"
+    # Backup existing config
+    sudo cp "$GPSD_CONFIG" "$GPSD_CONFIG.bak" 2>/dev/null || true
 
-if [ -f "$GPSD_SOCKET_DROPIN" ] && echo "$GPSD_SOCKET_CONTENT" | diff -q - "$GPSD_SOCKET_DROPIN" &>/dev/null; then
-    info "gpsd.socket remote access override already up to date - skipping."
-else
-    if confirm "Deploy gpsd.socket override to allow remote access (required for Docker)?"; then
-        sudo mkdir -p "$GPSD_SOCKET_DROPIN_DIR"
-        echo "$GPSD_SOCKET_CONTENT" | sudo tee "$GPSD_SOCKET_DROPIN" > /dev/null
-        sudo systemctl daemon-reload
-        info "gpsd.socket override deployed at $GPSD_SOCKET_DROPIN."
-        info "  gpsd now accepts connections on all interfaces (0.0.0.0:2947)."
-    else
-        warn "Skipping gpsd.socket override."
-    fi
+    # Write new config
+    sudo tee "$GPSD_CONFIG" > /dev/null <<'EOF'
+# Default settings for gpsd
+START_DAEMON="true"
+DEVICES="/dev/ttyACM0"
+GPSD_OPTIONS="-n"
+USBAUTO="false"
+EOF
+
+    info "gpsd configured for /dev/ttyACM0 (backup at $GPSD_CONFIG.bak)."
 fi
 echo ""
 
@@ -293,6 +269,15 @@ EOF
     warn "Conflicting modules unloaded. A reboot is recommended."
 fi
 
+# Add user to plugdev group for RTL-SDR access
+if groups "$CURRENT_USER" | grep -q '\bplugdev\b'; then
+    info "User $CURRENT_USER is already in the plugdev group."
+else
+    sudo usermod -aG plugdev "$CURRENT_USER"
+    info "User $CURRENT_USER added to plugdev group."
+    warn "You must log out and back in for this to take effect."
+fi
+
 # Test RTL-SDR detection
 if lsusb | grep -qi rtl; then
     info "RTL-SDR device detected via USB."
@@ -310,7 +295,9 @@ info "Step 5: Building and installing Direwolf..."
 if command -v direwolf &>/dev/null; then
     DIREWOLF_VERSION=$(direwolf -v 2>&1 | head -1 || echo "installed")
     info "Direwolf is already installed ($DIREWOLF_VERSION)."
-    confirm "Rebuild Direwolf from latest source?" || { warn "Skipping Direwolf build."; }
+    if ! confirm "Rebuild Direwolf from latest source?"; then
+        info "Skipping Direwolf build."
+    fi
 fi
 
 # Clone and build Direwolf
@@ -337,7 +324,7 @@ info "Direwolf installed successfully."
 echo ""
 
 # -----------------------------------------------------------------------------
-# Step 6 — Configure APRS reception
+# Step 6 — Enable and start systemd services
 # -----------------------------------------------------------------------------
 info "Step 6: Configuring APRS reception..."
 
@@ -694,8 +681,8 @@ else
 fi
 
 # gpsd — GPS daemon
-if systemctl is-enabled gpsd &>/dev/null && systemctl is-active gpsd &>/dev/null; then
-    info "gpsd is already enabled and running."
+if systemctl is-enabled gpsd &>/dev/null; then
+    info "gpsd is already enabled."
 else
     sudo systemctl enable gpsd
     sudo systemctl start gpsd
@@ -703,7 +690,6 @@ else
 fi
 
 # postgresql — stop system postgres (Docker will provide it)
-# Check for both generic 'postgresql' service and versioned 'postgresql@17-main'
 if systemctl is-active postgresql &>/dev/null 2>&1; then
     warn "System PostgreSQL is running and will conflict with Docker PostgreSQL on port 5432."
     if confirm "Stop and disable system PostgreSQL? (Docker will provide PostgreSQL instead)"; then
@@ -735,13 +721,13 @@ fi
 echo ""
 
 # -----------------------------------------------------------------------------
-# Step 10 — Clone repo to /opt/carputer
+# Step 7 — Clone repo to /opt/carputer
 # -----------------------------------------------------------------------------
-info "Step 10: Setting up carputer repository at /opt/carputer..."
+info "Step 7: Setting up carputer repository at /opt/carputer..."
 
 if [ -d "$DEPLOY_DIR/.git" ]; then
     info "Repository already exists at $DEPLOY_DIR."
-    confirm "Pull latest changes?" && git -C "$DEPLOY_DIR" pull && info "Repository updated."
+    confirm "Pull latest changes?" && sudo git -C "$DEPLOY_DIR" pull && info "Repository updated."
 else
     if confirm "Clone $REPO_URL into $DEPLOY_DIR?"; then
         sudo mkdir -p "$DEPLOY_DIR"
@@ -749,15 +735,15 @@ else
         sudo chown -R "$CURRENT_USER":"$CURRENT_USER" "$DEPLOY_DIR"
         info "Repository cloned to $DEPLOY_DIR."
     else
-        warn "Skipping repo clone."
+        error "Cannot proceed without repository. Aborting."
     fi
 fi
 echo ""
 
 # -----------------------------------------------------------------------------
-# Step 11 — Deploy chrony config and gpsd drop-in
+# Step 8 — Deploy chrony config and gpsd drop-in
 # -----------------------------------------------------------------------------
-info "Step 11: Deploying chrony + GPSD time sync configuration..."
+info "Step 8: Deploying chrony + GPSD time sync configuration..."
 
 CHRONY_SRC="$DEPLOY_DIR/embedded/ntp_gps_sync/chrony.conf"
 CHRONY_DST="/etc/chrony/chrony.conf"
@@ -802,32 +788,60 @@ fi
 echo ""
 
 # -----------------------------------------------------------------------------
-# Step 12 — Deploy carputer.service
+# Step 9 — Deploy carputer.service
 # -----------------------------------------------------------------------------
-info "Step 12: Deploying carputer.service..."
+info "Step 9: Deploying carputer.service..."
 
 SERVICE_SRC="$DEPLOY_DIR/infrastructure/systemd/carputer.service"
 SERVICE_DST="/etc/systemd/system/carputer.service"
 
 if [ ! -f "$SERVICE_SRC" ]; then
-    error "carputer.service not found at $SERVICE_SRC."
-fi
-
-if diff -q "$SERVICE_SRC" "$SERVICE_DST" &>/dev/null; then
-    info "carputer.service is already up to date."
+    warn "carputer.service not found at $SERVICE_SRC — skipping."
 else
-    confirm "Deploy carputer.service?" || { warn "Skipping service deployment."; }
-    sudo cp "$SERVICE_SRC" "$SERVICE_DST"
-    sudo systemctl daemon-reload
-    sudo systemctl enable carputer
-    info "carputer.service deployed and enabled."
+    if diff -q "$SERVICE_SRC" "$SERVICE_DST" &>/dev/null; then
+        info "carputer.service is already up to date."
+    else
+        confirm "Deploy carputer.service?" || { warn "Skipping service deployment."; }
+        sudo cp "$SERVICE_SRC" "$SERVICE_DST"
+        sudo systemctl daemon-reload
+        sudo systemctl enable carputer
+        info "carputer.service deployed and enabled."
+    fi
 fi
 echo ""
 
 # -----------------------------------------------------------------------------
-# Step 13 — Set up Docker environment
+# Step 10 — Deploy APRS infrastructure
 # -----------------------------------------------------------------------------
-info "Step 13: Setting up Docker environment..."
+info "Step 10: Deploying APRS infrastructure..."
+
+APRS_DEPLOY_SCRIPT="$DEPLOY_DIR/infrastructure/deploy_aprs.sh"
+
+if [ ! -f "$APRS_DEPLOY_SCRIPT" ]; then
+    warn "APRS deployment script not found at $APRS_DEPLOY_SCRIPT"
+    warn "APRS infrastructure will need to be deployed manually."
+    warn "Skipping APRS deployment."
+else
+    if confirm "Deploy APRS services and database?"; then
+        # Make sure script is executable
+        chmod +x "$APRS_DEPLOY_SCRIPT"
+        
+        # Run the APRS deployment script
+        cd "$DEPLOY_DIR"
+        bash "$APRS_DEPLOY_SCRIPT"
+        
+        info "APRS infrastructure deployed."
+    else
+        warn "Skipping APRS deployment."
+        warn "Run manually: bash $APRS_DEPLOY_SCRIPT"
+    fi
+fi
+echo ""
+
+# -----------------------------------------------------------------------------
+# Step 11 — Set up Docker environment
+# -----------------------------------------------------------------------------
+info "Step 11: Setting up Docker environment..."
 
 ENV_EXAMPLE="$DEPLOY_DIR/.env.example"
 ENV_FILE="$DEPLOY_DIR/.env"
@@ -871,6 +885,25 @@ fi
 echo ""
 
 # -----------------------------------------------------------------------------
+# Step 12 — Start APRS services (if deployed)
+# -----------------------------------------------------------------------------
+if systemctl list-unit-files | grep -q aprs-receiver.service; then
+    info "Step 12: Starting APRS services..."
+    
+    if confirm "Start APRS services now?"; then
+        sudo systemctl start aprs-receiver
+        sleep 3
+        sudo systemctl start aprs-bridge
+        info "APRS services started."
+        info "  Check status: sudo systemctl status aprs-receiver aprs-bridge"
+        info "  View logs:    sudo journalctl -u aprs-receiver -f"
+    else
+        warn "Start manually: sudo systemctl start aprs-receiver aprs-bridge"
+    fi
+    echo ""
+fi
+
+# -----------------------------------------------------------------------------
 # Done
 # -----------------------------------------------------------------------------
 echo "=================================================================="
@@ -882,15 +915,16 @@ echo "  RTL-SDR       : 144.390 MHz (APRS)"
 echo "  Direwolf KISS : localhost:8003"
 echo "  Direwolf AGW  : localhost:8005"
 echo "  Repo          : $DEPLOY_DIR"
-echo "  APRS config   : $APRS_DIR"
 echo ""
 echo "  Services enabled:"
 echo "    ✓ chrony (GPS time sync)"
 echo "    ✓ gpsd (GPS daemon)"
 echo "    ✓ docker (container runtime)"
 echo "    ✓ carputer (auto-start on boot)"
-echo "    ✓ aprs-receiver (RTL-SDR + Direwolf)"
-echo "    ✓ aprs-bridge (KISS → Backend)"
+if systemctl list-unit-files | grep -q aprs-receiver.service; then
+    echo "    ✓ aprs-receiver (RTL-SDR + Direwolf)"
+    echo "    ✓ aprs-bridge (KISS → Backend)"
+fi
 echo ""
 echo "  Docker services:"
 echo "    • Frontend: http://localhost:3000"
@@ -901,9 +935,16 @@ echo ""
 warn "NEXT STEPS:"
 warn "  1. Edit $DEPLOY_DIR/.env with credentials"
 warn "  2. Test GPS: cgps -s"
-warn "  3. Test APRS: sudo journalctl -u aprs-receiver -f"
-warn "  4. Check logs: tail -f /var/log/carputer/aprs/aprs-*.log"
-warn "  5. Open frontend: http://localhost:3000"
+if systemctl list-unit-files | grep -q aprs-receiver.service; then
+    warn "  3. Test APRS: sudo journalctl -u aprs-receiver -f"
+    warn "  4. Check logs: tail -f /var/log/carputer/aprs/aprs-*.log"
+    warn "  5. Test API: curl http://localhost:8000/v1/aprs/stations"
+    warn "  6. Open frontend: http://localhost:3000"
+else
+    warn "  3. Deploy APRS: bash $DEPLOY_DIR/infrastructure/deploy_aprs.sh"
+    warn "  4. Start APRS: sudo systemctl start aprs-receiver aprs-bridge"
+    warn "  5. Open frontend: http://localhost:3000"
+fi
 echo ""
-warn "REBOOT RECOMMENDED to load RTL-SDR driver changes."
+warn "REBOOT RECOMMENDED to load RTL-SDR driver and group changes."
 echo "=================================================================="
