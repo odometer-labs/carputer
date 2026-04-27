@@ -4,7 +4,6 @@ from .logging.handlers import logger
 
 app = FastAPI()
 
-
 app.include_router(tracks.router)
 app.include_router(websocket.router)
 app.include_router(aprs.router)
