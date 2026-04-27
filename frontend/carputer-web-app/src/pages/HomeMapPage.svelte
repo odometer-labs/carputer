@@ -107,8 +107,8 @@
     }, 500);
 
     // subscribes to track changes
-    const unsubscribe = trackStore.subscribe(({ tracks }) => { 
-      renderTracks(tracks);
+    const unsubscribe = trackStore.subscribe(({ tracks, selectedTrackId, hiddenTrackIds }) => {
+      renderTracks(tracks, selectedTrackId, hiddenTrackIds);
     });
     //TODO: uncomment this for real data from back end
     //trackStore.loadTracks();  //this loads in the old tracks from backend.
@@ -169,12 +169,16 @@
     // this determines the color/shape/size of the old tracks
     oldTrackLayer = new VectorLayer({
       source: oldTrackSource,
-      style: new Style({
-        stroke: new Stroke({
-          color: "#FF746C",
-          width: 4
+      style: (feature) => {
+        const isActive = feature.get('isActive');
+
+        return new Style({
+          stroke: new Stroke({
+            color: isActive ? "#ff392b" : "#ffa6a6",
+            width: 4
+          })
         })
-      })
+      }
     });
 
     currentTrackSource = new VectorSource();
@@ -281,6 +285,17 @@
         isFollowingHeading = false;
         updateUserMarkerStyle();
       }
+    });
+
+    map.on('singleclick', (event) => {
+      map?.forEachFeatureAtPixel(event.pixel, (featureLike) => {
+        if (!(featureLike instanceof Feature)) return;
+
+        const trackId = featureLike.get('trackId');
+        if (trackId != null) {
+          trackStore.selectTrack(trackId);
+        }
+      });
     });
   }
 
@@ -429,6 +444,12 @@
       return;
     }
 
+    //check if user maker feature is up
+    if (!userMarker) {
+      // use the coord from the user to add it to the current users track line
+      applyTrackLine(coords);
+    }
+
     if (!userMarker) {
       // first fix: create marker feature and add to map
       userMarker = new Feature({
@@ -556,8 +577,33 @@
     }
   ];
 
+  // this is used to make the track line for the user, given that the coordnates pushed
+  // in are the user's coordinates.
+  function applyTrackLine(coords : number[]){
+    // this adds a line (red line) so the user can see where they have been 
+    if ($trackStore.isTracking) { 
+      //this determines if this is the beggining of a new line 
+      if (!currentTrackFeature) { 
+        currentTrackFeature = new Feature({
+          geometry: new LineString([coords])
+        }); 
+        
+        currentTrackSource?.addFeature(currentTrackFeature);
+      } else { 
+        const geom = currentTrackFeature.getGeometry();
+        if (geom) {
+          geom.appendCoordinate(coords);
+        }
+      }
+    }
+  }
+
   // set up the old tracks that the user has been on previously
-  function renderTracks(tracks: Track[]) : void {
+  function renderTracks(
+    tracks: Track[],
+    selectedTrackId: number | null,
+    hiddenTrackIds: Set<number>
+    ) : void {
     //check if the trackSource exists
     if (!oldTrackSource) return;
 
@@ -565,13 +611,18 @@
     oldTrackSource.clear();
 
     tracks.forEach((track) => {
+      if (hiddenTrackIds.has(track.track_id)) return;
+
       const coords = track.geom.coordinates.map(([lon, lat]) =>
         fromLonLat([lon, lat])
       );
 
       const feature = new Feature({
-        geometry: new LineString(coords)
+        geometry: new LineString(coords),
+        trackId: track.track_id
       });
+
+      feature.set("isActive", track.track_id === selectedTrackId)
 
       oldTrackSource?.addFeature(feature);
     });
