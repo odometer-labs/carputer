@@ -2,9 +2,9 @@
   import { onMount, onDestroy } from 'svelte';
   import BackButton from "../assets/components/BackButton.svelte";
   import SystemIndicators from "../assets/components/SystemIndicators.svelte";
-  import check_mark from "../assets/check-circle-bold.svg";
-  import download_icon from  "../assets/download-bold.svg";
-
+  import check_mark from "../assets/icons/check-circle-bold.svg";
+  import download_icon from  "../assets/icons/download-bold.svg";
+  import update_icon from "../assets/icons/refresh-circle.svg";
   import OLMap from 'ol/Map.js';
   import View from 'ol/View.js';
   import TileLayer from 'ol/layer/Tile.js';
@@ -18,13 +18,20 @@
   import { Style, Fill, Stroke, Text, Circle } from 'ol/style.js';
   import { fromLonLat } from 'ol/proj.js';
   import { createXYZ } from 'ol/tilegrid.js';
-  import { gpsService } from '../fake-api/gpsService';
-  import type { GPSPosition } from '../fake-api/types';
+  import { getCurrentPosition, listTracks, subscribeToPositionStream } from '../api/restApi';
+  import type { GPSData } from '../api/types';
+  import { reportNonVitalError } from '../stores/errorStore';
   import 'ol/ol.css';
 
   // TODO: These values should be fetched from the backend, currently they are just placeholders for display.
   let num_tracks: number = 0;
   let patch_level: string = "0.1.2";
+  let storage_amount_dowloaded: number = 2;
+  let storage_amount_left: number = 1;
+
+  // update checking state
+  type UpdateState = 'idle' | 'checking' | 'no-updates' | 'updates-available' | 'updating' | 'updated';
+  let updateCheckState: UpdateState = 'idle';
 
   // map state
   let mapElement: HTMLDivElement | undefined;
@@ -37,6 +44,7 @@
   let userSource: VectorSource | undefined;
   let hasCenteredOnGpsFix: boolean = false;
   let gridRenderRaf: number | null = null;
+  let stopGPSSubscription: (() => void) | null = null;
   const GRID_ZOOM_OFFSET = 1;
   const tileGrid = createXYZ({ maxZoom: 22 });
 
@@ -67,7 +75,7 @@
     }),
   });
 
-  function updateUserMarker(position: GPSPosition): void {
+  function updateUserMarker(position: GPSData): void {
     if (!map) return;
 
     const lon = position.longitude;
@@ -165,6 +173,68 @@
   // re-render grid whenever select mode changes
   $: if (map && gridSource) updateGrid();
 
+  async function loadDashboardInfo(): Promise<void> {
+    try {
+      const tracks = await listTracks();
+      num_tracks = Array.isArray(tracks) ? tracks.length : 0;
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'DashboardPage.listTracks');
+    }
+  }
+
+  function startGPSTracking(): void {
+    getCurrentPosition()
+      .then((position) => updateUserMarker(position))
+      .catch((error: unknown) => {
+        reportNonVitalError(error, 'DashboardPage.getCurrentPosition');
+      });
+
+    stopGPSSubscription = subscribeToPositionStream(
+      (position: GPSData) => {
+        updateUserMarker(position);
+      },
+      (error: string) => {
+        reportNonVitalError(error, 'DashboardPage.subscribeToPositionStream');
+      }
+    );
+  }
+
+  async function handleCheckForUpdates(): Promise<void> {
+    updateCheckState = 'checking';
+    try {
+      // TODO: Replace with actual backend API call to check for updates
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // TODO: Determine if updates are available from backend response
+      const updatesAvailable = false;
+      
+      if (updatesAvailable) {
+        updateCheckState = 'updates-available';
+      } else {
+        updateCheckState = 'no-updates';
+      }
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'DashboardPage.handleCheckForUpdates');
+      updateCheckState = 'idle';
+    }
+  }
+
+  async function handleUpdate(): Promise<void> {
+    updateCheckState = 'updating';
+    try {
+      // TODO: Replace with actual backend API call to initiate update
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      updateCheckState = 'updated';
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'DashboardPage.handleUpdate');
+      updateCheckState = 'updates-available';
+    }
+  }
+
+  function resetUpdateState(): void {
+    updateCheckState = 'idle';
+  }
+
   onMount(() => {
     gridSource = new VectorSource();
     selectionSource = new VectorSource();
@@ -195,14 +265,8 @@
     map.getView().on('change:resolution', scheduleGridUpdate);
     map.on('moveend', scheduleGridUpdate);
 
-    gpsService.start(
-      (position: GPSPosition) => {
-        updateUserMarker(position);
-      },
-      (error: string) => {
-        console.error('GPS error:', error);
-      }
-    );
+    loadDashboardInfo();
+    startGPSTracking();
 
     // TODO: Replace this with backend response data when tile-download status API is ready.
     const downloadedTilesFromBackend: DownloadedTile[] = [];
@@ -285,7 +349,8 @@
       cancelAnimationFrame(gridRenderRaf);
       gridRenderRaf = null;
     }
-    gpsService.stop();
+    stopGPSSubscription?.();
+    stopGPSSubscription = null;
     map?.setTarget(undefined);
   });
 
@@ -348,11 +413,6 @@
     const tiles = [...selectedTiles.values()].map(([z, x, y]) => ({ z, x, y }));
     // TODO: hook up to real backend endpoint
     console.log('Download tiles request:', { tiles });
-    // await fetch('/api/tiles/download', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ tiles }),
-    // });
   }
 </script>
 
@@ -363,7 +423,7 @@
   <div class="title-box"> 
       <!-- this is the exit button -->
     <BackButton />
-    <h2>System Info</h2>
+    <h2>System Data</h2>
 
     <SystemIndicators 
       isActiveBackground={false} 
@@ -393,15 +453,54 @@
           <span class="info-value">{patch_level}</span>
         </p>
       </div>
-    </div>
-  </div>
+      <div class="info-box">
+        <p class="info-row">
+          <span class="info-label">Maps Downloaded:</span>
+          <span class="info-value">{storage_amount_dowloaded}GB</span>
+        </p>
+      </div>
 
-  <div class="update-box">
-    <!-- this button is for checking updates of the system.-->
-    <button class="button-color">
-      <img src={check_mark} alt="Check" class="icons" />
-      Check for Updates
-    </button>
+      <div class="info-box">
+        <p class="info-row">
+          <span class="info-label">Storage Left:</span>
+          <span class="info-value">{storage_amount_left}GB</span>
+        </p>
+      </div>
+    </div>
+
+    <!-- divider -->
+    <div class="divider"></div>
+
+    <!-- update section -->
+    <div class="update-section">
+      {#if updateCheckState === 'idle'}
+        <button class="button-color" on:click={handleCheckForUpdates}>
+          <img src={check_mark} alt="Check" class="icons" />
+          Check for Updates
+        </button>
+      {:else if updateCheckState === 'checking'}
+        <div class="checking-text">Checking for updates...</div>
+      {:else if updateCheckState === 'no-updates'}
+        <button class="button-color" on:click={handleCheckForUpdates}>
+          <img src={check_mark} alt="Check" class="icons" />
+          Check for Updates
+        </button>
+        <div class="no-updates-text">No updates available</div>
+      {:else if updateCheckState === 'updates-available'}
+        <button class="button-color button-color--update" on:click={handleUpdate}>
+          <img src={update_icon} alt="Update" class="icons" />
+          Update
+        </button>
+      {:else if updateCheckState === 'updating'}
+        <div class="checking-text">Updating...</div>
+      {:else if updateCheckState === 'updated'}
+        <button class="button-color" on:click={handleCheckForUpdates}>
+          <img src={check_mark} alt="Check" class="icons" />
+          Check for Updates
+        </button>
+        <div class="done-text">Done!</div>
+      {/if}       
+    </div>
   </div>
 
   </div>
@@ -486,12 +585,15 @@
 
   .seperate-vert {
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
+    justify-content: flex-start;
     position: relative;
     padding-left: 2%;
     padding-right: 2%;
+    padding-top: 8px;
+    padding-bottom: 8px;
     box-sizing: border-box;
-    align-items: center;
+    gap: 12px;
     background-color: var(--secondary-color);
     width: 100%;
     flex: 1;
@@ -505,10 +607,7 @@
     flex-direction: column;
     justify-content: flex-start;
     gap: 8px;
-    height: 100%;
     width: 100%;
-    padding-top: 8px;
-    padding-bottom: 8px;
     box-sizing: border-box;
   }
 
@@ -529,19 +628,37 @@
     font-weight: 600;
   }
 
-  .update-box {
-    display: flex;
-    justify-content: flex-start;
-    align-items: center;
-    position: relative;
-    background-color: var(--secondary-color);
+  .divider {
+    height: 1px;
+    background-color: rgba(0, 0, 0, 0.2);
     width: 100%;
-    flex: 1;
-    box-sizing: border-box;
-    padding-left: 5%;
-    border-width: 2px;
-    border-color: rgb(255, 255, 255);
-    border-style: solid;
+  }
+
+  .update-section {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .checking-text {
+    color: rgba(0, 0, 0, 0.7);
+    text-align: left;
+  }
+
+  .no-updates-text {
+    color: rgba(0, 0, 0, 0.7);
+    font-size: 0.85rem;
+    text-align: left;
+    padding-left: 2px;
+  }
+
+  .done-text {
+    color: rgba(0, 0, 0, 0.7);
+    font-size: 0.85rem;
+    text-align: left;
+    padding-left: 2px;
   }
 
   .download-box {
@@ -626,19 +743,26 @@
 
   .button-color {
     background-color: rgba(188, 188, 188);
-
     color: black;
-
     outline: none;
-
     display: flex;
     align-items: center;
-
     justify-content: center;
     border: none;
+    padding: 8px 16px;
+    margin-top: auto;
+    cursor: pointer;
   }
   .button-color:hover {
     background-color: rgba(202, 202, 202);
+  }
+  .button-color--update {
+    background-color: rgba(76, 175, 80, 0.9);
+    color: white;
+    margin-top: 0;
+  }
+  .button-color--update:hover {
+    background-color: rgba(56, 155, 60, 0.9);
   }
 
   .icons {
