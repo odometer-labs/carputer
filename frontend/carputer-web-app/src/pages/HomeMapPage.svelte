@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { derived } from 'svelte/store';
   import Map from 'ol/Map.js';
   import View from 'ol/View.js';
   import TileLayer from 'ol/layer/Tile.js';
@@ -24,7 +25,6 @@
   import { trackStore } from '../stores/trackStore'
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
   import SystemIndicators from "../assets/components/SystemIndicators.svelte";
-  import { listTracks } from '../api/restApi';
   //remove this later
   import type { Track } from '../api/types';
 
@@ -75,6 +75,30 @@
   let zoomLevel: number = 18;
   $: zoomLevel = $preferences.defaultZoom; // default zoom level when centering on user
 
+  // this is the list of tracks that is shown on the page, filtered
+  const filteredTracks = derived(
+    [trackStore, preferences],
+    ([$trackStore, $preferences]) => {
+      //set up the date string so that you can compare
+      const filterDate = $preferences.showTracksAfterDate
+        ? new Date($preferences.showTracksAfterDate + "T00:00:00")
+        : null;
+
+      return {
+        tracks: $trackStore.tracks.filter(track => {
+          const start = new Date(track.start_time);
+
+          if ((filterDate) && (start < filterDate)) {
+            return false;
+          }
+
+          return true;
+        }),
+        selectedTrackId: $trackStore.selectedTrackId
+      };
+    }
+  );
+
   function getUserIconScale(): number {
     return 0.6 + ($preferences.iconSizeLevel * 0.2);
   }
@@ -107,8 +131,8 @@
     }, 500);
 
     // subscribes to track changes
-    const unsubscribe = trackStore.subscribe(({ tracks, selectedTrackId, hiddenTrackIds }) => {
-      renderTracks(tracks, selectedTrackId, hiddenTrackIds);
+    const unsubscribe = filteredTracks.subscribe(({ tracks, selectedTrackId }) => {
+      renderTracks(tracks, selectedTrackId);
     });
     //TODO: uncomment this for real data from back end
     //trackStore.loadTracks();  //this loads in the old tracks from backend.
@@ -295,6 +319,9 @@
         if (trackId != null) {
           trackStore.selectTrack(trackId);
         }
+      },
+      {
+        layerFilter: (layer) => layer === oldTrackLayer
       });
     });
   }
@@ -444,11 +471,8 @@
       return;
     }
 
-    //check if user maker feature is up
-    if (!userMarker) {
-      // use the coord from the user to add it to the current users track line
-      applyTrackLine(coords);
-    }
+    // use the coord from the user to add it to the current users track line
+    applyTrackLine(coords);
 
     if (!userMarker) {
       // first fix: create marker feature and add to map
@@ -580,7 +604,7 @@
   // this is used to make the track line for the user, given that the coordnates pushed
   // in are the user's coordinates.
   function applyTrackLine(coords : number[]){
-    // this adds a line (red line) so the user can see where they have been 
+    // this adds a line (blue line) so the user can see where they have been (current track) 
     if ($trackStore.isTracking) { 
       //this determines if this is the beggining of a new line 
       if (!currentTrackFeature) { 
@@ -599,11 +623,7 @@
   }
 
   // set up the old tracks that the user has been on previously
-  function renderTracks(
-    tracks: Track[],
-    selectedTrackId: number | null,
-    hiddenTrackIds: Set<number>
-    ) : void {
+  function renderTracks(tracks: Track[], selectedTrackId: number | null) : void {
     //check if the trackSource exists
     if (!oldTrackSource) return;
 
@@ -611,8 +631,6 @@
     oldTrackSource.clear();
 
     tracks.forEach((track) => {
-      if (hiddenTrackIds.has(track.track_id)) return;
-
       const coords = track.geom.coordinates.map(([lon, lat]) =>
         fromLonLat([lon, lat])
       );

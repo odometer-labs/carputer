@@ -10,8 +10,6 @@ export interface Tracks {
   tracks: Track[];  // holds the tracks from backend.
 
   selectedTrackId: number | null;
-  hiddenTrackIds: Set<number>;    //this is used to figure out which tracks
-                                  // will be hidden.
 }
 
 
@@ -29,7 +27,6 @@ class TrackStore {
       tracks: [],
 
       selectedTrackId: null,
-      hiddenTrackIds: new Set()
     });
     
     //this is to make it into a store
@@ -86,24 +83,6 @@ class TrackStore {
       ...state,
       selectedTrackId: state.selectedTrackId === trackId ? null : trackId
     }));
-  }
-
-  // this is used to toggel what is visible
-  toggleTrackVisibility(trackId: number) {
-    this.store.update(state => {
-      const hidden = new Set(state.hiddenTrackIds);
-
-      if (hidden.has(trackId)) {
-        hidden.delete(trackId);
-      } else {
-        hidden.add(trackId);
-      }
-
-      return {
-        ...state,
-        hiddenTrackIds: hidden
-      };
-    });
   }
 
   //this might be deleted later, for now it helps showcase tracks on the map

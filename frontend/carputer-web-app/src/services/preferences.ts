@@ -5,6 +5,7 @@ const STORAGE_KEY = "carputer.preferences.v1";
 export interface Preferences {
   toggleSomething: boolean;
   milesToDiscoverRoads: number;
+  showTracksAfterDate: string | null;
   nightMode: boolean;
   brightness: number;
   defaultZoom: number;
@@ -16,6 +17,7 @@ type PreferencesPatch = Partial<Preferences>;
 export const DEFAULT_PREFERENCES: Preferences = {
   toggleSomething: false,
   milesToDiscoverRoads: 50,
+  showTracksAfterDate: null,
   nightMode: false,
   brightness: 100,
   defaultZoom: 18,
@@ -73,6 +75,10 @@ function sanitizePreferences(
     brightness: clampBrightness(rawPreferences.brightness),
     defaultZoom: clampZoom(rawPreferences.defaultZoom),
     iconSizeLevel: clampIconSizeLevel(rawPreferences.iconSizeLevel),
+    showTracksAfterDate: 
+      rawPreferences.showTracksAfterDate === "string"
+      ? rawPreferences.showTracksAfterDate
+      : null,
   };
 }
 

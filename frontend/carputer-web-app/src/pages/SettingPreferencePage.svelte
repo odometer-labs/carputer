@@ -28,6 +28,14 @@
     updatePreferences({ brightness: Number(input.value) });
   }
 
+  function handleTracksAfterDateChange(event: Event) : void {
+    const input = event.currentTarget as HTMLInputElement;
+
+    updatePreferences({
+      showTracksAfterDate: input.value ? input.value : null
+    });
+  }
+
   // defaultZoom stored as 12–21; displayed as 1–10 (display = zoom - 11)
   function incrementZoom(): void {
     preferences.update((p) => ({ ...p, defaultZoom: Math.min(21, p.defaultZoom + 1) }));
@@ -90,6 +98,25 @@
           on:input={handleMilesChange}
         >
         <span style="text-align: right; width: 30px;"><b>{$preferences.milesToDiscoverRoads}</b></span>
+      </div>
+    </div>
+
+    <div class="option-box">
+      <h4>Show Tracks After:</h4>
+
+      <div>
+        <input
+          type="date"
+          value={$preferences.showTracksAfterDate ?? ""}
+          on:change={handleTracksAfterDateChange}
+        />
+
+        <button 
+          on:click={() => updatePreferences({ showTracksAfterDate: null })}
+          class="date-btn"
+        >
+          Clear
+        </button>
       </div>
     </div>
   </div>
@@ -213,6 +240,21 @@
     min-width: 24px;
     text-align: center;
     font-size: 1.1rem;
+  }
+
+  .date-btn {
+    height: 28px;
+    padding: 0 8px;
+    font-size: 0.85rem;
+    -webkit-text-fill-color: black;
+    border: 1px solid #ccc;
+    background: rgb(130, 130, 130);
+    cursor: pointer;
+    align-items: center;
+    outline: none;
+  }
+  .date-btn:active {
+    background-color: rgb(100, 100, 100);
   }
 
 </style>
