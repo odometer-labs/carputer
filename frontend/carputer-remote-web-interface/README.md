@@ -52,3 +52,5 @@ npm run dev
 
 - Routing is handled in `src/App.svelte`.
 - Navigation helpers are in `src/utils/navigation.ts`.
+- The logs page fetches a static device log file from `/device-logs/carputer-system.log`.
+- On the Raspberry Pi, store the source log at `/opt/carputer/logs/carputer-system.log` and expose it through the web server, since the browser cannot read arbitrary filesystem paths directly.
