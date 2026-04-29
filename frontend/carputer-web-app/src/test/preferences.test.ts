@@ -46,6 +46,7 @@ describe("preferences service", () => {
         brightness: 8,
         defaultZoom: 30,
         iconSizeLevel: -4,
+        showTracksAfterDate: "04-12-2025"
       }),
     );
 
@@ -56,6 +57,7 @@ describe("preferences service", () => {
       brightness: 10,
       defaultZoom: 21,
       iconSizeLevel: 1,
+      showTracksAfterDate: null,
     });
   });
 
@@ -76,6 +78,7 @@ describe("preferences service", () => {
       milesToDiscoverRoads: 75,
       defaultZoom: 12,
       iconSizeLevel: 5,
+      showTracksAfterDate: null,
     });
   });
 
@@ -116,5 +119,13 @@ describe("preferences service", () => {
         Object.defineProperty(globalThis, "localStorage", originalDescriptor);
       }
     }
+  });
+
+  it("handles showTracksAfterDate correctly", async () => {
+    const { savePreferences, loadPreferences } = await loadPreferencesModule();
+
+    savePreferences({ showTracksAfterDate: "2026-04-28" });
+
+    expect(loadPreferences().showTracksAfterDate).toBe("2026-04-28");
   });
 });

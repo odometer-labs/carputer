@@ -65,6 +65,15 @@ function clampIconSizeLevel(value: unknown): number {
   return Math.round(Math.min(5, Math.max(1, numericValue)));
 }
 
+function validateDate(date: string | null | undefined): string | null {
+  if (typeof date !== "string") return null; //checks if it's a string
+
+  // check if it's in the correct format too
+  if (!(/^\d{4}-\d{2}-\d{2}$/).test(date)) return null;
+
+  return date;
+}
+
 function sanitizePreferences(
   rawPreferences: Partial<Preferences> = {},
 ): Preferences {
@@ -75,10 +84,7 @@ function sanitizePreferences(
     brightness: clampBrightness(rawPreferences.brightness),
     defaultZoom: clampZoom(rawPreferences.defaultZoom),
     iconSizeLevel: clampIconSizeLevel(rawPreferences.iconSizeLevel),
-    showTracksAfterDate: 
-      rawPreferences.showTracksAfterDate === "string"
-      ? rawPreferences.showTracksAfterDate
-      : null,
+    showTracksAfterDate: validateDate(rawPreferences.showTracksAfterDate),
   };
 }
 
