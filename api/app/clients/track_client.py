@@ -99,7 +99,23 @@ class TrackClient:
                 conn.commit()
                 return {"result": "success"}
 
-    def add_track_point(self, track_id: int, track_point: TrackPoint):
+    def add_track_point(self, track_point: TrackPoint):
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """CALL gps.add_track_point(%s, %s, %s, %s, %s)""",
+                    (
+                        datetime.now(timezone.utc),
+                        track_point.latitude,
+                        track_point.longitude,
+                        track_point.speed,
+                        track_point.heading,
+                    ),
+                )
+                conn.commit()
+                return {"result": "success"}
+
+    def import_track_point(self, track_id: int, track_point: TrackPoint):
         with get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
