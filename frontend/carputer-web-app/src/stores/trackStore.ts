@@ -31,7 +31,7 @@ class TrackStore {
 
       this.store.set({
         isTracking: true,
-        trackId: res.createdTrackId
+        trackId: res.create_track
       });
     } catch (error) {
       console.error(error)

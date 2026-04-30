@@ -17,7 +17,7 @@
 # Configuration
 # -----------------------------------------------------------------------------
 DOCKER_COMPOSE := docker compose
-PI_HOST ?= emb_usr@10.200.110.128
+PI_HOST ?= emb_usr@10.200.108.160
 PI_DIR := /opt/carputer
 
 # Multi-arch build configuration

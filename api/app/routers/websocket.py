@@ -16,7 +16,13 @@ async def send_position(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
-            await websocket.send_text(json.dumps(track_client))
+            payload = {
+                "latitude": track_client.latitude,
+                "longitude": track_client.longitude,
+                "speed": track_client.speed,
+                "heading": track_client.heading
+            }
+            await websocket.send_text(json.dumps(payload))
             await asyncio.sleep(0.25)
     except WebSocketDisconnect as e:
         pass
@@ -27,11 +33,15 @@ async def recv_position(websocket: WebSocket):
     try:
         while True:
             data: str = await websocket.receive_text() # gpsd data should be a json string
-            gpsd = json.loads(data)
+            gpsd: dict = json.loads(data)
 
-            track_client.latitude = gpsd["lat"]
-            track_client.longitude = gpsd["lon"]
-            track_client.speed = gpsd["speed"]
-            track_client.heading = gpsd["track"]
+            # Real gpsd TPV packets omit lat/lon/speed/track when there is no fix
+            if "lat" not in gpsd or "lon" not in gpsd:
+                continue
+
+            track_client.latitude = gpsd.get("lat", track_client.latitude)
+            track_client.longitude = gpsd.get("lon", track_client.longitude)
+            track_client.speed = gpsd.get("speed", track_client.speed)
+            track_client.heading = gpsd.get("track", track_client.heading)
     except WebSocketDisconnect as e:
         pass

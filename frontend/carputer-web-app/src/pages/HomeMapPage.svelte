@@ -12,13 +12,13 @@
   import VectorSource from 'ol/source/Vector.js';
   import { Style, Circle, Fill, Stroke, RegularShape, Icon, Text } from 'ol/style.js';
   import 'ol/ol.css';
-  import { gpsService } from '../fake-api/gpsService';
-  import type { GPSPosition } from '../fake-api/types';
+  import { getCurrentPosition, subscribeToPositionStream } from '../api/restApi';
+  import type { GPSData } from '../api/types';
   import { push } from 'svelte-spa-router';
   import { Cluster } from 'ol/source';
   import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
   import { preferences } from '../services/preferences';
-  import aprsIconUrl from '../assets/aprs-bold.svg';
+  import aprsIconUrl from '../assets/icons/aprs-bold.svg';
   import userArrowIconUrl from '../assets/icons/maps-arrow-blue-white.svg';
   import { trackStore } from '../stores/trackStore'
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
@@ -59,6 +59,7 @@
 
   // device orientation listener (reserved for future compass integration)
   let orientationListener: ((event: DeviceOrientationEvent) => void) | null = null;
+  let stopGPSSubscription: (() => void) | null = null;
 
   let zoomLevel: number = 18;
   $: zoomLevel = $preferences.defaultZoom; // default zoom level when centering on user
@@ -75,7 +76,7 @@
   onMount(() => {
     try {
       loadMap();             // create map instance and hook events
-      startGPSTracking();    // begin receiving simulated GPS data
+      startGPSTracking();    // begin receiving backend GPS data
     } catch (error: unknown) {
       reportVitalError(error, 'HomeMapPage.onMount');
 
@@ -95,7 +96,8 @@
 
     return () => {
       map?.setTarget(undefined);
-      gpsService.stop();
+      stopGPSSubscription?.();
+      stopGPSSubscription = null;
 
       if (orientationListener) {
         window.removeEventListener('deviceorientationabsolute', orientationListener);
@@ -330,92 +332,110 @@
   }
 
   /**
-   * Start receiving positions from the GPS service (NMEA playback or gpsfake).
-   * Each update: stores coords and heading, creates/moves the marker feature,
-   * recentres the map if locked, and applies heading rotation in compass mode.
-   * See src/fake-api/README.md for mode switching and configuration.
+   * Start receiving positions from backend API.
+   * Pulls one initial snapshot then subscribes to /ws/get-position updates.
    */
   function startGPSTracking(): void {
-    gpsService.start(
-      (position: GPSPosition) => {
-        const lon: number = position.longitude;
-        const lat: number = position.latitude;
-        if (typeof position.heading === 'number' && Number.isFinite(position.heading)) {
-          latestHeadingDegrees = position.heading;
-        }
-        const coords = fromLonLat([lon, lat]);
-        latestUserCoords = coords;
-        
-        if (map) {
-          if (!userMarker) {
-            // first fix: create marker feature and add to map
-            userMarker = new Feature({
-              geometry: new Point(coords)
-            });
+    getCurrentPosition()
+      .then((position) => handleGPSPosition(position))
+      .catch((error: unknown) => {
+        const message = `Initial GPS fetch failed: ${String(error)}`;
+        locationStatus = message;
+        reportNonVitalError(error, 'HomeMapPage.getCurrentPosition');
+      });
 
-            userMarker.setStyle(new Style({
-              image: new Circle({
-                radius: getUserMarkerRadius(),
-                fill: new Fill({ color: '#3399CC' }),
-                stroke: new Stroke({ color: '#fff', width: 2 })
-              })
-            }));
-
-            vectorSource = new VectorSource({
-              features: [userMarker]
-            });
-
-            if (userLayer) {
-              map.removeLayer(userLayer);
-            }
-
-            userLayer = new VectorLayer({
-              source: vectorSource,
-              updateWhileAnimating: true,
-              updateWhileInteracting: true
-            });
-
-            map.addLayer(userLayer);
-            map.render();
-          } else {
-            // subsequent fixes: move marker and refresh style
-            const geometry = userMarker.getGeometry();
-            if (geometry) {
-              geometry.setCoordinates(coords);
-            } else {
-              userMarker.setGeometry(new Point(coords));
-            }
-            
-            if (isFollowingUser) {
-              updateUserMarkerStyle();
-            }
-            
-            if (vectorSource) {
-              vectorSource.changed();
-            }
-
-            // Request a redraw so marker motion remains visible during map drag interactions.
-            map.render();
-          }
-
-          if (!hasCenteredInitially) {
-            centerOnUserLocation(true);
-            hasCenteredInitially = true;
-          } else if (isFollowingUser) {
-            centerOnUserLocation(false);
-          }
-
-          applyHeadingRotation();
-          
-          locationStatus = `Location: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
-        }
+    stopGPSSubscription = subscribeToPositionStream(
+      (position: GPSData) => {
+        handleGPSPosition(position);
       },
       (error: string) => {
         console.error('GPS error:', error);
         locationStatus = `GPS Error: ${error}`;
-        reportNonVitalError(error, 'HomeMapPage.gpsService');
+        reportNonVitalError(error, 'HomeMapPage.subscribeToPositionStream');
       }
     );
+  }
+
+  function handleGPSPosition(position: GPSData): void {
+    const lon: number = Number(position.longitude);
+    const lat: number = Number(position.latitude);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return;
+    }
+
+    if (typeof position.heading === 'number' && Number.isFinite(position.heading)) {
+      latestHeadingDegrees = position.heading;
+    }
+
+    const coords = fromLonLat([lon, lat]);
+    latestUserCoords = coords;
+
+    if (!map) {
+      return;
+    }
+
+    if (!userMarker) {
+      // first fix: create marker feature and add to map
+      userMarker = new Feature({
+        geometry: new Point(coords)
+      });
+
+      userMarker.setStyle(new Style({
+        image: new Circle({
+          radius: getUserMarkerRadius(),
+          fill: new Fill({ color: '#3399CC' }),
+          stroke: new Stroke({ color: '#fff', width: 2 })
+        })
+      }));
+
+      vectorSource = new VectorSource({
+        features: [userMarker]
+      });
+
+      if (userLayer) {
+        map.removeLayer(userLayer);
+      }
+
+      userLayer = new VectorLayer({
+        source: vectorSource,
+        updateWhileAnimating: true,
+        updateWhileInteracting: true
+      });
+
+      map.addLayer(userLayer);
+      map.render();
+    } else {
+      // subsequent fixes: move marker and refresh style
+      const geometry = userMarker.getGeometry();
+      if (geometry) {
+        geometry.setCoordinates(coords);
+      } else {
+        userMarker.setGeometry(new Point(coords));
+      }
+
+      if (isFollowingUser) {
+        updateUserMarkerStyle();
+      }
+
+      if (vectorSource) {
+        vectorSource.changed();
+      }
+
+      // Request a redraw so marker motion remains visible during map drag interactions.
+      map.render();
+    }
+
+    if (!hasCenteredInitially) {
+      centerOnUserLocation(true);
+      hasCenteredInitially = true;
+    } else if (isFollowingUser) {
+      centerOnUserLocation(false);
+    }
+
+    applyHeadingRotation();
+
+    locationStatus = `Location: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
   }
 
   /**
@@ -542,12 +562,7 @@
 
   // this function changes route to /Dashboard
   function goToDashboard() : void {
-    push("/Dashboard");
-  }
-  
-  // this function changes route to /Dashboard
-  function goToMapDownload() : void {
-    push("/MapDownload");
+    push("/SystemData");
   }
 
   let isDropdownOpen: boolean = false;
@@ -593,15 +608,6 @@
             </button>
         </li>
         <li style="padding: 0;">
-            <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false; goToMapDownload()}}>
-              <i class="iconoir-download dropdown-menu_btn_icons"></i>
-              Download Map
-              <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
-                <sub class="sub_text">2GB free</sub>
-              </div>  
-            </button>
-        </li>
-        <li style="padding: 0;">
             <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false; goToSettingPreference()}}>
               <i class="iconoir-settings dropdown-menu_btn_icons"></i>
               Settings
@@ -613,7 +619,7 @@
         <li style="padding: 0;">
           <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false; goToDashboard()}}>
             <i class="iconoir-info-circle dropdown-menu_btn_icons"></i>
-            System Info
+            System Data
             <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
                 <sub class="sub_text">Patch Level: 0.0.0</sub>
             </div>  

@@ -5,7 +5,7 @@ import * as api from "../api/restApi";
 
 describe("trackStore", () => {
   it("start() sets isTracking and trackId", async () => {
-    vi.spyOn(api, "startTrack").mockResolvedValue({ createdTrackId: 42 });
+    vi.spyOn(api, "startTrack").mockResolvedValue({ create_track: 42 });
 
     await trackStore.start();
     const state = get(trackStore);
@@ -15,7 +15,7 @@ describe("trackStore", () => {
   });
 
   it("end() resets the isTracking and trackId", async () => {
-    vi.spyOn(api, "endTrack").mockResolvedValue({ success: "true" });
+    vi.spyOn(api, "endTrack").mockResolvedValue({ result: "true" });
 
     await trackStore.end();
     const state = get(trackStore);

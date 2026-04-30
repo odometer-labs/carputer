@@ -2,8 +2,8 @@
   import { preferences } from "../../services/preferences";
 
   //images to use
-  import light_mode from "../light-mode-bold.svg";
-  import dark_mode from "../dark-mode-bold.svg";
+  import light_mode from "../icons/light-mode-bold.svg";
+  import dark_mode from "../icons/dark-mode-bold.svg";
 
 </script>
 

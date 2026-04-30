@@ -1,8 +1,17 @@
+# Node and Vite
 node_modules
-.env
-.vscode
+dist-ssr
+
+# Editor directories and files
+.vscode/*
 .idea
 .DS_Store
+*.local
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -368,3 +377,4 @@ vite.config.ts.timestamp-*
 
 # Github Copilot Agentic files
 .github/copilot-instructions.md
+.claude
