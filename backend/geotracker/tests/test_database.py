@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 import mapbox_vector_tile
 
+
 def test_db_connection(db_conn):
     """
     Verify that db_conn fixture actually works.
@@ -87,8 +88,11 @@ def test_track_name(db_conn):
         cur.execute("SELECT end_time FROM gps.tracks WHERE track_id = %s;", (track_id,))
         assert cur.fetchone()["end_time"] is not None
 
-        cur.execute("SELECT track_name FROM gps.tracks WHERE track_id = %s;", (track_id,))
+        cur.execute(
+            "SELECT track_name FROM gps.tracks WHERE track_id = %s;", (track_id,)
+        )
         assert cur.fetchone()["track_name"] == "Hello"
+
 
 def test_add_track_point(db_conn, sample_track_points):
     """
@@ -753,6 +757,7 @@ def test_update_track_metadata(db_conn):
         assert str(updated["start_time"]).startswith("2026-01-01 08:00:00")
         assert str(updated["end_time"]).startswith("2026-01-01 09:00:00")
         assert str(updated["track_name"]) == "Hello"
+
 
 def test_get_tracks_near_location(db_conn):
     """
