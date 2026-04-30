@@ -1009,47 +1009,6 @@ def test_geometry_structure_after_validation(db_conn, sample_track_points):
         assert "LineString" in geom_type
 
 
-def test_get_track_tiles_returns_valid_mvt(db_conn):
-    """
-    Verify retrieving track tiles.
-    """
-    # Create a dummy track that crosses the 0,0 tile
-    with db_conn.cursor() as cur:
-        cur.execute("""
-            INSERT INTO gps.tracks (track_id, start_time) VALUES (123, NOW());
-            INSERT INTO gps.track_lines (track_id, geom, geom_wm) 
-            VALUES (
-                123, 
-                ST_GeogFromText('LINESTRING(0 0, 1 1)'), 
-                ST_Transform(ST_GeomFromText('LINESTRING(0 0, 1 1)', 4326), 3857)
-            );
-        """)
-
-        cur.execute("SELECT gps.get_track_tiles(0, 0, 0) AS tile;")
-        row = cur.fetchone()
-
-        tile_binary = row["tile"]
-
-        # 3. ASSERT:
-        assert tile_binary is not None, "Function returned None"
-        assert len(tile_binary) > 0, "MVT binary is empty"
-
-        # Decode the MVT binary
-        decoded_tile = mapbox_vector_tile.decode(tile_binary)
-
-        # Verify the layer name matches ST_AsMVT call ('tracks_layer')
-        assert "tracks_layer" in decoded_tile
-
-        features = decoded_tile["tracks_layer"]["features"]
-        assert len(features) > 0, "No features found in MVT layer"
-
-        # Check if specific track_id is in the properties
-        assert int(features[0]["properties"]["track_id"]) == 123
-
-
-import mapbox_vector_tile
-
-
 # ---------------------------
 # 1. ALL MODE
 # ---------------------------
@@ -1118,10 +1077,6 @@ def test_get_tracks_mvt_single_mode(db_conn):
 
     assert len(features) == 1
     assert int(features[0]["properties"]["track_id"]) == 2001
-
-
-import mapbox_vector_tile
-from datetime import datetime
 
 
 def test_get_tracks_mvt_nearby_mode(db_conn):
