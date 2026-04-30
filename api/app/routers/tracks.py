@@ -78,11 +78,7 @@ async def start_track(name: Optional[str] = None):
     """
     Starts track for the trip. If no name is provided, it defaults to NULL.
     """
-<<<<<<< HEAD
 
-=======
-    
->>>>>>> 5ba82e6 (supporting track name tests and endpoints)
     return track_client.start_track(name)
 
 
@@ -112,6 +108,7 @@ async def add_track_point(track_point: TrackPoint):
 
     return track_client.add_track_point(track_point)
 
+
 @router.get("/tracks-latest-point")
 async def get_latest_track_point():
     """
@@ -125,8 +122,7 @@ async def get_latest_track_point():
 async def check_new_road():
     """
     Checks if the latest point is a new road
-    """import Response
-import status
+    """
 
     return track_client.check_new_road()
 
