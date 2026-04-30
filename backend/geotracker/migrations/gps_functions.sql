@@ -113,6 +113,34 @@ END;
 $$;
 -- Add track point with track id
 CREATE OR REPLACE PROCEDURE gps.add_track_point(
+        p_time_stamp TIMESTAMPTZ,
+        p_latitude DOUBLE PRECISION,
+        p_longitude DOUBLE PRECISION,
+        p_speed_mps DOUBLE PRECISION,
+        p_heading_deg DOUBLE PRECISION
+    ) LANGUAGE plpgsql AS $$
+DECLARE p_track_id BIGINT;
+BEGIN
+SELECT track_id INTO p_track_id
+FROM gps.tracks
+WHERE end_time is NULL;
+INSERT INTO gps.track_points (
+        track_id,
+        time_stamp,
+        geom,
+        speed_mps,
+        heading_deg
+    )
+VALUES (
+        p_track_id,
+        p_time_stamp,
+        ST_Point(p_longitude, p_latitude, 4326)::GEOGRAPHY,
+        p_speed_mps,
+        p_heading_deg
+    );
+END;
+$$;
+CREATE OR REPLACE PROCEDURE gps.add_track_point(
         p_track_id BIGINT,
         p_time_stamp TIMESTAMPTZ,
         p_latitude DOUBLE PRECISION,
