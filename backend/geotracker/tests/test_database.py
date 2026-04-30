@@ -16,7 +16,7 @@ def test_db_connection(db_conn):
 
 def test_create_and_end_track(db_conn):
     """
-    Test track creation and end.
+    Test track creation and end and auto generated name.
     """
     with db_conn.cursor() as cur:
         cur.execute("SELECT gps.create_track() as id;")
