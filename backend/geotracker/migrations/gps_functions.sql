@@ -140,6 +140,7 @@ VALUES (
     );
 END;
 $$;
+-- Add track point with track id
 CREATE OR REPLACE PROCEDURE gps.add_track_point(
         p_track_id BIGINT,
         p_time_stamp TIMESTAMPTZ,
