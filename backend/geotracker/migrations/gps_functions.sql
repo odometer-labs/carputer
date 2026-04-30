@@ -111,17 +111,131 @@ SET end_time = NOW()
 WHERE end_time IS NULL;
 END;
 $$;
+-- Gets tracks vector tile based on mode -- all, single, nearby, road
+CREATE OR REPLACE FUNCTION gps.get_tracks_mvt(
+        z INTEGER,
+        x INTEGER,
+        y INTEGER,
+        mode TEXT DEFAULT 'all',
+        p_track_id BIGINT DEFAULT NULL,
+        p_within_meters DOUBLE PRECISION DEFAULT NULL
+    ) RETURNS bytea LANGUAGE plpgsql AS $$
+DECLARE mvt bytea;
+latest_track_id BIGINT;
+latest_geom GEOGRAPHY;
+current_track_id BIGINT;
+current_track_geom_wm GEOMETRY;
+tile_env GEOMETRY;
+BEGIN tile_env := ST_TileEnvelope(z, x, y);
+--------------------------------------------------
+-- Nearby only: fetch latest point
+--------------------------------------------------
+IF mode = 'nearby' THEN
+SELECT geom,
+    track_id INTO latest_geom,
+    latest_track_id
+FROM gps.get_latest_track_point()
+ORDER BY time_stamp DESC
+LIMIT 1;
+END IF;
+--------------------------------------------------
+-- Road only: fetch active track
+--------------------------------------------------
+IF mode = 'road' THEN
+SELECT t.track_id,
+    tl.geom_wm INTO current_track_id,
+    current_track_geom_wm
+FROM gps.tracks t
+    JOIN gps.track_lines tl ON t.track_id = tl.track_id
+WHERE t.end_time IS NULL
+ORDER BY t.start_time DESC
+LIMIT 1;
+END IF;
+--------------------------------------------------
+-- Main Query 
+--------------------------------------------------
+SELECT ST_AsMVT(tile, 'tracks_layer') INTO mvt
+FROM (
+        SELECT t.track_id,
+            t.start_time,
+            t.end_time,
+            t.track_name,
+            ST_AsMVTGeom(
+                tl.geom_wm,
+                tile_env,
+                4096,
+                -- 4096 x 4096 units (grid resolution)
+                256,
+                -- buffer (~6% more space)
+                true
+            ) AS geom
+        FROM gps.tracks t
+            JOIN gps.track_lines tl ON t.track_id = tl.track_id
+        WHERE tl.geom_wm && tile_env
+            AND (
+                --------------------------------------------------
+                -- ALL MODE
+                --------------------------------------------------
+                mode = 'all' -------------------------------------
+                -- SINGLE 
+                --------------------------------------------------
+                OR (
+                    mode = 'single'
+                    AND p_track_id IS NOT NULL
+                    AND t.track_id = p_track_id
+                ) --------------------------------------------------
+                -- NEARBY
+                --------------------------------------------------
+                OR (
+                    mode = 'nearby'
+                    AND p_within_meters IS NOT NULL
+                    AND latest_track_id IS NOT NULL
+                    AND latest_geom IS NOT NULL
+                    AND t.track_id <> latest_track_id
+                    AND ST_DWithin(
+                        tl.geom,
+                        latest_geom,
+                        p_within_meters
+                    )
+                ) --------------------------------------------------
+                -- ROAD
+                --------------------------------------------------
+                OR (
+                    mode = 'road'
+                    AND current_track_id IS NOT NULL
+                    AND current_track_geom_wm IS NOT NULL
+                    AND t.track_id <> current_track_id
+                    AND t.end_time IS NOT NULL
+                    AND ST_DWithin(
+                        ST_Transform(tl.geom_wm, 4326)::geography,
+                        ST_Transform(current_track_geom_wm, 4326)::geography,
+                        30
+                    )
+                )
+            )
+    ) AS tile;
+--------------------------------------------------
+-- Normalize empty tile → NULL
+--------------------------------------------------
+IF mvt IS NULL
+OR length(mvt) = 0 THEN RETURN NULL;
+END IF;
+RETURN mvt;
+END;
+$$;
 -- Fetches a single track as a spatial LineString
 CREATE OR REPLACE FUNCTION gps.retrieve_track(retrieve_track_id INTEGER) RETURNS TABLE (
         track_id BIGINT,
         geom JSONB,
         start_time TIMESTAMPTZ,
-        end_time TIMESTAMPTZ
+        end_time TIMESTAMPTZ,
+        track_name VARCHAR(50)
     ) LANGUAGE plpgsql AS $$ BEGIN RETURN QUERY
 SELECT t.track_id,
     ST_AsGeoJSON(tl.geom, 6)::jsonb,
     t.start_time,
-    t.end_time
+    t.end_time,
+    t.track_name
 FROM gps.tracks AS t
     INNER JOIN gps.track_lines AS tl ON t.track_id = tl.track_id
 WHERE retrieve_track_id = t.track_id;
@@ -132,12 +246,14 @@ CREATE OR REPLACE FUNCTION gps.view_all_tracks() RETURNS TABLE (
         track_id BIGINT,
         geom JSONB,
         start_time TIMESTAMPTZ,
-        end_time TIMESTAMPTZ
+        end_time TIMESTAMPTZ,
+        track_name VARCHAR(50)
     ) LANGUAGE plpgsql AS $$ BEGIN RETURN QUERY
 SELECT t.track_id,
     ST_AsGeoJSON(tl.geom, 6)::jsonb,
     t.start_time,
-    t.end_time
+    t.end_time,
+    t.track_name
 FROM gps.tracks AS t
     INNER JOIN gps.track_lines AS tl ON t.track_id = tl.track_id;
 END;
@@ -154,32 +270,6 @@ SET start_time = p_start_time,
     end_time = p_end_time,
     track_name = p_track_name
 WHERE track_id = update_track_id;
-END;
-$$;
-CREATE OR REPLACE FUNCTION gps.view_all_tracks_mvt(z integer, x integer, y integer) RETURNS bytea LANGUAGE plpgsql AS $$
-DECLARE mvt bytea;
-BEGIN --ST_AsMVT to aggregate all rows into a single binary tile
-SELECT ST_AsMVT(tile, 'tracks_layer') INTO mvt
-FROM (
-        SELECT t.track_id,
-            t.start_time,
-            t.end_time,
-            t.track_name,
-            -- Convert the geometry into the local coordinate system of the tile
-            ST_AsMVTGeom(
-                tl.geom_wm,
-                -- Web Mercator geometry
-                ST_TileEnvelope(z, x, y),
-                -- The bounding box of the requested tile
-                4096,
-                256,
-                true -- Extent, Buffer, Clip
-            ) AS geom
-        FROM gps.tracks AS t
-            INNER JOIN gps.track_lines AS tl ON t.track_id = tl.track_id -- Only process tracks that are actually inside this tile's area
-        WHERE tl.geom_wm && ST_TileEnvelope(z, x, y)
-    ) AS tile;
-RETURN mvt;
 END;
 $$;
 -- Cascading delete: removing a track removes all associated points and lines
@@ -222,6 +312,7 @@ CREATE OR REPLACE FUNCTION gps.get_latest_track_point() RETURNS TABLE (
         track_id BIGINT,
         time_stamp TIMESTAMPTZ,
         geom GEOGRAPHY(Point, 4326),
+        geom_wm GEOMETRY(Point, 3857),
         speed_mps DOUBLE PRECISION,
         heading_deg DOUBLE PRECISION
     ) LANGUAGE plpgsql AS $$ #variable_conflict use_column BEGIN RETURN QUERY
@@ -229,6 +320,7 @@ SELECT point_id,
     track_id,
     time_stamp,
     geom,
+    ST_Transform(geom::geometry, 3857) AS geom_wm,
     speed_mps,
     heading_deg
 FROM gps.track_points
@@ -262,12 +354,14 @@ CREATE OR REPLACE FUNCTION gps.get_track_lines_near_location(p_within_meters DOU
         track_id BIGINT,
         geom JSONB,
         start_time TIMESTAMPTZ,
-        end_time TIMESTAMPTZ
+        end_time TIMESTAMPTZ,
+        track_name VARCHAR(50)
     ) LANGUAGE plpgsql AS $$ BEGIN RETURN QUERY
 SELECT t.track_id,
     ST_AsGeoJSON(tl.geom, 6)::jsonb,
     t.start_time,
-    t.end_time
+    t.end_time,
+    t.track_name
 FROM gps.tracks AS t
     INNER JOIN gps.track_lines AS tl ON t.track_id = tl.track_id
     CROSS JOIN gps.get_latest_track_point() AS p
@@ -280,7 +374,8 @@ CREATE OR REPLACE FUNCTION gps.get_track_lines_using_road() RETURNS TABLE (
         track_id BIGINT,
         geom JSONB,
         start_time TIMESTAMPTZ,
-        end_time TIMESTAMPTZ
+        end_time TIMESTAMPTZ,
+        track_name VARCHAR(50)
     ) LANGUAGE plpgsql AS $$
 DECLARE current_track_id BIGINT;
 current_track_geom GEOGRAPHY;
@@ -299,7 +394,8 @@ RETURN QUERY
 SELECT t.track_id,
     ST_AsGeoJSON(tl.geom, 6)::jsonb,
     t.start_time,
-    t.end_time
+    t.end_time,
+    t.track_name
 FROM gps.tracks AS t
     INNER JOIN gps.track_lines AS tl ON t.track_id = tl.track_id
 WHERE t.track_id <> current_track_id
