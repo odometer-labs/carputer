@@ -82,6 +82,7 @@ END;
 $$;
 --- Standard entry point for raw GPS telemetry
 -- Units: Lat/Long (Decimal), Speed (m/s), Heading (0-360 deg)
+-- Add track point without track id
 CREATE OR REPLACE PROCEDURE gps.add_track_point(
         p_time_stamp TIMESTAMPTZ,
         p_latitude DOUBLE PRECISION,
@@ -110,6 +111,7 @@ VALUES (
     );
 END;
 $$;
+-- Add track point with track id
 CREATE OR REPLACE PROCEDURE gps.add_track_point(
         p_track_id BIGINT,
         p_time_stamp TIMESTAMPTZ,
