@@ -46,6 +46,7 @@ CREATE INDEX IF NOT EXISTS idx_track_lines_geom ON gps.track_lines USING GIST (g
 -- 4. CRUD OPERATIONS
 ---------------------------
 -- Handles logic to either start a new track or return the currently active one
+-- Create track function that auto generates a name when no name is passed in
 CREATE OR REPLACE FUNCTION gps.create_track() RETURNS BIGINT LANGUAGE plpgsql AS $$
 DECLARE new_track_id BIGINT;
 generated_name VARCHAR(50);
@@ -63,6 +64,7 @@ RETURNING track_id INTO new_track_id;
 RETURN new_track_id;
 END;
 $$;
+-- Create track function that is passed in a name
 CREATE OR REPLACE FUNCTION gps.create_track(p_track_name VARCHAR(50)) RETURNS BIGINT LANGUAGE plpgsql AS $$
 DECLARE new_track_id BIGINT;
 BEGIN
@@ -113,11 +115,14 @@ END;
 $$;
 -- Gets tracks vector tile based on mode -- all, single, nearby, road
 CREATE OR REPLACE FUNCTION gps.get_tracks_mvt(
+        -- z, x, y: address that builds the bounding box (tile envelope) for the vector tiles
         z INTEGER,
         x INTEGER,
         y INTEGER,
         mode TEXT DEFAULT 'all',
+        -- only needed for retrieval of a single track
         p_track_id BIGINT DEFAULT NULL,
+        -- only needed for retrieval of nearby tracks within a certain amount of meters
         p_within_meters DOUBLE PRECISION DEFAULT NULL
     ) RETURNS bytea LANGUAGE plpgsql AS $$
 DECLARE mvt bytea;
@@ -173,19 +178,21 @@ FROM (
             JOIN gps.track_lines tl ON t.track_id = tl.track_id
         WHERE tl.geom_wm && tile_env
             AND (
-                --------------------------------------------------
-                -- ALL MODE
-                --------------------------------------------------
-                mode = 'all' -------------------------------------
-                -- SINGLE 
-                --------------------------------------------------
+                ------------------------------------------------------
+                -- ALL MODE -- get all tracks in current tile envelope
+                ------------------------------------------------------
+                mode = 'all' -----------------------------------------
+                -- SINGLE -- retrieve track based on p_track_id 
+                --          AND in current tile envelope
+                ------------------------------------------------------
                 OR (
                     mode = 'single'
                     AND p_track_id IS NOT NULL
                     AND t.track_id = p_track_id
-                ) --------------------------------------------------
-                -- NEARBY
-                --------------------------------------------------
+                ) ------------------------------------------------------
+                -- NEARBY -- retrieves all tracks within p_within_meters
+                --            AND in current tile envelope 
+                --------------------------------------------------------
                 OR (
                     mode = 'nearby'
                     AND p_within_meters IS NOT NULL
@@ -197,9 +204,10 @@ FROM (
                         latest_geom,
                         p_within_meters
                     )
-                ) --------------------------------------------------
-                -- ROAD
-                --------------------------------------------------
+                ) -------------------------------------------------------------
+                -- ROAD -- retrieves all tracks that overlap with current track
+                --         AND in tile envelope
+                ---------------------------------------------------------------
                 OR (
                     mode = 'road'
                     AND current_track_id IS NOT NULL
