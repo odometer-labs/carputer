@@ -60,12 +60,12 @@ async def end_track():
     return track_client.end_track()
 
 @router.post("/tracks/point/{track_id}")
-async def add_track_point(track_id: int, track_point: TrackPoint):
+async def add_track_point(track_point: TrackPoint):
     """
     Adds a track point for the current track
     """
     
-    return track_client.add_track_point(track_id, track_point)
+    return track_client.add_track_point(track_point)
 
 @router.get("/tracks-latest-point")
 async def get_latest_track_point():

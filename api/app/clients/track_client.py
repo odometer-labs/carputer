@@ -62,12 +62,11 @@ class TrackClient:
                 conn.commit()
                 return {"result": "success"}
     
-    def add_track_point(self, track_id: int, track_point: TrackPoint):
+    def add_track_point(self, track_point: TrackPoint):
         with get_connection() as conn:
             with conn.cursor() as cursor:
-                cursor.execute("""CALL gps.add_track_point(%s, %s, %s, %s, %s, %s)""", 
-                            (track_id, 
-                                datetime.now(timezone.utc),
+                cursor.execute("""CALL gps.add_track_point(%s, %s, %s, %s, %s)""", 
+                            (datetime.now(timezone.utc),
                                 track_point.latitude, 
                                 track_point.longitude, 
                                 track_point.speed, 
@@ -91,21 +90,19 @@ class TrackClient:
                 result = cursor.fetchone()
                 return result
 
-
-
-def import_track(self, geojson_data):
-   
-    if isinstance(geojson_data, dict):
-        geojson_data = json.dumps(geojson_data)
-        
-    with get_connection() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute(
-                "SELECT gps.import_track(%s) as track_id;", 
-                (geojson_data,)
-            )
-            result = cursor.fetchone()
-            return {"track_id": result["track_id"], "status": "imported"}
-        
+    def import_track(self, geojson_data):
+    
+        if isinstance(geojson_data, dict):
+            geojson_data = json.dumps(geojson_data)
+            
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT gps.import_track(%s) as track_id;", 
+                    (geojson_data,)
+                )
+                result = cursor.fetchone()
+                return {"track_id": result["track_id"], "status": "imported"}
+            
 # singleton object
 track_client: TrackClient = TrackClient()

@@ -26,3 +26,10 @@ async def get_aprs_station(callsign: str):
     Retrieves details for a specific APRS station
     """
     return aprs_client.get_station(callsign)
+
+@router.post("/aprs/station/history")
+async def get_aprs_station_history(callsign: str, limit: int = 100):
+    """
+    Get recent packet history for a station
+    """
+    return aprs_client.get_station_history()
