@@ -432,11 +432,22 @@ echo ""
 # -----------------------------------------------------------------------------
 # Step 7 — Deploy APRS bridge to backend
 # -----------------------------------------------------------------------------
-info "Step 7: Creating APRS bridge to backend..."
+info "Step 7: Deploying APRS bridge from embedded/aprs_bridge..."
 
-APRS_BRIDGE="$APRS_DIR/aprs_bridge.py"
+APRS_BRIDGE_DIR="$APRS_DIR/aprs_bridge"
 
-cat > "$APRS_BRIDGE" <<'PYEOF'
+# Copy the APRS bridge module from the repo
+if [ -d "$DEPLOY_DIR/embedded/aprs_bridge" ]; then
+    if [ -d "$APRS_BRIDGE_DIR" ]; then
+        info "APRS bridge already exists at $APRS_BRIDGE_DIR."
+        confirm "Overwrite with latest from repo?" || { warn "Skipping APRS bridge update."; }
+    fi
+    cp -r "$DEPLOY_DIR/embedded/aprs_bridge" "$APRS_DIR/"
+    info "APRS bridge deployed from embedded/aprs_bridge."
+else
+    warn "embedded/aprs_bridge not found in repo — creating minimal bridge..."
+    mkdir -p "$APRS_BRIDGE_DIR"
+    cat > "$APRS_BRIDGE_DIR/bridge.py" <<'PYEOF'
 #!/usr/bin/env python3
 """
 APRS Bridge - Connects Direwolf to FastAPI Backend
@@ -450,6 +461,7 @@ import time
 import logging
 import requests
 from datetime import datetime
+import os
 
 # Configure logging
 logging.basicConfig(
@@ -458,10 +470,10 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-# Configuration
-KISS_HOST = 'localhost'
-KISS_PORT = 8001
-BACKEND_URL = 'http://localhost:8000/api/aprs/ingest'
+# Configuration from environment
+KISS_HOST = os.environ.get('KISS_HOST', 'localhost')
+KISS_PORT = int(os.environ.get('KISS_PORT', 8001))
+BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:8000/v1/aprs/ingest-raw')
 
 def parse_kiss_frame(frame):
     """Parse KISS frame from Direwolf"""
@@ -567,8 +579,16 @@ if __name__ == '__main__':
     main()
 PYEOF
 
-chmod +x "$APRS_BRIDGE"
-info "APRS bridge created at $APRS_BRIDGE."
+    cat > "$APRS_BRIDGE_DIR/__main__.py" <<'PYEOF'
+from .bridge import main
+if __name__ == '__main__':
+    main()
+PYEOF
+    cat > "$APRS_BRIDGE_DIR/__init__.py" <<'PYEOF'
+PYEOF
+    chmod +x "$APRS_BRIDGE_DIR/bridge.py"
+fi
+info "APRS bridge ready at $APRS_BRIDGE_DIR."
 echo ""
 
 # -----------------------------------------------------------------------------
@@ -589,7 +609,7 @@ Wants=network.target
 Type=simple
 User=$CURRENT_USER
 Group=plugdev
-WorkingDir=$APRS_DIR
+WorkingDirectory=$APRS_DIR
 ExecStartPre=/bin/sleep 5
 ExecStart=$APRS_DIR/start_aprs.sh
 Restart=on-failure
@@ -618,7 +638,11 @@ Requires=aprs-receiver.service
 [Service]
 Type=simple
 User=$CURRENT_USER
-ExecStart=/usr/bin/python3 $APRS_DIR/aprs_bridge.py
+WorkingDirectory=$APRS_DIR
+Environment="KISS_HOST=localhost"
+Environment="KISS_PORT=8001"
+Environment="BACKEND_URL=http://localhost:8000"
+ExecStart=/usr/bin/python3 -m aprs_bridge
 Restart=always
 RestartSec=10
 StandardOutput=journal

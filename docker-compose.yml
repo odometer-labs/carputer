@@ -116,7 +116,8 @@ services:
       timeout: 5s
       retries: 5
     volumes:
-      - ./backend/geotracker/migrations/gps_functions.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./backend/geotracker/migrations/gps_functions.sql:/docker-entrypoint-initdb.d/01_gps_functions.sql
+      - ./backend/geotracker/migrations/aprs_tables.sql:/docker-entrypoint-initdb.d/02_aprs_tables.sql
       - postgres_data:/var/lib/postgresql/data
     networks:
       - carputer
