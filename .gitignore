@@ -378,3 +378,6 @@ vite.config.ts.timestamp-*
 # Github Copilot Agentic files
 .github/copilot-instructions.md
 .claude
+
+# Private/local files
+CapstoneReview/
