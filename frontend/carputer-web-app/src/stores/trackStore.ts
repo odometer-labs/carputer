@@ -1,5 +1,5 @@
 import { writable, type Writable } from "svelte/store";
-import { startTrack, endTrack, listTracks } from "../api/restApi";
+import { startTrack, endTrack, listTracks, checkNewRoad } from "../api/restApi";
 import type { Track } from "../api/types"
 
 
@@ -8,8 +8,9 @@ export interface Tracks {
   trackId: number | null;
 
   tracks: Track[];  // holds the tracks from backend.
-
   selectedTrackId: number | null;
+
+  isOnNewRoad: boolean;
 }
 
 
@@ -25,8 +26,8 @@ class TrackStore {
       trackId: null,
 
       tracks: [],
-
       selectedTrackId: null,
+      isOnNewRoad: false,
     });
     
     //this is to make it into a store
@@ -91,6 +92,20 @@ class TrackStore {
       ...state, 
       tracks
     }));
+  }
+
+  //checks if the current road has been driven on in the past
+  async checkIfNewRoad() {
+    try {
+      const res = await checkNewRoad();
+
+      this.store.update(state => ({
+        ...state,
+        isOnNewRoad: res.is_new_road
+      }));
+    } catch (error) {
+      console.error(error);
+    }
   }
 }
 

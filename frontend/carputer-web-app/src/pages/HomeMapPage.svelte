@@ -75,6 +75,13 @@
   let zoomLevel: number = 18;
   $: zoomLevel = $preferences.defaultZoom; // default zoom level when centering on user
 
+  //this is to prevent having too many calls for $trackStore.checkIfNewRoad
+  let lastCheckTime: number = 0;
+  const CHECK_ROAD_INTERVAL: number = 1000; //one second
+
+  // this is used to prevent the user track having too many points on 1 spot
+  let lastUserTrackCoord: [number, number] | null = null;
+
   // this is the list of tracks that is shown on the page, filtered
   const filteredTracks = derived(
     [trackStore, preferences],
@@ -131,7 +138,7 @@
     }, 500);
 
     // subscribes to track changes
-    const unsubscribe = filteredTracks.subscribe(({ tracks, selectedTrackId }) => {
+    const unsubscribeTracks = filteredTracks.subscribe(({ tracks, selectedTrackId }) => {
       renderTracks(tracks, selectedTrackId);
     });
     //TODO: uncomment this for real data from back end
@@ -141,7 +148,7 @@
     trackStore.setTrack(mockTracks);
 
     return () => {
-      unsubscribe();
+      unsubscribeTracks();
 
       map?.setTarget(undefined);
       stopGPSSubscription?.();
@@ -474,6 +481,9 @@
     // use the coord from the user to add it to the current users track line
     applyTrackLine(coords);
 
+    // checks if the current road is a new road or not.
+    checkRoadHistory();
+
     if (!userMarker) {
       // first fix: create marker feature and add to map
       userMarker = new Feature({
@@ -601,9 +611,21 @@
     }
   ];
 
+  // this function checks if the user has passed a certain amount of distance
+  // I made this becuase I realized that the applyTrackLine will add multiple 
+  // points on the same spot on the map and that just seem very wastefull.
+  function hasMovedEnough(newCoords : [number, number], minimumDistance = 5) : boolean {
+    if (!lastUserTrackCoord) return true;
+
+    const dx = newCoords[0] - lastUserTrackCoord[0];
+    const dy = newCoords[1] - lastUserTrackCoord[1];
+
+    return (Math.sqrt(dx * dx + dy * dy) > minimumDistance);
+  }
+
   // this is used to make the track line for the user, given that the coordnates pushed
   // in are the user's coordinates.
-  function applyTrackLine(coords : number[]){
+  function applyTrackLine(coords : number[]) : void {
     // this adds a line (blue line) so the user can see where they have been (current track) 
     if ($trackStore.isTracking) { 
       //this determines if this is the beggining of a new line 
@@ -613,14 +635,36 @@
         }); 
         
         currentTrackSource?.addFeature(currentTrackFeature);
-      } else { 
+        
+        lastUserTrackCoord = coords as [number, number];
+      } 
+      else if (hasMovedEnough(coords as [number, number])){ 
         const geom = currentTrackFeature.getGeometry();
         if (geom) {
           geom.appendCoordinate(coords);
+
+          lastUserTrackCoord = coords as [number, number];
         }
       }
     }
   }
+
+  // this function is used to check if the current road the user is on is a road
+  // that the user has never driven on before.
+  function checkRoadHistory() : void {
+    //check if the trackstore is tracking currently
+    if ($trackStore.isTracking) {
+      const now = Date.now();
+
+      // makes sure that the most a call for checking if the road is new is at most 2/sec
+      if (now - lastCheckTime > CHECK_ROAD_INTERVAL) {
+        lastCheckTime = now;
+
+        trackStore.checkIfNewRoad();
+      }
+    }
+  }
+
 
   // set up the old tracks that the user has been on previously
   function renderTracks(tracks: Track[], selectedTrackId: number | null) : void {
