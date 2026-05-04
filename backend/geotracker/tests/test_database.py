@@ -1,6 +1,7 @@
 import pytest
 import json
 from datetime import datetime
+import mapbox_vector_tile
 
 
 def test_db_connection(db_conn):
@@ -15,7 +16,7 @@ def test_db_connection(db_conn):
 
 def test_create_and_end_track(db_conn):
     """
-    Test track creation and end.
+    Test track creation and end and auto generated name.
     """
     with db_conn.cursor() as cur:
         cur.execute("SELECT gps.create_track() as id;")
@@ -29,6 +30,43 @@ def test_create_and_end_track(db_conn):
 
         cur.execute("SELECT end_time FROM gps.tracks WHERE track_id = %s;", (track_id,))
         assert cur.fetchone()["end_time"] is not None
+        cur.execute(
+            "SELECT track_name FROM gps.tracks WHERE track_id = %s;", (track_id,)
+        )
+        generated_name = cur.fetchone()["track_name"]
+        assert generated_name.startswith("Track ")
+
+        # Check that it contains today's date (YYYY-MM-DD)
+        cur.execute("SELECT TO_CHAR(NOW(), 'YYYY-MM-DD') as time;")
+        today_str = cur.fetchone()["time"]
+        assert today_str in generated_name
+
+        # Verify length (Track + Space + YYYY-MM-DD + Space + HH:MM = 22 characters)
+        assert len(generated_name) == 22
+
+
+def test_track_name(db_conn):
+    """
+    Test track creation with name parameter.
+    """
+
+    with db_conn.cursor() as cur:
+        cur.execute("SELECT gps.create_track(%s) as id", ("Hello",))
+        track_id = cur.fetchone()["id"]
+        assert track_id is not None
+
+        cur.execute("SELECT count(*) from gps.tracks as id;")
+        assert cur.fetchone()["count"] == 1
+
+        cur.execute("CALL gps.end_track();")
+
+        cur.execute("SELECT end_time FROM gps.tracks WHERE track_id = %s;", (track_id,))
+        assert cur.fetchone()["end_time"] is not None
+
+        cur.execute(
+            "SELECT track_name FROM gps.tracks WHERE track_id = %s;", (track_id,)
+        )
+        assert cur.fetchone()["track_name"] == "Hello"
 
 
 def test_add_track_point(db_conn, sample_track_points):
@@ -209,7 +247,7 @@ def test_is_new_road_false1(db_conn):
     with db_conn.cursor() as cur:
 
         # 1. Create track 1
-        cur.execute("SELECT gps.create_track() as id;")
+        cur.execute("SELECT gps.create_track(%s) as id;", ("Hello",))
         tid1 = cur.fetchone()["id"]
 
         cur.execute(
@@ -505,7 +543,7 @@ def test_retrieve_tracks(db_conn, sample_track_points):
         assert result is None
 
         for _ in range(4):
-            cur.execute("SELECT gps.create_track() as id;")
+            cur.execute("SELECT gps.create_track(%s) as id;", ("Hello",))
             tid = cur.fetchone()["id"]
             track_ids.append(tid)
 
@@ -518,9 +556,10 @@ def test_retrieve_tracks(db_conn, sample_track_points):
 
         cur.execute("SELECT * FROM gps.retrieve_track(%s);", (track_ids[0],))
         result = cur.fetchone()
-        assert len(result) == 4
+        assert len(result) == 5
         assert result["geom"] is not None
         assert result["track_id"] == track_ids[0]
+        assert result["track_name"] == "Hello"
 
         # NOW VERIFY GEOJSON
         # Extract the geom column
@@ -649,19 +688,22 @@ def test_update_track_metadata(db_conn):
 
         new_start = "2026-01-01 08:00:00+00"
         new_end = "2026-01-01 09:00:00+00"
+        new_track_name = "Hello"
 
         cur.execute(
-            "CALL gps.update_track(%s, %s, %s);", (track_id, new_start, new_end)
+            "CALL gps.update_track(%s, %s, %s, %s);",
+            (track_id, new_start, new_end, new_track_name),
         )
 
         cur.execute(
-            "SELECT start_time, end_time FROM gps.tracks WHERE track_id = %s;",
+            "SELECT start_time, end_time, track_name FROM gps.tracks WHERE track_id = %s;",
             (track_id,),
         )
         updated = cur.fetchone()
 
         assert str(updated["start_time"]).startswith("2026-01-01 08:00:00")
         assert str(updated["end_time"]).startswith("2026-01-01 09:00:00")
+        assert str(updated["track_name"]) == "Hello"
 
 
 def test_get_tracks_near_location(db_conn):
@@ -724,7 +766,6 @@ def test_get_tracks_near_location(db_conn):
         # Now both Old Track A and Old Track B should be retrieved
         assert len(results_large) == 2
 
-        
         cur.execute("SELECT * FROM gps.get_track_lines_near_location(0);")
         results_zero = cur.fetchall()
         assert len(results_zero) == 0
@@ -825,9 +866,9 @@ def test_get_tracks_using_road(db_conn):
 
         # NOW VERIFY GEOJSON
         for row in results:
-            assert 'geom' in row
-            assert isinstance(row['geom'], dict)
-            assert row['geom']['type'] == 'LineString'
+            assert "geom" in row
+            assert isinstance(row["geom"], dict)
+            assert row["geom"]["type"] == "LineString"
 
 
 def test_get_tracks_using_no_road(db_conn):
@@ -966,3 +1007,218 @@ def test_geometry_structure_after_validation(db_conn, sample_track_points):
         geom_type = cur.fetchone()["geom"]
 
         assert "LineString" in geom_type
+
+
+# ---------------------------
+# 1. ALL MODE
+# ---------------------------
+def test_get_tracks_mvt_all_mode(db_conn):
+    """
+    Verify retrieving all tracks as a mapbox vector tile.
+    """
+    with db_conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO gps.tracks (track_id, start_time, end_time)
+            VALUES (1001, NOW(), NOW());
+
+            INSERT INTO gps.track_lines (track_id, geom, geom_wm)
+            VALUES (
+                1001,
+                ST_GeogFromText('LINESTRING(0 0, 1 1)'),
+                ST_Transform(ST_GeomFromText('LINESTRING(0 0, 1 1)', 4326), 3857)
+            );
+        """)
+
+        cur.execute("SELECT gps.get_tracks_mvt(0,0,0,'all') AS tile;")
+        tile_binary = cur.fetchone()["tile"]
+
+    assert tile_binary is not None
+    assert len(tile_binary) > 0
+
+    decoded = mapbox_vector_tile.decode(tile_binary)
+    assert "tracks_layer" in decoded
+
+    features = decoded["tracks_layer"]["features"]
+    assert len(features) > 0
+
+    assert int(features[0]["properties"]["track_id"]) == 1001
+
+
+# ---------------------------
+# 2. SINGLE MODE
+# ---------------------------
+def test_get_tracks_mvt_single_mode(db_conn):
+    """
+    Verify retrieving a single track with a specified track id as a mapbox vector tile.
+    """
+    with db_conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO gps.tracks (track_id, start_time, end_time)
+            VALUES (2001, NOW(), NOW());
+
+            INSERT INTO gps.track_lines (track_id, geom, geom_wm)
+            VALUES (
+                2001,
+                ST_GeogFromText('LINESTRING(0 0, 1 1)'),
+                ST_Transform(ST_GeomFromText('LINESTRING(0 0, 1 1)', 4326), 3857)
+            );
+        """)
+
+        cur.execute("""
+            SELECT gps.get_tracks_mvt(0,0,0,'single', 2001) AS tile;
+        """)
+        tile_binary = cur.fetchone()["tile"]
+
+    assert tile_binary is not None
+    assert len(tile_binary) > 0
+
+    decoded = mapbox_vector_tile.decode(tile_binary)
+    features = decoded["tracks_layer"]["features"]
+
+    assert len(features) == 1
+    assert int(features[0]["properties"]["track_id"]) == 2001
+
+
+def test_get_tracks_mvt_nearby_mode(db_conn):
+    """
+    Verify spatial filtering: find nearby tracks but ignore the current one as
+    a mapbox vector tile.
+    """
+    with db_conn.cursor() as cur:
+
+        # Create "Old Track A" (Nearby)
+        # Location: roughly (0,0)
+        cur.execute("SELECT gps.create_track() as id;")
+        id_near = cur.fetchone()["id"]
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, 0.0, 0.0, 0, 0);",
+            (id_near, "2024-01-01 10:00:00+00"),
+        )
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, 0.001, 0.001, 0, 0);",
+            (id_near, "2024-01-01 10:00:50+00"),
+        )
+        cur.execute("CALL gps.end_track();")
+
+        # Create "Old Track B" (Far away)
+        # Location: roughly (1,1) -> which is ~150km away
+        cur.execute("SELECT gps.create_track() as id;")
+        id_far = cur.fetchone()["id"]
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, 1.0, 1.0, 0, 0);",
+            (id_far, "2024-02-01 10:00:00+00"),
+        )
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, 1.001, 1.001, 0, 0);",
+            (id_far, "2024-01-01 10:00:50+00"),
+        )
+
+        cur.execute("CALL gps.end_track();")
+
+        # Create "Current Track" (The search origin)
+        # Place a point right next to Track A (approx 10m away)
+        cur.execute("SELECT gps.create_track() as id;")
+        current_id = cur.fetchone()["id"]
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, 0.0001, 0.0, 0, 0);",
+            (current_id, "2024-03-01 10:00:00+00"),
+        )
+
+        # Search for tracks within 5000 meters
+        cur.execute(
+            # Specific tile specification (z,x,y) parameters are needed (i.e. 14, 8192, 8192)
+            # Singular gps track point from gps.get_latest_track_point() will be erased
+            # by the bounding box if it is too large (i.e. z,x,y = 0,0,0 (whole world))
+            "SELECT gps.get_tracks_mvt(14, 8192, 8192, 'nearby', NULL, 5000) AS tile;"
+        )
+        tile_binary = cur.fetchone()["tile"]
+
+        # ASSERT
+        # We expect exactly 1 result (Track A).
+        # Track B is too far, and Current Track is excluded by the SQL (t.track_id <> p.track_id).
+        # Assertions
+        assert tile_binary is not None
+        assert len(tile_binary) > 0
+
+        decoded = mapbox_vector_tile.decode(tile_binary)
+        assert "tracks_layer" in decoded
+
+        features = decoded["tracks_layer"]["features"]
+        assert len(features) > 0
+
+        found_ids = [int(f["properties"]["track_id"]) for f in features]
+        assert id_near in found_ids
+        assert id_far not in found_ids
+
+
+# ---------------------------
+# 4. ROAD MODE
+# ---------------------------
+
+
+def test_get_tracks_mvt_road_mode(db_conn):
+    """
+    Verify spatial filtering: retrieve all tracks that use the same road as the
+    current track (excluding current track) a mapbox vector tile.
+    """
+    with db_conn.cursor() as cur:
+        # Active track (reference)
+        cur.execute("""
+            INSERT INTO gps.tracks (track_id, start_time, end_time)
+            VALUES (4001, NOW(), NULL);
+
+            INSERT INTO gps.track_lines (track_id, geom, geom_wm)
+            VALUES (
+                4001,
+                ST_GeogFromText('LINESTRING(0 0, 1 1)'),
+                ST_Transform(ST_GeomFromText('LINESTRING(0 0, 1 1)', 4326), 3857)
+            );
+        """)
+
+        # Nearby completed track (should be returned)
+        cur.execute("""
+            INSERT INTO gps.tracks (track_id, start_time, end_time)
+            VALUES (4002, NOW(), NOW());
+
+            INSERT INTO gps.track_lines (track_id, geom, geom_wm)
+            VALUES (
+                4002,
+                ST_GeogFromText('LINESTRING(0 0, 1 1)'),
+                ST_Transform(ST_GeomFromText('LINESTRING(0 0, 1 1)', 4326), 3857)
+            );
+        """)
+
+        # Far completed track (should NOT be returned)
+        cur.execute("""
+            INSERT INTO gps.tracks (track_id, start_time, end_time)
+            VALUES (4003, NOW(), NOW());
+
+            INSERT INTO gps.track_lines (track_id, geom, geom_wm)
+            VALUES (
+                4003,
+                ST_GeogFromText('LINESTRING(10 10, 11 11)'),
+                ST_Transform(ST_GeomFromText('LINESTRING(10 10, 11 11)', 4326), 3857)
+            );
+        """)
+
+        # Execute track retrieval
+        cur.execute("""
+            SELECT gps.get_tracks_mvt(0,0,0,'road') AS tile;
+        """)
+        tile_binary = cur.fetchone()["tile"]
+
+    # Assertions
+    assert tile_binary is not None
+    assert len(tile_binary) > 0
+
+    decoded = mapbox_vector_tile.decode(tile_binary)
+    assert "tracks_layer" in decoded
+
+    features = decoded["tracks_layer"]["features"]
+    assert len(features) > 0
+
+    found_ids = [int(f["properties"]["track_id"]) for f in features]
+
+    assert 4002 in found_ids  # nearby completed track
+    assert 4001 not in found_ids  # active track excluded
+    assert 4003 not in found_ids  # far track excluded
