@@ -1,9 +1,5 @@
 <script lang="ts">
   import AppBar from '../assets/components/AppBar.svelte';
-  import {
-    DEVICE_LOG_FILE_SYSTEM_PATH,
-    DEVICE_LOG_FILE_URL
-  } from '../utils/constants';
   import { parseSystemLog, type LogEntry, type LogSeverity } from '../utils/logs';
 
   const SAMPLE_LOG_FILE = [
@@ -71,16 +67,6 @@
         <h2>Device Log Viewer</h2>
         <p>
           This UI currently uses sample log data while the Pi log file contract is being finalized.
-          The intended static file URL is
-          <strong>{DEVICE_LOG_FILE_URL}</strong>.
-        </p>
-        <p>
-          Expected Pi file path:
-          <strong>{DEVICE_LOG_FILE_SYSTEM_PATH}</strong>
-        </p>
-        <p class="hint">
-          The browser cannot read arbitrary Pi files directly, so the web server will eventually
-          need to publish that file at the URL above. Until then, this page stays frontend-only.
         </p>
       </div>
 
@@ -160,8 +146,7 @@
 
   .overview-panel {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
+    flex-direction: column;
     gap: 1rem;
   }
 
@@ -185,6 +170,7 @@
   }
 
   .refresh-btn {
+    width: fit-content;
     border: 1px solid rgba(17, 17, 17, 0.18);
     border-radius: 6px;
     background: rgba(255, 255, 255, 0.8);
