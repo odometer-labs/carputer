@@ -94,7 +94,7 @@ async def end_track():
 
 
 @router.post("/tracks/point/{track_id}")
-async def add_track_point(track_id: int, track_point: TrackPoint):
+async def add_track_point(track_point: TrackPoint):
     """
     Adds a track point for the current track
     """
