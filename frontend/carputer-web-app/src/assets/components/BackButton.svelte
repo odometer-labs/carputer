@@ -1,5 +1,5 @@
 <script>
-  import arrow from "../arrow-left-bold.svg";
+  import arrow from "../icons/arrow-left-bold.svg";
   import { goBack } from "../../utils/navigation";
 </script>
 

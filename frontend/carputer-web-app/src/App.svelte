@@ -5,7 +5,7 @@
   import HomeMapPage from './pages/HomeMapPage.svelte';
   import SettingPreferencePage from './pages/SettingPreferencePage.svelte';
   import WifiPage from './pages/WifiPage.svelte';
-  import DashboardPage from './pages/DashboardPage.svelte';
+  import SystemDataPage from './pages/SystemDataPage.svelte';
   import ErrorPage from './pages/ErrorPage.svelte';
   import ErrorPopup from './assets/components/ErrorPopup.svelte';
   import {
@@ -21,7 +21,7 @@
   // in the background.
   const overlayRoutes = ['/SettingPreference',
                          '/Wifi', 
-                         '/Dashboard',];
+                         '/SystemData',];
 
   // Checks if current route needs an overlay
   // this is reactive, includes() function returns a true or false
@@ -120,10 +120,10 @@
       </div>
     {/if}
 
-    <!-- Dashboard Page -->
-    {#if $location === '/Dashboard'}
+    <!-- System Data Page -->
+    {#if $location === '/SystemData'}
       <div style="height: 100%; width: 100%;">
-        <DashboardPage />
+        <SystemDataPage />
       </div>
     {/if}
     
