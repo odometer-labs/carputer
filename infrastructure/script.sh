@@ -373,8 +373,8 @@ MODEM 1200
 # Reduce console spam
 QUIET
 
-# Enable KISS interface on TCP port 8001
-KISSPORT 8001
+# Enable KISS interface on TCP port 8003
+KISSPORT 8003
 
 # Log all received packets
 LOGDIR /var/log/carputer/aprs
@@ -451,7 +451,7 @@ else
 #!/usr/bin/env python3
 """
 APRS Bridge - Connects Direwolf to FastAPI Backend
-Reads APRS packets from Direwolf KISS interface (TCP port 8001)
+Reads APRS packets from Direwolf KISS interface (TCP port 8003)
 Sends to backend API for storage in PostgreSQL
 """
 
@@ -472,7 +472,7 @@ logging.basicConfig(
 
 # Configuration from environment
 KISS_HOST = os.environ.get('KISS_HOST', 'localhost')
-KISS_PORT = int(os.environ.get('KISS_PORT', 8001))
+KISS_PORT = int(os.environ.get('KISS_PORT', 8003))
 BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:8000/v1/aprs/ingest-raw')
 
 def parse_kiss_frame(frame):
@@ -640,7 +640,7 @@ Type=simple
 User=$CURRENT_USER
 WorkingDirectory=$APRS_DIR
 Environment="KISS_HOST=localhost"
-Environment="KISS_PORT=8001"
+Environment="KISS_PORT=8003"
 Environment="BACKEND_URL=http://localhost:8000"
 ExecStart=/usr/bin/python3 -m aprs_bridge
 Restart=always
@@ -872,7 +872,7 @@ echo ""
 echo "  GPS device    : /dev/ttyACM0"
 echo "  gpsd socket   : /var/run/gpsd.sock"
 echo "  RTL-SDR       : 144.390 MHz (APRS)"
-echo "  Direwolf KISS : localhost:8001"
+echo "  Direwolf KISS : localhost:8003"
 echo "  Repo          : $DEPLOY_DIR"
 echo "  APRS config   : $APRS_DIR"
 echo ""
