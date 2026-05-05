@@ -8,8 +8,6 @@ from app.models.track_point import TrackPoint
 from app.clients.track_client import track_client
 from typing import Dict, Any, Optional
 import json
-import Response
-import status
 
 router = APIRouter(prefix="/v1", tags=["Tracks"])
 
@@ -39,13 +37,9 @@ async def list_track_mvt(
     tile_data = track_client.list_tracks_mvt(z, x, y, mode, track_id, within_meters)
     if not tile_data or len(tile_data) == 0:
 
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
+        return {"Error": "Tile data not found"}
 
-    return Response(
-        content=tile_data,
-        media_type="application/vnd.mapbox-vector-tile",
-        headers={"Cache-Control": "public, max-age=3600"},
-    )
+    return { "content": tile_data.decode("utf-8") }
 
 
 @router.get("/tracks/{track_id}")
