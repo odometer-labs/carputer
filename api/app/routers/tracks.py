@@ -110,9 +110,6 @@ async def add_track_point(track_point: TrackPoint):
 
     return track_client.add_track_point(track_point)
 
-    
-    return track_client.add_track_point(track_point)
-
 @router.get("/tracks-latest-point")
 async def get_latest_track_point():
     """
