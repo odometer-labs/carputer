@@ -90,6 +90,34 @@ def test_add_track_point(db_conn, sample_track_points):
         )
         assert cur.fetchone()["count"] == 1
 
+        # Second point (added without track id)
+        point = sample_track_points[1]
+
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, %s, %s, %s);",
+            (point["timestamp"], point["lat"], point["lon"], 15.0, 0.0),
+        )
+
+        # Check if the points exists in the points table
+        cur.execute(
+            "SELECT count(*) FROM gps.track_points WHERE track_id = %s;", (track_id,)
+        )
+        assert cur.fetchone()["count"] == 2
+
+        cur.execute(
+            "SELECT count(*) FROM gps.track_points WHERE time_stamp = %s;",
+            (point["timestamp"],),
+        )
+        assert cur.fetchone()["count"] == 1
+
+        cur.execute("SELECT * FROM gps.get_latest_track_point();")
+        result = cur.fetchone()
+
+        # Checks if speed matches
+        assert (result["speed_mps"]) == 15.0
+        assert (result["point_id"]) > 0
+        assert result["track_id"] == track_id
+
 
 def test_gps_latest_track_point(db_conn, sample_track_points):
     """

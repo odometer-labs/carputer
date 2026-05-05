@@ -33,7 +33,8 @@ Standard operations to manage your tracking data:
 `gps.create_track()`: Starts a new track and generates name or returns the active track_id.
 `gps.create_track(name)`: Starts a new track with specificed name or returns the active track_id.
 
-`gps.add_track_point(...)`: Ingests raw GPS coordinates.
+`gps.add_track_point(track_id, ...)`: Ingests raw GPS coordinates with specified track id.
+`gps.add_track_point(...)`: Ingests raw GPS coordinates to add to current track.
 
 `gps.end_track()`: Ends the current session.
 
