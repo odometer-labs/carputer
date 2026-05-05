@@ -376,6 +376,9 @@ QUIET
 # Enable KISS interface on TCP port 8003
 KISSPORT 8003
 
+# Enable AGW port on 8005 - as far as I know we don't use this, but default overlaps with :8000
+AGWPORT 8005
+
 # Log all received packets
 LOGDIR /var/log/carputer/aprs
 LOGFILE aprs-%Y%m%d.log
@@ -473,6 +476,8 @@ logging.basicConfig(
 # Configuration from environment
 KISS_HOST = os.environ.get('KISS_HOST', 'localhost')
 KISS_PORT = int(os.environ.get('KISS_PORT', 8003))
+AGW_HOST  = os.environ.get('AGW_HOST', 'localhost')
+AGW_PORT  = int(os.environ.get('AGW_PORT', '8005')
 BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:8000/v1/aprs/ingest-raw')
 
 def parse_kiss_frame(frame):
@@ -641,6 +646,8 @@ User=$CURRENT_USER
 WorkingDirectory=$APRS_DIR
 Environment="KISS_HOST=localhost"
 Environment="KISS_PORT=8003"
+Environment="AGW_HOST=localhost"
+Environment="AGW_PORT=8005"
 Environment="BACKEND_URL=http://localhost:8000"
 ExecStart=/usr/bin/python3 -m aprs_bridge
 Restart=always
@@ -873,6 +880,7 @@ echo "  GPS device    : /dev/ttyACM0"
 echo "  gpsd socket   : /var/run/gpsd.sock"
 echo "  RTL-SDR       : 144.390 MHz (APRS)"
 echo "  Direwolf KISS : localhost:8003"
+echo "  Direwolf AGW  : localhost:8005"
 echo "  Repo          : $DEPLOY_DIR"
 echo "  APRS config   : $APRS_DIR"
 echo ""
