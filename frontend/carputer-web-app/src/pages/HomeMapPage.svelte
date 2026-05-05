@@ -86,18 +86,36 @@
   const filteredTracks = derived(
     [trackStore, preferences],
     ([$trackStore, $preferences]) => {
+      //disable all tracks 
+      if ($preferences.toggleAllTracks) {
+        //set the selectedTrackID to null
+        $trackStore.selectedTrackId = null;
+
+        //return just an empty tracks
+        return {
+          tracks: [],
+          selectedTrackId: $trackStore.selectedTrackId
+        };
+      }
+
       //set up the date string so that you can compare
-      const filterDate = $preferences.showTracksAfterDate
+      const afterDate = $preferences.showTracksAfterDate
         ? new Date($preferences.showTracksAfterDate + "T00:00:00")
+        : null;
+      
+      const beforeDate = $preferences.showTracksBeforeDate
+        ? new Date($preferences.showTracksBeforeDate + "T23:59:59")
         : null;
 
       return {
         tracks: $trackStore.tracks.filter(track => {
           const start = new Date(track.start_time);
 
-          if ((filterDate) && (start < filterDate)) {
-            return false;
-          }
+          //this is fore after the date
+          if ((afterDate) && (start < afterDate)) return false;
+
+          // this is for before the date
+          if ((beforeDate) && (start > beforeDate)) return false;
 
           return true;
         }),
@@ -200,12 +218,13 @@
     // this determines the color/shape/size of the old tracks
     oldTrackLayer = new VectorLayer({
       source: oldTrackSource,
+      minZoom: 13,
       style: (feature) => {
         const isActive = feature.get('isActive');
 
         return new Style({
           stroke: new Stroke({
-            color: isActive ? "#ff392b" : "#ffa6a6",
+            color: isActive ? "rgba(255, 57, 43, 0.65)" : "rgba(255, 166, 166, 0.75)",
             width: 4
           })
         })
@@ -219,7 +238,7 @@
       source: currentTrackSource,
       style: new Style({
         stroke: new Stroke({
-          color: "#1c91ff",
+          color: "rgba(28, 145, 255, 0.7)",
           width: 4
         })
       })
@@ -238,17 +257,12 @@
 
     aprsLayer = new VectorLayer({
       source: aprCluster,
+      minZoom: 13, //this determines how far our zoomed can the aprs still load.
       style: (feature) => {
         // make sure that map exists before doing anything
         if (!map) return;
 
         const size = feature.get('features').length;
-        const zoom = map.getView().getZoom() ?? 0;
-
-        //at a certain distance the clusters/points will dissapear
-        if (zoom < 13) {
-          return;
-        }
 
         // Single point = normal APRS icon
         if (size === 1) {
@@ -328,7 +342,8 @@
         }
       },
       {
-        layerFilter: (layer) => layer === oldTrackLayer
+        layerFilter: (layer) => layer === oldTrackLayer,
+        hitTolerance: 13
       });
     });
   }
@@ -652,16 +667,13 @@
   // this function is used to check if the current road the user is on is a road
   // that the user has never driven on before.
   function checkRoadHistory() : void {
-    //check if the trackstore is tracking currently
-    if ($trackStore.isTracking) {
-      const now = Date.now();
+    const now = Date.now();
 
-      // makes sure that the most a call for checking if the road is new is at most 2/sec
-      if (now - lastCheckTime > CHECK_ROAD_INTERVAL) {
-        lastCheckTime = now;
+    // makes sure that the most a call for checking if the road is new is at most 1 per sec
+    if (now - lastCheckTime > CHECK_ROAD_INTERVAL) {
+      lastCheckTime = now;
 
-        trackStore.checkIfNewRoad();
-      }
+      trackStore.checkIfNewRoad();
     }
   }
 

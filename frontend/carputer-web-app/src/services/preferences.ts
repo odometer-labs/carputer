@@ -3,9 +3,10 @@ import { writable, type Writable } from "svelte/store";
 const STORAGE_KEY = "carputer.preferences.v1";
 
 export interface Preferences {
-  toggleSomething: boolean;
+  toggleAllTracks: boolean;
   milesToDiscoverRoads: number;
   showTracksAfterDate: string | null;
+  showTracksBeforeDate: string | null;
   nightMode: boolean;
   brightness: number;
   defaultZoom: number;
@@ -15,9 +16,10 @@ export interface Preferences {
 type PreferencesPatch = Partial<Preferences>;
 
 export const DEFAULT_PREFERENCES: Preferences = {
-  toggleSomething: false,
+  toggleAllTracks: false,
   milesToDiscoverRoads: 50,
   showTracksAfterDate: null,
+  showTracksBeforeDate: null,
   nightMode: false,
   brightness: 100,
   defaultZoom: 18,
@@ -78,13 +80,14 @@ function sanitizePreferences(
   rawPreferences: Partial<Preferences> = {},
 ): Preferences {
   return {
-    toggleSomething: Boolean(rawPreferences.toggleSomething),
+    toggleAllTracks: Boolean(rawPreferences.toggleAllTracks),
     milesToDiscoverRoads: clampMiles(rawPreferences.milesToDiscoverRoads),
     nightMode: Boolean(rawPreferences.nightMode),
     brightness: clampBrightness(rawPreferences.brightness),
     defaultZoom: clampZoom(rawPreferences.defaultZoom),
     iconSizeLevel: clampIconSizeLevel(rawPreferences.iconSizeLevel),
     showTracksAfterDate: validateDate(rawPreferences.showTracksAfterDate),
+    showTracksBeforeDate: validateDate(rawPreferences.showTracksBeforeDate),
   };
 }
 

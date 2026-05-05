@@ -14,7 +14,7 @@ export interface Tracks {
 }
 
 
-class TrackStore {
+export class TrackStore {
   //this sets the store in the class and makes sure it can't be accessed inside
   private store: Writable<Tracks>;
   subscribe: Writable<Tracks>["subscribe"];
@@ -69,9 +69,12 @@ class TrackStore {
     try {
       const tracks = await listTracks();
 
+      //this prevents unfinished tracks from being shown up on the map.
+      const finishedTracks = tracks.filter(track => track.end_time != null);
+
       this.store.update(state => ({
         ...state,
-        tracks
+        tracks: finishedTracks
       }));
     } catch (error) {
       console.error(error);

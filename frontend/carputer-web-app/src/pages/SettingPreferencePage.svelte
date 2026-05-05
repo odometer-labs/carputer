@@ -8,9 +8,9 @@
   } from "../services/preferences";
 
 
-  function handleToggleSomethingChange(event: Event): void {
+  function handleToggleAllTracks(event: Event): void {
     const input = event.currentTarget as HTMLInputElement;
-    updatePreferences({ toggleSomething: input.checked });
+    updatePreferences({ toggleAllTracks: input.checked });
   }
 
   function handleMilesChange(event: Event): void {
@@ -33,6 +33,14 @@
 
     updatePreferences({
       showTracksAfterDate: input.value ? input.value : null
+    });
+  }
+
+  function handleTracksBeforeDateChange(event: Event) : void {
+    const input = event.currentTarget as HTMLInputElement;
+
+    updatePreferences({
+      showTracksBeforeDate: input.value ? input.value : null
     });
   }
 
@@ -76,12 +84,12 @@
         THIS IS ALL JUST TEMPORARY, I JUST DIDN'T WANT THIS PAGE
         TO BE EMPY                                              -->
     <div class="option-box">
-      <h3>Togle something</h3>
+      <h3>Togle All Tracks</h3>
       <input
         type="checkbox"
         class="checkbox"
-        checked={$preferences.toggleSomething}
-        on:change={handleToggleSomethingChange}
+        checked={$preferences.toggleAllTracks}
+        on:change={handleToggleAllTracks}
       />
     </div>
     
@@ -113,6 +121,25 @@
 
         <button 
           on:click={() => updatePreferences({ showTracksAfterDate: null })}
+          class="date-btn"
+        >
+          Clear
+        </button>
+      </div>
+    </div>
+
+    <div class="option-box">
+      <h4>Show Tracks Before:</h4>
+
+      <div>
+        <input
+          type="date"
+          value={$preferences.showTracksBeforeDate ?? ""}
+          on:change={handleTracksBeforeDateChange}
+        />
+
+        <button 
+          on:click={() => updatePreferences({ showTracksBeforeDate: null })}
           class="date-btn"
         >
           Clear
