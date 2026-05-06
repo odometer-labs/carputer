@@ -29,4 +29,19 @@ describe("parseSystemLog", () => {
       "Service started without structured logging",
     );
   });
+
+  it("falls back to message severity for unstructured lines even when they contain severity keywords", () => {
+    const parsed = parseSystemLog(
+      [
+        "WARNING: unstructured warning line",
+        "ERROR: unstructured error line",
+        "CRITICAL: unstructured critical line",
+      ].join("\n"),
+    );
+
+    expect(parsed.total).toBe(3);
+    expect(parsed.messages).toHaveLength(3);
+    expect(parsed.errors).toHaveLength(0);
+    expect(parsed.warnings).toHaveLength(0);
+  });
 });
