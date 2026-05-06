@@ -103,21 +103,17 @@
         </div>
       </div>
 
-      {#if visibleEntries.length === 0}
-        <p class="empty-state">Select at least one message type to display log entries.</p>
-      {:else}
-        <div class="entry-list">
-          {#each visibleEntries as entry (entry.id)}
-            <section class="log-entry" class:errors={entry.severity === 'error'} class:warnings={entry.severity === 'warning'} class:messages={entry.severity === 'message'}>
-              <div class="entry-header">
-                <p class="entry-meta">{formatEntryLabel(entry)}</p>
-                <span class="severity-badge">{entry.severity}</span>
-              </div>
-              <p class="entry-message">{entry.message}</p>
-            </section>
-          {/each}
-        </div>
-      {/if}
+      <div class="entry-list">
+        {#each visibleEntries as entry (entry.id)}
+          <section class="log-entry" class:errors={entry.severity === 'error'} class:warnings={entry.severity === 'warning'} class:messages={entry.severity === 'message'}>
+            <div class="entry-header">
+              <p class="entry-meta">{formatEntryLabel(entry)}</p>
+              <span class="severity-badge">{entry.severity}</span>
+            </div>
+            <p class="entry-message">{entry.message}</p>
+          </section>
+        {/each}
+      </div>
     </article>
   </section>
 </main>
