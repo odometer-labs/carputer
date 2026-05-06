@@ -11,6 +11,7 @@
     getSavedWifiConnections,
     getWifiAccessPoints,
   } from "../api/wifiApi";
+  import { setWifiConnected, setWifiDisconnected } from "../stores/wifiStore";
 
   let isWifiOn = false;
   let wifiStatus = "OFF";
@@ -26,6 +27,14 @@
   const NETWORK_SCAN_INTERVAL_MS = 10000;
 
   $: wifiStatus = isWifiOn ? "ON" : "OFF";
+  $: {
+    if (isWifiOn && currentConnection) {
+      const ap = accessPoints.find((p) => p.ssid === currentConnection.ssid);
+      setWifiConnected(currentConnection.ssid, ap?.signal_strength ?? 0);
+    } else {
+      setWifiDisconnected();
+    }
+  }
   $: otherNetworks = accessPoints
     .filter((accessPoint) => accessPoint.ssid)
     .filter((accessPoint) => accessPoint.ssid !== currentConnection?.ssid)
@@ -193,7 +202,7 @@
   <!-- This button is to disable the wifi -->
   <div class="switch-box">
     <!-- this is the wifi indicator encased in a span so that I can style it.-->
-    <span style="transform: scale(1.3); position:relative; top:-6px;"><WifiIndicator wifiConnection={isWifiOn} /></span>
+    <span style="transform: scale(1.3); position:relative; top:-6px;"><WifiIndicator /></span>
 
     <label class="switch">
       <input
