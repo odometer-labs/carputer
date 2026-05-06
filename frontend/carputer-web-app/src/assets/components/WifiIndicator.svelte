@@ -10,7 +10,8 @@
   import wifi3 from "../icons/wifi-signal3-bold.svg";
 
   // delete this after the indicators are implemented with backend information.
-  let wifiConnection:boolean = true
+  export let wifiConnection: boolean = true;
+
   let wifiConnection_strength:number = 3; // 0-3
 
   const wifiIcons = [wifi0, wifi1, wifi2, wifi3];
@@ -20,12 +21,14 @@
   import { onMount } from "svelte";
   onMount(() => {
     const interval = setInterval(() => {
-      // cycle from 0 → 3
-      wifiConnection_strength = (wifiConnection_strength + 1) % 4;
+      // cycle from 1 → 3
+      wifiConnection_strength = (wifiConnection_strength + 1) % 3 + 1;
     }, 3000); // 3 seconds
 
     return () => clearInterval(interval);
   });
+
+  
 
 </script>
 
