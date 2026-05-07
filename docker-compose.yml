@@ -71,6 +71,7 @@ services:
       - carputer
     depends_on:
       - api
+      - wifi-manager
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
       interval: 30s
@@ -139,6 +140,8 @@ services:
   wifi-manager:
     build: ./infrastructure/wifi-manager/
     restart: always
+    networks:
+      - carputer
     ports:
         - "${WIFI_MANAGER_PORT}:80"
     environment:
