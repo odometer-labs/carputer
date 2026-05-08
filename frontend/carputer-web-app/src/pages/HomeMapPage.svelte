@@ -20,7 +20,7 @@
   import { Cluster } from 'ol/source';
   import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
   import { preferences, type TrackRange } from '../services/preferences';
-  import aprsIconUrl from '../assets/aprs-bold.svg';
+  import aprsIconUrl from '../assets/icons/aprs-bold.svg';
   import userArrowIconUrl from '../assets/icons/maps-arrow-blue-white.svg';
   import { trackStore } from '../stores/trackStore'
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
@@ -833,7 +833,7 @@
 
   // this function changes route to /Dashboard
   function goToDashboard() : void {
-    push("/Dashboard");
+    push("/SystemData");
   }
 
   let isDropdownOpen: boolean = false;
@@ -890,7 +890,7 @@
         <li style="padding: 0;">
           <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false; goToDashboard()}}>
             <i class="iconoir-info-circle dropdown-menu_btn_icons"></i>
-            System Info
+            System Data
             <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
                 <sub class="sub_text">Patch Level: 0.0.0</sub>
             </div>  

@@ -1,0 +1,18 @@
+[Unit]
+Description=APRS Bridge to Backend
+After=aprs-receiver.service network.target
+Requires=aprs-receiver.service
+
+[Service]
+Type=simple
+User=emb_usr
+ExecStart=/usr/bin/python3 /opt/carputer/aprs/aprs_bridge.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aprs-bridge
+
+[Install]
+WantedBy=multi-user.target
+EOF
