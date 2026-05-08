@@ -80,14 +80,6 @@
   const NETWORK_STARTUP_SCAN_DELAY_MS = 900;
 
   $: wifiStatus = $wifiStore.isWifiOn ? "ON" : "OFF";
-  $: {
-    if ($wifiStore.isWifiOn && currentConnection) {
-      const ap = accessPoints.find((p) => p.ssid === currentConnection.ssid);
-      setWifiConnected(currentConnection.ssid, ap?.signal_strength ?? 0);
-    } else {
-      setWifiDisconnected();
-    }
-  }
   $: otherNetworks = dedupeAccessPointsBySsid(accessPoints)
     .filter((accessPoint) => accessPoint.ssid !== currentConnection?.ssid)
     .sort((a, b) => b.signal_strength - a.signal_strength);
@@ -111,6 +103,16 @@
     stopNetworkScanLoop();
   });
 
+  function syncWifiStoreConnectionState() {
+    if ($wifiStore.isWifiOn && currentConnection) {
+      const ap = accessPoints.find((p) => p.ssid === currentConnection.ssid);
+      setWifiConnected(currentConnection.ssid, ap?.signal_strength ?? 0);
+      return;
+    }
+
+    setWifiDisconnected();
+  }
+
   async function loadInitialState() {
     try {
       isLoading = true;
@@ -129,6 +131,8 @@
         setWifiPower(true);
       }
 
+      syncWifiStoreConnectionState();
+
       if ($wifiStore.isWifiOn) {
         startNetworkScanLoop();
       }
@@ -143,6 +147,7 @@
     const nextState = event.currentTarget.checked;
     errorMessage = "";
     setWifiPower(nextState);
+    syncWifiStoreConnectionState();
 
     if (nextState) {
       // Turning ON: start scanning, keep toggle ON even if a scan fails
@@ -165,6 +170,7 @@
       stopNetworkScanLoop();
       currentConnection = null;
       accessPoints = [];
+      syncWifiStoreConnectionState();
       try {
         await deactivateCurrentWifiConnection();
       } catch (error) {
@@ -187,6 +193,7 @@
 
       accessPoints = nearby;
       currentConnection = connection;
+      syncWifiStoreConnectionState();
     } catch (error) {
       errorMessage = `Failed to scan nearby networks: ${String(error)}`;
     } finally {
@@ -301,6 +308,7 @@
       ]);
       currentConnection = connection;
       savedConnections = saved;
+      syncWifiStoreConnectionState();
       clearSelection();
     } catch (error) {
       errorMessage = `Failed to connect to ${accessPoint.ssid}: ${String(error)}`;
