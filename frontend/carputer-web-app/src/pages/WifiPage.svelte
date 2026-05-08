@@ -16,6 +16,25 @@
     if (strength > 0)   return wifiIcons[1];
     return wifiIcons[0];
   }
+
+  function dedupeAccessPointsBySsid(accessPointList) {
+    const strongestBySsid = new Map();
+
+    for (const accessPoint of accessPointList) {
+      const ssid = String(accessPoint?.ssid ?? "").trim();
+      if (!ssid) {
+        continue;
+      }
+
+      const existing = strongestBySsid.get(ssid);
+      if (!existing || accessPoint.signal_strength > existing.signal_strength) {
+        strongestBySsid.set(ssid, { ...accessPoint, ssid });
+      }
+    }
+
+    return Array.from(strongestBySsid.values());
+  }
+
   import {
     activateWifiConnection,
     createAndActivateWifiConnection,
@@ -41,6 +60,8 @@
   let isNetworkScanInFlight = false;
 
   const NETWORK_SCAN_INTERVAL_MS = 10000;
+  const NETWORK_STARTUP_SCAN_ATTEMPTS = 5;
+  const NETWORK_STARTUP_SCAN_DELAY_MS = 900;
 
   $: wifiStatus = isWifiOn ? "ON" : "OFF";
   $: {
@@ -51,8 +72,7 @@
       setWifiDisconnected();
     }
   }
-  $: otherNetworks = accessPoints
-    .filter((accessPoint) => accessPoint.ssid)
+  $: otherNetworks = dedupeAccessPointsBySsid(accessPoints)
     .filter((accessPoint) => accessPoint.ssid !== currentConnection?.ssid)
     .sort((a, b) => b.signal_strength - a.signal_strength);
   $: selectedAccessPoint = otherNetworks.find((ap) => ap.ssid === selectedSsid) ?? null;
@@ -102,14 +122,15 @@
       isWifiOn = true;
       startNetworkScanLoop();
       try {
-        const [connection, saved, nearby] = await Promise.all([
+        const [connection, saved] = await Promise.all([
           getCurrentWifiConnection(),
           getSavedWifiConnections(),
-          getWifiAccessPoints(),
         ]);
+
+        await runStartupScanBurst();
+
         currentConnection = connection;
         savedConnections = saved;
-        accessPoints = nearby;
       } catch (error) {
         errorMessage = `Failed to scan Wi-Fi networks: ${String(error)}`;
       }
@@ -147,6 +168,9 @@
       return;
     }
 
+    // Trigger one scan immediately so users don't wait for the first interval tick.
+    void refreshNearbyNetworks();
+
     networkScanIntervalId = window.setInterval(() => {
       void refreshNearbyNetworks();
     }, NETWORK_SCAN_INTERVAL_MS);
@@ -159,6 +183,19 @@
 
     window.clearInterval(networkScanIntervalId);
     networkScanIntervalId = null;
+  }
+
+  async function runStartupScanBurst() {
+    for (let attempt = 0; attempt < NETWORK_STARTUP_SCAN_ATTEMPTS; attempt += 1) {
+      await refreshNearbyNetworks();
+      if (accessPoints.length > 0) {
+        return;
+      }
+
+      await new Promise((resolve) => {
+        window.setTimeout(resolve, NETWORK_STARTUP_SCAN_DELAY_MS);
+      });
+    }
   }
 
   function isAccessPointSecured(accessPoint) {
