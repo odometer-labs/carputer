@@ -74,6 +74,7 @@
   let passwordRequiredOverride = null;
   let networkScanIntervalId = null;
   let isNetworkScanInFlight = false;
+  let hasMounted = false;
 
   const NETWORK_SCAN_INTERVAL_MS = 10000;
   const NETWORK_STARTUP_SCAN_ATTEMPTS = 5;
@@ -96,10 +97,12 @@
     : false;
 
   onMount(async () => {
+    hasMounted = true;
     await loadInitialState();
   });
 
   onDestroy(() => {
+    hasMounted = false;
     stopNetworkScanLoop();
   });
 
@@ -118,16 +121,29 @@
       isLoading = true;
       errorMessage = "";
 
-      const [connection, saved, nearby] = await Promise.all([
+      const [connectionResult, savedResult, nearbyResult] = await Promise.allSettled([
         getCurrentWifiConnection(),
         getSavedWifiConnections(),
         getWifiAccessPoints(),
       ]);
 
-      currentConnection = connection;
-      savedConnections = saved;
-      accessPoints = nearby;
-      if (connection) {
+      if (!hasMounted) {
+        return;
+      }
+
+      if (connectionResult.status === "fulfilled") {
+        currentConnection = connectionResult.value;
+      }
+
+      if (savedResult.status === "fulfilled") {
+        savedConnections = savedResult.value;
+      }
+
+      if (nearbyResult.status === "fulfilled") {
+        accessPoints = nearbyResult.value;
+      }
+
+      if (connectionResult.status === "fulfilled" && connectionResult.value) {
         setWifiPower(true);
       }
 
@@ -135,6 +151,22 @@
 
       if ($wifiStore.isWifiOn) {
         startNetworkScanLoop();
+        await runStartupScanBurst();
+      }
+
+      const initialErrors = [];
+      if (connectionResult.status === "rejected") {
+        initialErrors.push("connection status");
+      }
+      if (savedResult.status === "rejected") {
+        initialErrors.push("saved networks");
+      }
+      if (nearbyResult.status === "rejected") {
+        initialErrors.push("nearby networks");
+      }
+
+      if (initialErrors.length > 0) {
+        errorMessage = `Failed to load ${initialErrors.join(", ")}. Retrying in background.`;
       }
     } catch (error) {
       errorMessage = `Failed to load Wi-Fi status: ${String(error)}`;
@@ -186,14 +218,30 @@
 
     isNetworkScanInFlight = true;
     try {
-      const [nearby, connection] = await Promise.all([
+      const [nearbyResult, connectionResult] = await Promise.allSettled([
         getWifiAccessPoints(),
         getCurrentWifiConnection(),
       ]);
 
-      accessPoints = nearby;
-      currentConnection = connection;
+      if (!hasMounted) {
+        return;
+      }
+
+      if (nearbyResult.status === "fulfilled") {
+        accessPoints = nearbyResult.value;
+      }
+
+      if (connectionResult.status === "fulfilled") {
+        currentConnection = connectionResult.value;
+      }
+
       syncWifiStoreConnectionState();
+
+      if (nearbyResult.status === "rejected" && connectionResult.status === "rejected") {
+        errorMessage = "Failed to refresh Wi-Fi status. Retrying...";
+      } else {
+        errorMessage = "";
+      }
     } catch (error) {
       errorMessage = `Failed to scan nearby networks: ${String(error)}`;
     } finally {
