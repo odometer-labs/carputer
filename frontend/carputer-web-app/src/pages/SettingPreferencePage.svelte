@@ -71,7 +71,7 @@
 
     
     <div class="option-box">
-      <h3>Togle All Tracks</h3>
+      <h3>Turn Off All Tracks</h3>
       <input
         type="checkbox"
         class="checkbox"
@@ -81,7 +81,7 @@
     </div>
     
     <div class="option-box">
-      <h4>Road History</h4>
+      <h3>Road History Within</h3>
       
       <div class="controls">
         <input
@@ -92,12 +92,14 @@
           step="5"
           on:input={handleMilesChange}
         >
+        
         <span style="text-align: right; width: 30px;"><b>{$preferences.milesToDiscoverRoads}</b></span>
+        <b>miles</b>
       </div>
     </div>
 
     <div class="option-box">
-      <h4>Track History</h4>
+      <h3>Track History</h3>
 
       <div class="range-buttons">
         <button

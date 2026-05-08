@@ -223,7 +223,7 @@
         })
       ],
       view: new View({
-        center: fromLonLat([0, 0]), // Default center
+        center: fromLonLat([-122.6765, 45.5231]), // Default center: Portland, OR (fallback when GPS is unavailable)
         zoom: zoomLevel
       }),
       controls: defaultControls({
@@ -243,7 +243,7 @@
 
         return new Style({
           stroke: new Stroke({
-            color: isActive ? "rgba(255, 57, 43, 0.65)" : "rgba(255, 166, 166, 0.75)",
+            color: isActive ?  "rgba(150, 0, 196, 0.9)" : "rgba(250, 95, 255, 0.7)",
             width: 4
           })
         })
@@ -257,7 +257,8 @@
       source: currentTrackSource,
       style: new Style({
         stroke: new Stroke({
-          color: "rgba(28, 145, 255, 0.7)",
+          // color: "rgba(28, 145, 255, 0.7)",
+          color: "#ff34f1",
           width: 4
         })
       })
@@ -478,6 +479,7 @@
       .catch((error: unknown) => {
         const message = `Initial GPS fetch failed: ${String(error)}`;
         locationStatus = message;
+        console.warn('GPS unavailable — map defaulting to Portland, OR');
         reportNonVitalError(error, 'HomeMapPage.getCurrentPosition');
       });
 
@@ -969,7 +971,7 @@
     background-color: rgba(188, 188, 188, 0.9);
     color: #333;
     font-weight: 500;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);   
     transition: all 0.2s;
     outline: none;
   }
