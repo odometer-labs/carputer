@@ -143,7 +143,9 @@ services:
     networks:
       - carputer
     ports:
-        - "9001:9001"
+      - 9001:9001
+    networks:
+      - carputer
     volumes:
         - "/var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket"
     healthcheck:
