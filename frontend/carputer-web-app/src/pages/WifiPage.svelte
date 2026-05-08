@@ -60,9 +60,8 @@
     getSavedWifiConnections,
     getWifiAccessPoints,
   } from "../api/wifiApi";
-  import { setWifiConnected, setWifiDisconnected } from "../stores/wifiStore";
+  import { setWifiConnected, setWifiDisconnected, setWifiPower, wifiStore } from "../stores/wifiStore";
 
-  let isWifiOn = false;
   let wifiStatus = "OFF";
   let isLoading = true;
   let errorMessage = "";
@@ -80,9 +79,9 @@
   const NETWORK_STARTUP_SCAN_ATTEMPTS = 5;
   const NETWORK_STARTUP_SCAN_DELAY_MS = 900;
 
-  $: wifiStatus = isWifiOn ? "ON" : "OFF";
+  $: wifiStatus = $wifiStore.isWifiOn ? "ON" : "OFF";
   $: {
-    if (isWifiOn && currentConnection) {
+    if ($wifiStore.isWifiOn && currentConnection) {
       const ap = accessPoints.find((p) => p.ssid === currentConnection.ssid);
       setWifiConnected(currentConnection.ssid, ap?.signal_strength ?? 0);
     } else {
@@ -126,8 +125,11 @@
       currentConnection = connection;
       savedConnections = saved;
       accessPoints = nearby;
-      isWifiOn = connection !== null;
-      if (isWifiOn) {
+      if (connection) {
+        setWifiPower(true);
+      }
+
+      if ($wifiStore.isWifiOn) {
         startNetworkScanLoop();
       }
     } catch (error) {
@@ -140,10 +142,10 @@
   async function handleWifiToggle(event) {
     const nextState = event.currentTarget.checked;
     errorMessage = "";
+    setWifiPower(nextState);
 
     if (nextState) {
       // Turning ON: start scanning, keep toggle ON even if a scan fails
-      isWifiOn = true;
       startNetworkScanLoop();
       try {
         const [connection, saved] = await Promise.all([
@@ -160,7 +162,6 @@
       }
     } else {
       // Turning OFF: stop scanning and deactivate
-      isWifiOn = false;
       stopNetworkScanLoop();
       currentConnection = null;
       accessPoints = [];
@@ -173,7 +174,7 @@
   }
 
   async function refreshNearbyNetworks() {
-    if (!isWifiOn || isNetworkScanInFlight) {
+    if (!$wifiStore.isWifiOn || isNetworkScanInFlight) {
       return;
     }
 
@@ -335,21 +336,26 @@
     <label class="switch">
       <input
         type="checkbox"
-        checked={isWifiOn}
+        checked={$wifiStore.isWifiOn}
         onchange={handleWifiToggle}
       />
       
       <!-- Icon changes based on state -->
-      <i class={isWifiOn ? "iconoir-switch-on" : "iconoir-switch-off"}></i>
+      <i class={$wifiStore.isWifiOn ? "iconoir-switch-on" : "iconoir-switch-off"}></i>
 
     </label>
 
-    <h3 class={isWifiOn ? "wifi_text_on" : "wifi_text_off"}>{wifiStatus}</h3>
+    <h3 class={$wifiStore.isWifiOn ? "wifi_text_on" : "wifi_text_off"}>{wifiStatus}</h3>
   </div>
 
 
   <!-- this is just a box to tell the user that below
       is the current connection                       -->
+  <div class="option-box connected-to-box">
+    <h3>Connected To:</h3>
+    <h3 class="connected-to-name">{currentConnection?.ssid ?? "None"}</h3>
+  </div>
+
   <div class="option-box">
     <h3>Previously Connected To:</h3>
   </div>
@@ -389,7 +395,7 @@
             class="network-row"
             type="button"
             onclick={() => selectNetwork(accessPoint)}
-            disabled={!isWifiOn || !!busySsid}
+            disabled={!$wifiStore.isWifiOn || !!busySsid}
             aria-expanded={selectedSsid === accessPoint.ssid}
           >
             <span class="network-ssid">{accessPoint.ssid}</span>
@@ -432,7 +438,7 @@
                 class="connect-btn"
                 type="button"
                 onclick={() => connectToNetwork(accessPoint)}
-                disabled={!isWifiOn || !!busySsid}
+                disabled={!$wifiStore.isWifiOn || !!busySsid}
               >
                 {busySsid === accessPoint.ssid ? "Connecting..." : "Connect"}
               </button>
@@ -453,6 +459,20 @@
     padding-left: 5%;
     padding-right: 5%;
     color: black;
+  }
+
+  .connected-to-box {
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .connected-to-name {
+    margin-left: 12px;
+    max-width: 50%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: right;
   }
 
   .network-box {

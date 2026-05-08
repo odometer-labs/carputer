@@ -1,6 +1,7 @@
 import { writable } from "svelte/store";
 
 export interface WifiState {
+  isWifiOn: boolean;
   isConnected: boolean;
   /** Signal strength as a percentage (0–100). 0 when disconnected. */
   signalStrength: number;
@@ -8,6 +9,7 @@ export interface WifiState {
 }
 
 const INITIAL_STATE: WifiState = {
+  isWifiOn: true,
   isConnected: false,
   signalStrength: 0,
   ssid: null,
@@ -15,10 +17,24 @@ const INITIAL_STATE: WifiState = {
 
 export const wifiStore = writable<WifiState>(INITIAL_STATE);
 
+export function setWifiPower(isWifiOn: boolean): void {
+  wifiStore.update((state) => ({ ...state, isWifiOn }));
+}
+
 export function setWifiConnected(ssid: string, signalStrength: number): void {
-  wifiStore.set({ isConnected: true, signalStrength, ssid });
+  wifiStore.update((state) => ({
+    ...state,
+    isConnected: true,
+    signalStrength,
+    ssid,
+  }));
 }
 
 export function setWifiDisconnected(): void {
-  wifiStore.set({ isConnected: false, signalStrength: 0, ssid: null });
+  wifiStore.update((state) => ({
+    ...state,
+    isConnected: false,
+    signalStrength: 0,
+    ssid: null,
+  }));
 }
