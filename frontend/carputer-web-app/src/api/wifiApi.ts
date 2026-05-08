@@ -1,6 +1,7 @@
 export interface WifiAccessPoint {
   ssid: string;
   signal_strength: number;
+  security?: string | null;
 }
 
 export interface StaticNetworkSettings {
@@ -21,7 +22,7 @@ interface CreateWifiConnectionRequest {
   hotspot: boolean;
   connection_id: string;
   ssid: string;
-  password: string;
+  password?: string;
   static_config?: StaticNetworkSettings | null;
 }
 

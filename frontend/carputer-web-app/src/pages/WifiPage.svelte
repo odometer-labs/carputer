@@ -3,6 +3,19 @@
   import BackButton from "../assets/components/BackButton.svelte";
   import SystemIndicators from "../assets/components/SystemIndicators.svelte";
   import WifiIndicator from "../assets/components/WifiIndicator.svelte";
+  import wifi0 from "../assets/icons/wifi-signal0-bold.svg";
+  import wifi1 from "../assets/icons/wifi-signal1-bold.svg";
+  import wifi2 from "../assets/icons/wifi-signal2-bold.svg";
+  import wifi3 from "../assets/icons/wifi-signal3-bold.svg";
+
+  const wifiIcons = [wifi0, wifi1, wifi2, wifi3];
+
+  function signalIcon(strength) {
+    if (strength >= 67) return wifiIcons[3];
+    if (strength >= 34) return wifiIcons[2];
+    if (strength > 0)   return wifiIcons[1];
+    return wifiIcons[0];
+  }
   import {
     activateWifiConnection,
     createAndActivateWifiConnection,
@@ -21,6 +34,9 @@
   let savedConnections = [];
   let accessPoints = [];
   let busySsid = "";
+  let selectedSsid = "";
+  let selectedPassword = "";
+  let passwordRequiredOverride = null;
   let networkScanIntervalId = null;
   let isNetworkScanInFlight = false;
 
@@ -39,6 +55,10 @@
     .filter((accessPoint) => accessPoint.ssid)
     .filter((accessPoint) => accessPoint.ssid !== currentConnection?.ssid)
     .sort((a, b) => b.signal_strength - a.signal_strength);
+  $: selectedAccessPoint = otherNetworks.find((ap) => ap.ssid === selectedSsid) ?? null;
+  $: selectedNetworkRequiresPassword = selectedAccessPoint
+    ? (passwordRequiredOverride ?? isAccessPointSecured(selectedAccessPoint))
+    : false;
 
   onMount(async () => {
     await loadInitialState();
@@ -141,6 +161,46 @@
     networkScanIntervalId = null;
   }
 
+  function isAccessPointSecured(accessPoint) {
+    const security = String(accessPoint?.security ?? "").trim().toLowerCase();
+    if (!security) {
+      return false;
+    }
+    return !["none", "open", "--"].includes(security);
+  }
+
+  function formatSecurity(accessPoint) {
+    const security = String(accessPoint?.security ?? "").trim();
+    if (!security || security.toLowerCase() === "open" || security.toLowerCase() === "none") {
+      return "Open network";
+    }
+    return `Secured (${security})`;
+  }
+
+  function selectNetwork(accessPoint) {
+    if (busySsid) {
+      return;
+    }
+
+    if (selectedSsid === accessPoint.ssid) {
+      selectedSsid = "";
+      selectedPassword = "";
+      passwordRequiredOverride = null;
+      return;
+    }
+
+    selectedSsid = accessPoint.ssid;
+    selectedPassword = "";
+    passwordRequiredOverride = isAccessPointSecured(accessPoint);
+    errorMessage = "";
+  }
+
+  function clearSelection() {
+    selectedSsid = "";
+    selectedPassword = "";
+    passwordRequiredOverride = null;
+  }
+
   async function connectToNetwork(accessPoint) {
     busySsid = accessPoint.ssid;
     errorMessage = "";
@@ -153,9 +213,9 @@
       if (existing?.uuid) {
         await activateWifiConnection(existing.uuid);
       } else {
-        const password = window.prompt(`Enter password for ${accessPoint.ssid}`);
-        if (!password) {
-          busySsid = "";
+        const requiresPassword = passwordRequiredOverride ?? isAccessPointSecured(accessPoint);
+        if (requiresPassword && !selectedPassword.trim()) {
+          errorMessage = `Password required for ${accessPoint.ssid}.`;
           return;
         }
 
@@ -163,7 +223,7 @@
           hotspot: false,
           connection_id: accessPoint.ssid,
           ssid: accessPoint.ssid,
-          password,
+          ...(requiresPassword ? { password: selectedPassword.trim() } : {}),
         });
       }
 
@@ -173,6 +233,7 @@
       ]);
       currentConnection = connection;
       savedConnections = saved;
+      clearSelection();
     } catch (error) {
       errorMessage = `Failed to connect to ${accessPoint.ssid}: ${String(error)}`;
     } finally {
@@ -252,21 +313,61 @@
       <p class="network-message">No additional networks found.</p>
     {:else}
       {#each otherNetworks as accessPoint}
-        <button
-          class="network-row"
-          type="button"
-          onclick={() => connectToNetwork(accessPoint)}
-          disabled={!isWifiOn || !!busySsid}
-        >
-          <span class="network-ssid">{accessPoint.ssid}</span>
-          <span class="network-signal">
-            {#if busySsid === accessPoint.ssid}
-              Connecting...
-            {:else}
-              Signal: {accessPoint.signal_strength}%
-            {/if}
-          </span>
-        </button>
+        <div class="network-card {selectedSsid === accessPoint.ssid ? 'selected' : ''}">
+          <button
+            class="network-row"
+            type="button"
+            onclick={() => selectNetwork(accessPoint)}
+            disabled={!isWifiOn || !!busySsid}
+            aria-expanded={selectedSsid === accessPoint.ssid}
+          >
+            <span class="network-ssid">{accessPoint.ssid}</span>
+            <span class="network-signal">
+              {#if busySsid === accessPoint.ssid}
+                Connecting...
+              {:else}
+                <img src={signalIcon(accessPoint.signal_strength)} alt="signal {accessPoint.signal_strength}%" style="width:22px; height:22px;" />
+              {/if}
+            </span>
+          </button>
+
+          {#if selectedSsid === accessPoint.ssid}
+            <div class="network-details">
+              <p class="network-security">{formatSecurity(accessPoint)}</p>
+
+              <label class="password-toggle">
+                <input
+                  type="checkbox"
+                  checked={selectedNetworkRequiresPassword}
+                  onchange={(event) => (passwordRequiredOverride = event.currentTarget.checked)}
+                  disabled={!!busySsid}
+                />
+                Requires password
+              </label>
+
+              {#if selectedNetworkRequiresPassword}
+                <label class="password-input-wrap">
+                  <span>Password</span>
+                  <input
+                    type="password"
+                    bind:value={selectedPassword}
+                    placeholder="Enter Wi-Fi password"
+                    disabled={!!busySsid}
+                  />
+                </label>
+              {/if}
+
+              <button
+                class="connect-btn"
+                type="button"
+                onclick={() => connectToNetwork(accessPoint)}
+                disabled={!isWifiOn || !!busySsid}
+              >
+                {busySsid === accessPoint.ssid ? "Connecting..." : "Connect"}
+              </button>
+            </div>
+          {/if}
+        </div>
       {/each}
     {/if}
   </div>
@@ -301,6 +402,66 @@
     text-align: left;
   }
 
+  .network-card {
+    margin-top: 10px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.35);
+  }
+
+  .network-card.selected {
+    border: 1px solid rgba(33, 140, 0, 0.35);
+  }
+
+  .network-details {
+    padding: 0 14px 12px;
+    display: grid;
+    gap: 8px;
+  }
+
+  .network-security {
+    margin: 0;
+    color: #1d1d1d;
+    font-size: 0.85rem;
+  }
+
+  .password-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    color: #222;
+  }
+
+  .password-input-wrap {
+    display: grid;
+    gap: 4px;
+    font-size: 0.85rem;
+    color: #222;
+  }
+
+  .password-input-wrap input {
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.8);
+  }
+
+  .connect-btn {
+    border: 0;
+    border-radius: 8px;
+    background: rgba(33, 140, 0, 0.9);
+    color: white;
+    padding: 8px 10px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .connect-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
   .network-row:disabled {
     opacity: 0.6;
   }
@@ -320,6 +481,8 @@
 
   .network-signal {
     font-size: 0.9rem;
+    display: flex;
+    align-items: center;
   }
 
   .network-message {
