@@ -35,6 +35,23 @@
     return Array.from(strongestBySsid.values());
   }
 
+  function dedupeConnectionsBySsid(connectionList) {
+    const uniqueBySsid = new Map();
+
+    for (const connection of connectionList) {
+      const ssid = String(connection?.ssid ?? "").trim();
+      if (!ssid) {
+        continue;
+      }
+
+      if (!uniqueBySsid.has(ssid)) {
+        uniqueBySsid.set(ssid, { ...connection, ssid });
+      }
+    }
+
+    return Array.from(uniqueBySsid.values());
+  }
+
   import {
     activateWifiConnection,
     createAndActivateWifiConnection,
@@ -75,6 +92,13 @@
   $: otherNetworks = dedupeAccessPointsBySsid(accessPoints)
     .filter((accessPoint) => accessPoint.ssid !== currentConnection?.ssid)
     .sort((a, b) => b.signal_strength - a.signal_strength);
+  $: previousConnections = dedupeConnectionsBySsid(savedConnections)
+    .filter((connection) => !connection.hotspot)
+    .sort((a, b) => {
+      if (a.ssid === currentConnection?.ssid) return -1;
+      if (b.ssid === currentConnection?.ssid) return 1;
+      return a.ssid.localeCompare(b.ssid);
+    });
   $: selectedAccessPoint = otherNetworks.find((ap) => ap.ssid === selectedSsid) ?? null;
   $: selectedNetworkRequiresPassword = selectedAccessPoint
     ? (passwordRequiredOverride ?? isAccessPointSecured(selectedAccessPoint))
@@ -155,7 +179,13 @@
 
     isNetworkScanInFlight = true;
     try {
-      accessPoints = await getWifiAccessPoints();
+      const [nearby, connection] = await Promise.all([
+        getWifiAccessPoints(),
+        getCurrentWifiConnection(),
+      ]);
+
+      accessPoints = nearby;
+      currentConnection = connection;
     } catch (error) {
       errorMessage = `Failed to scan nearby networks: ${String(error)}`;
     } finally {
@@ -321,19 +351,23 @@
   <!-- this is just a box to tell the user that below
       is the current connection                       -->
   <div class="option-box">
-    <h3>Currently Connected To:</h3>
+    <h3>Previously Connected To:</h3>
   </div>
-
+  
   <div class="network-box">
     {#if isLoading}
       <p class="network-message">Loading current connection...</p>
-    {:else if currentConnection}
-      <div class="network-row active-network">
-        <span class="network-ssid">{currentConnection.ssid}</span>
-        <span class="network-signal">Connected</span>
-      </div>
+    {:else if previousConnections.length > 0}
+      {#each previousConnections as connection}
+        <div class="network-row {connection.ssid === currentConnection?.ssid ? 'active-network' : ''}">
+          <span class="network-ssid">{connection.ssid}</span>
+          <span class="network-signal">
+            {connection.ssid === currentConnection?.ssid ? "Connected" : "Saved"}
+          </span>
+        </div>
+      {/each}
     {:else}
-      <p class="network-message">No active Wi-Fi connection.</p>
+      <p class="network-message">No previously connected Wi-Fi networks.</p>
     {/if}
   </div>
   
