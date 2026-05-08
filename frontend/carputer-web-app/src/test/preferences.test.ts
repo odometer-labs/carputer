@@ -46,8 +46,7 @@ describe("preferences service", () => {
         brightness: 8,
         defaultZoom: 30,
         iconSizeLevel: -4,
-        showTracksAfterDate: "04-12-2025",
-        showTracksBeforeDate: "05-16-2026"
+        trackRange: "banan",
       }),
     );
 
@@ -58,8 +57,7 @@ describe("preferences service", () => {
       brightness: 10,
       defaultZoom: 21,
       iconSizeLevel: 1,
-      showTracksAfterDate: null,
-      showTracksBeforeDate: null
+      trackRange: "all"
     });
   });
 
@@ -80,8 +78,7 @@ describe("preferences service", () => {
       milesToDiscoverRoads: 75,
       defaultZoom: 12,
       iconSizeLevel: 5,
-      showTracksAfterDate: null,
-      showTracksBeforeDate: null
+      trackRange: "all"
     });
   });
 
@@ -124,15 +121,13 @@ describe("preferences service", () => {
     }
   });
 
-  it("handles showTracksAfterDate and showTracksBeforeDate correctly", async () => {
+  it("handles trackRange correctly", async () => {
     const { savePreferences, loadPreferences } = await loadPreferencesModule();
 
     savePreferences({ 
-      showTracksAfterDate: "2026-04-28",
-      showTracksBeforeDate: "2026-05-22"
+      trackRange: "day"
     });
 
-    expect(loadPreferences().showTracksAfterDate).toBe("2026-04-28");
-    expect(loadPreferences().showTracksBeforeDate).toBe("2026-05-22");
+    expect(loadPreferences().trackRange).toBe("day");
   });
 });

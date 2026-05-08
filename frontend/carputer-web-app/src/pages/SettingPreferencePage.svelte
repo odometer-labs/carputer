@@ -5,6 +5,7 @@
   import {
     preferences,
     updatePreferences,
+    type TrackRange,
   } from "../services/preferences";
 
 
@@ -28,20 +29,8 @@
     updatePreferences({ brightness: Number(input.value) });
   }
 
-  function handleTracksAfterDateChange(event: Event) : void {
-    const input = event.currentTarget as HTMLInputElement;
-
-    updatePreferences({
-      showTracksAfterDate: input.value ? input.value : null
-    });
-  }
-
-  function handleTracksBeforeDateChange(event: Event) : void {
-    const input = event.currentTarget as HTMLInputElement;
-
-    updatePreferences({
-      showTracksBeforeDate: input.value ? input.value : null
-    });
+  function handleTrackRange(range: TrackRange) : void {
+    updatePreferences({ trackRange: range});
   }
 
   // defaultZoom stored as 12–21; displayed as 1–10 (display = zoom - 11)
@@ -80,9 +69,7 @@
       />
     </div>
 
-    <!-- the box contains a settings functionality 
-        THIS IS ALL JUST TEMPORARY, I JUST DIDN'T WANT THIS PAGE
-        TO BE EMPY                                              -->
+    
     <div class="option-box">
       <h3>Togle All Tracks</h3>
       <input
@@ -110,39 +97,42 @@
     </div>
 
     <div class="option-box">
-      <h4>Show Tracks After:</h4>
+      <h4>Track History</h4>
 
-      <div>
-        <input
-          type="date"
-          value={$preferences.showTracksAfterDate ?? ""}
-          on:change={handleTracksAfterDateChange}
-        />
-
-        <button 
-          on:click={() => updatePreferences({ showTracksAfterDate: null })}
-          class="date-btn"
+      <div class="range-buttons">
+        <button
+          class:selected={$preferences.trackRange === "day"}
+          on:click={() => handleTrackRange("day")}
         >
-          Clear
+          Day
         </button>
-      </div>
-    </div>
 
-    <div class="option-box">
-      <h4>Show Tracks Before:</h4>
-
-      <div>
-        <input
-          type="date"
-          value={$preferences.showTracksBeforeDate ?? ""}
-          on:change={handleTracksBeforeDateChange}
-        />
-
-        <button 
-          on:click={() => updatePreferences({ showTracksBeforeDate: null })}
-          class="date-btn"
+        <button
+          class:selected={$preferences.trackRange === "week"}
+          on:click={() => handleTrackRange("week")}
         >
-          Clear
+          Week
+        </button>
+
+        <button
+          class:selected={$preferences.trackRange === "month"}
+          on:click={() => handleTrackRange("month")}
+        >
+          Month
+        </button>
+
+        <button
+          class:selected={$preferences.trackRange === "year"}
+          on:click={() => handleTrackRange("year")}
+        >
+          Year
+        </button>
+
+        <button
+          class:selected={$preferences.trackRange === "all"}
+          on:click={() => handleTrackRange("all")}
+        >
+          All
         </button>
       </div>
     </div>
@@ -156,9 +146,6 @@
       <h2>Preferences</h2>
     </div>
 
-    <!-- the box contains a preferences functionality
-        THIS IS ALL JUST TEMPORARY, I JUST DIDN'T WANT THIS PAGE
-        TO BE EMPY                                              -->
     <div class="option-box">
       <h3>Night Mode</h3>
       <span class="icon">
@@ -269,19 +256,23 @@
     font-size: 1.1rem;
   }
 
-  .date-btn {
-    height: 28px;
-    padding: 0 8px;
-    font-size: 0.85rem;
+  .range-buttons {
+    display: flex;
+    gap: 8px;
+  }
+
+  .range-buttons button {
+    padding: 6px 12px;
     -webkit-text-fill-color: black;
     border: 1px solid #ccc;
     background: rgb(130, 130, 130);
     cursor: pointer;
-    align-items: center;
     outline: none;
   }
-  .date-btn:active {
-    background-color: rgb(100, 100, 100);
+
+  .range-buttons button.selected {
+    background: rgb(100, 100, 100);
+    -webkit-text-fill-color: white;
   }
 
 </style>

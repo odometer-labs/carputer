@@ -19,7 +19,7 @@
   import { push } from 'svelte-spa-router';
   import { Cluster } from 'ol/source';
   import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
-  import { preferences } from '../services/preferences';
+  import { preferences, type TrackRange } from '../services/preferences';
   import aprsIconUrl from '../assets/aprs-bold.svg';
   import userArrowIconUrl from '../assets/icons/maps-arrow-blue-white.svg';
   import { trackStore } from '../stores/trackStore'
@@ -98,24 +98,14 @@
         };
       }
 
-      //set up the date string so that you can compare
-      const afterDate = $preferences.showTracksAfterDate
-        ? new Date($preferences.showTracksAfterDate + "T00:00:00")
-        : null;
-      
-      const beforeDate = $preferences.showTracksBeforeDate
-        ? new Date($preferences.showTracksBeforeDate + "T23:59:59")
-        : null;
+      const afterDate = getAfterDate($preferences.trackRange);
 
       return {
         tracks: $trackStore.tracks.filter(track => {
           const start = new Date(track.start_time);
 
-          //this is fore after the date
+          //this is for after the date
           if ((afterDate) && (start < afterDate)) return false;
-
-          // this is for before the date
-          if ((beforeDate) && (start > beforeDate)) return false;
 
           return true;
         }),
@@ -123,6 +113,35 @@
       };
     }
   );
+
+  // this function gets the date by 1 day, week, month or year. 
+  // if there shouldn't be a date, if the user has selected all tracks
+  // to show then it should default to null
+  function getAfterDate(range: TrackRange) : Date | null {
+    if (range === "all") return null;
+
+    const date = new Date();
+
+    // set to midnight
+    date.setHours(0, 0, 0, 0);
+
+    switch (range) {
+      case "day":
+        date.setDate(date.getDate() - 1);
+        break;
+      case "week":
+        date.setDate(date.getDate() - 7);
+        break;
+      case "month":
+        date.setMonth(date.getMonth() - 1);
+        break;
+      case "year":
+        date.setFullYear(date.getFullYear() - 1);
+        break;
+    }
+
+    return date;
+  }
 
   function getUserIconScale(): number {
     return 0.6 + ($preferences.iconSizeLevel * 0.2);

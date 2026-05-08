@@ -2,11 +2,12 @@ import { writable, type Writable } from "svelte/store";
 
 const STORAGE_KEY = "carputer.preferences.v1";
 
+export type TrackRange = "all" | "day" | "week" | "month" | "year";
+
 export interface Preferences {
   toggleAllTracks: boolean;
   milesToDiscoverRoads: number;
-  showTracksAfterDate: string | null;
-  showTracksBeforeDate: string | null;
+  trackRange: TrackRange;
   nightMode: boolean;
   brightness: number;
   defaultZoom: number;
@@ -18,8 +19,7 @@ type PreferencesPatch = Partial<Preferences>;
 export const DEFAULT_PREFERENCES: Preferences = {
   toggleAllTracks: false,
   milesToDiscoverRoads: 50,
-  showTracksAfterDate: null,
-  showTracksBeforeDate: null,
+  trackRange: "all",
   nightMode: false,
   brightness: 100,
   defaultZoom: 18,
@@ -67,13 +67,17 @@ function clampIconSizeLevel(value: unknown): number {
   return Math.round(Math.min(5, Math.max(1, numericValue)));
 }
 
-function validateDate(date: string | null | undefined): string | null {
-  if (typeof date !== "string") return null; //checks if it's a string
-
-  // check if it's in the correct format too
-  if (!(/^\d{4}-\d{2}-\d{2}$/).test(date)) return null;
-
-  return date;
+function validateTrackRange(value: unknown) : TrackRange {
+  switch (value) {
+    case "day":
+    case "week":
+    case "month":
+    case "year":
+    case "all":
+      return value;
+    default:
+      return DEFAULT_PREFERENCES.trackRange;
+  }
 }
 
 function sanitizePreferences(
@@ -86,8 +90,7 @@ function sanitizePreferences(
     brightness: clampBrightness(rawPreferences.brightness),
     defaultZoom: clampZoom(rawPreferences.defaultZoom),
     iconSizeLevel: clampIconSizeLevel(rawPreferences.iconSizeLevel),
-    showTracksAfterDate: validateDate(rawPreferences.showTracksAfterDate),
-    showTracksBeforeDate: validateDate(rawPreferences.showTracksBeforeDate),
+    trackRange: validateTrackRange(rawPreferences.trackRange),
   };
 }
 
