@@ -47,6 +47,14 @@ function sanitizeTrackColor(value: unknown, fallback: string): string {
   return normalized.toLowerCase();
 }
 
+function sanitizeBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  return fallback;
+}
+
 function clampMiles(value: unknown): number {
   const numericValue = Number(value);
 
@@ -114,24 +122,43 @@ function validateTrackRange(value: unknown): TrackRange {
 function sanitizeSettingsPreferences(
   rawPreferences: Partial<Preferences> & { trackColor?: unknown } = {},
 ): Preferences {
-  const legacyTrackColor = sanitizeTrackColor(
-    rawPreferences.trackColor,
-    DEFAULT_PREFERENCES.selectedTrackColor,
-  );
+  const hasLegacyTrackColor = typeof rawPreferences.trackColor === "string";
+  const legacyTrackColor = hasLegacyTrackColor
+    ? sanitizeTrackColor(
+        rawPreferences.trackColor,
+        DEFAULT_PREFERENCES.selectedTrackColor,
+      )
+    : null;
+
+  const selectedTrackFallback =
+    legacyTrackColor !== null && rawPreferences.selectedTrackColor === undefined
+      ? legacyTrackColor
+      : DEFAULT_PREFERENCES.selectedTrackColor;
+
+  const restingTrackFallback =
+    legacyTrackColor !== null && rawPreferences.restingTrackColor === undefined
+      ? legacyTrackColor
+      : DEFAULT_PREFERENCES.restingTrackColor;
 
   return {
-    areAllTracksOn: Boolean(rawPreferences.areAllTracksOn),
+    areAllTracksOn: sanitizeBoolean(
+      rawPreferences.areAllTracksOn,
+      DEFAULT_PREFERENCES.areAllTracksOn,
+    ),
     milesToDiscoverRoads: clampMiles(rawPreferences.milesToDiscoverRoads),
     selectedTrackColor: sanitizeTrackColor(
       rawPreferences.selectedTrackColor,
-      legacyTrackColor,
+      selectedTrackFallback,
     ),
     restingTrackColor: sanitizeTrackColor(
       rawPreferences.restingTrackColor,
-      legacyTrackColor,
+      restingTrackFallback,
     ),
     trackThickness: clampTrackThickness(rawPreferences.trackThickness),
-    nightMode: Boolean(rawPreferences.nightMode),
+    nightMode: sanitizeBoolean(
+      rawPreferences.nightMode,
+      DEFAULT_PREFERENCES.nightMode,
+    ),
     brightness: clampBrightness(rawPreferences.brightness),
     defaultZoom: clampZoom(rawPreferences.defaultZoom),
     iconSizeLevel: clampIconSizeLevel(rawPreferences.iconSizeLevel),
@@ -152,7 +179,7 @@ export function loadSettingsPreferences(): Preferences {
     }
 
     const parsed = JSON.parse(stored) as Partial<Preferences>;
-    return sanitizeSettingsPreferences({ ...DEFAULT_PREFERENCES, ...parsed });
+    return sanitizeSettingsPreferences(parsed);
   } catch {
     return { ...DEFAULT_PREFERENCES };
   }
