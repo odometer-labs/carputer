@@ -19,7 +19,7 @@
   import { push } from 'svelte-spa-router';
   import { Cluster } from 'ol/source';
   import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
-  import { preferences, type TrackRange } from '../services/preferences';
+  import { settingsPreferences, type TrackRange } from '../services/settings_preferences';
   import aprsIconUrl from '../assets/icons/aprs-bold.svg';
   import userArrowIconUrl from '../assets/icons/maps-arrow-blue-white.svg';
   import { trackStore } from '../stores/trackStore'
@@ -73,7 +73,7 @@
   let stopGPSSubscription: (() => void) | null = null;
 
   let zoomLevel: number = 18;
-  $: zoomLevel = $preferences.defaultZoom; // default zoom level when centering on user
+  $: zoomLevel = $settingsPreferences.defaultZoom; // default zoom level when centering on user
 
   //this is to prevent having too many calls for $trackStore.checkIfNewRoad
   let lastCheckTime: number = 0;
@@ -84,10 +84,10 @@
 
   // this is the list of tracks that is shown on the page, filtered
   const filteredTracks = derived(
-    [trackStore, preferences],
-    ([$trackStore, $preferences]) => {
+    [trackStore, settingsPreferences],
+    ([$trackStore, $settingsPreferences]) => {
       //disable all tracks 
-      if ($preferences.toggleAllTracks) {
+      if (!$settingsPreferences.areAllTracksOn) {
         //set the selectedTrackID to null
         $trackStore.selectedTrackId = null;
 
@@ -98,7 +98,7 @@
         };
       }
 
-      const afterDate = getAfterDate($preferences.trackRange);
+      const afterDate = getAfterDate($settingsPreferences.trackRange);
 
       return {
         tracks: $trackStore.tracks.filter(track => {
@@ -144,11 +144,51 @@
   }
 
   function getUserIconScale(): number {
-    return 0.6 + ($preferences.iconSizeLevel * 0.2);
+    return 0.6 + ($settingsPreferences.iconSizeLevel * 0.2);
   }
 
   function getUserMarkerRadius(): number {
-    return 5 + $preferences.iconSizeLevel;
+    return 5 + $settingsPreferences.iconSizeLevel;
+  }
+
+  function hexToRgba(hex: string, alpha: number): string {
+    const normalized = hex.trim().replace("#", "");
+
+    if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+      return `rgba(255, 52, 241, ${alpha})`;
+    }
+
+    const red = parseInt(normalized.slice(0, 2), 16);
+    const green = parseInt(normalized.slice(2, 4), 16);
+    const blue = parseInt(normalized.slice(4, 6), 16);
+
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+  }
+
+  function getSelectedTrackColor(alpha: number = 1): string {
+    return hexToRgba($settingsPreferences.selectedTrackColor, alpha);
+  }
+
+  function getRestingTrackColor(alpha: number = 1): string {
+    return hexToRgba($settingsPreferences.restingTrackColor, alpha);
+  }
+
+  function getTrackWidth(offset: number = 0): number {
+    return Math.max(1, $settingsPreferences.trackThickness + offset);
+  }
+
+  $: if (oldTrackLayer) {
+    $settingsPreferences.selectedTrackColor;
+    $settingsPreferences.restingTrackColor;
+    $settingsPreferences.trackThickness;
+    oldTrackLayer.changed();
+  }
+
+  $: if (currentTrackLayer) {
+    $settingsPreferences.selectedTrackColor;
+    $settingsPreferences.restingTrackColor;
+    $settingsPreferences.trackThickness;
+    currentTrackLayer.changed();
   }
 
   // run once when the Svelte component is mounted
@@ -243,8 +283,8 @@
 
         return new Style({
           stroke: new Stroke({
-            color: isActive ?  "rgba(150, 0, 196, 0.9)" : "rgba(250, 95, 255, 0.7)",
-            width: 4
+            color: isActive ? getSelectedTrackColor(0.95) : getRestingTrackColor(0.55),
+            width: isActive ? getTrackWidth(1) : getTrackWidth(0)
           })
         })
       }
@@ -255,11 +295,10 @@
     // this determines the color/shape/size of the current track the user is making
     currentTrackLayer = new VectorLayer({
       source: currentTrackSource,
-      style: new Style({
+      style: () => new Style({
         stroke: new Stroke({
-          // color: "rgba(28, 145, 255, 0.7)",
-          color: "#ff34f1",
-          width: 4
+          color: getSelectedTrackColor(0.8),
+          width: getTrackWidth(0)
         })
       })
     });

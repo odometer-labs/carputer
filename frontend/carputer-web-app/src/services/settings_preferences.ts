@@ -5,9 +5,12 @@ const STORAGE_KEY = "carputer.preferences.v1";
 export type TrackRange = "all" | "day" | "week" | "month" | "year";
 
 export interface Preferences {
-  toggleAllTracks: boolean;
+  areAllTracksOn: boolean;
   milesToDiscoverRoads: number;
   trackRange: TrackRange;
+  selectedTrackColor: string;
+  restingTrackColor: string;
+  trackThickness: number;
   nightMode: boolean;
   brightness: number;
   defaultZoom: number;
@@ -17,14 +20,32 @@ export interface Preferences {
 type PreferencesPatch = Partial<Preferences>;
 
 export const DEFAULT_PREFERENCES: Preferences = {
-  toggleAllTracks: false,
+  areAllTracksOn: true,
   milesToDiscoverRoads: 50,
   trackRange: "all",
+  selectedTrackColor: "#ff34f1",
+  restingTrackColor: "#fa5fff",
+  trackThickness: 4,
   nightMode: false,
   brightness: 100,
   defaultZoom: 18,
   iconSizeLevel: 3,
 };
+
+function sanitizeTrackColor(value: unknown, fallback: string): string {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  const normalized = value.trim();
+  const hexColorPattern = /^#([0-9a-fA-F]{6})$/;
+
+  if (!hexColorPattern.test(normalized)) {
+    return fallback;
+  }
+
+  return normalized.toLowerCase();
+}
 
 function clampMiles(value: unknown): number {
   const numericValue = Number(value);
@@ -35,6 +56,16 @@ function clampMiles(value: unknown): number {
 
   const clamped = Math.min(100, Math.max(0, numericValue));
   return Math.round(clamped / 5) * 5;
+}
+
+function clampTrackThickness(value: unknown): number {
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return DEFAULT_PREFERENCES.trackThickness;
+  }
+
+  return Math.round(Math.min(12, Math.max(1, numericValue)));
 }
 
 function clampBrightness(value: unknown): number {
@@ -67,7 +98,7 @@ function clampIconSizeLevel(value: unknown): number {
   return Math.round(Math.min(5, Math.max(1, numericValue)));
 }
 
-function validateTrackRange(value: unknown) : TrackRange {
+function validateTrackRange(value: unknown): TrackRange {
   switch (value) {
     case "day":
     case "week":
@@ -80,12 +111,26 @@ function validateTrackRange(value: unknown) : TrackRange {
   }
 }
 
-function sanitizePreferences(
-  rawPreferences: Partial<Preferences> = {},
+function sanitizeSettingsPreferences(
+  rawPreferences: Partial<Preferences> & { trackColor?: unknown } = {},
 ): Preferences {
+  const legacyTrackColor = sanitizeTrackColor(
+    rawPreferences.trackColor,
+    DEFAULT_PREFERENCES.selectedTrackColor,
+  );
+
   return {
-    toggleAllTracks: Boolean(rawPreferences.toggleAllTracks),
+    areAllTracksOn: Boolean(rawPreferences.areAllTracksOn),
     milesToDiscoverRoads: clampMiles(rawPreferences.milesToDiscoverRoads),
+    selectedTrackColor: sanitizeTrackColor(
+      rawPreferences.selectedTrackColor,
+      legacyTrackColor,
+    ),
+    restingTrackColor: sanitizeTrackColor(
+      rawPreferences.restingTrackColor,
+      legacyTrackColor,
+    ),
+    trackThickness: clampTrackThickness(rawPreferences.trackThickness),
     nightMode: Boolean(rawPreferences.nightMode),
     brightness: clampBrightness(rawPreferences.brightness),
     defaultZoom: clampZoom(rawPreferences.defaultZoom),
@@ -94,7 +139,7 @@ function sanitizePreferences(
   };
 }
 
-export function loadPreferences(): Preferences {
+export function loadSettingsPreferences(): Preferences {
   if (typeof localStorage === "undefined") {
     return { ...DEFAULT_PREFERENCES };
   }
@@ -107,39 +152,41 @@ export function loadPreferences(): Preferences {
     }
 
     const parsed = JSON.parse(stored) as Partial<Preferences>;
-    return sanitizePreferences({ ...DEFAULT_PREFERENCES, ...parsed });
+    return sanitizeSettingsPreferences({ ...DEFAULT_PREFERENCES, ...parsed });
   } catch {
     return { ...DEFAULT_PREFERENCES };
   }
 }
 
-export function savePreferences(preferences: Partial<Preferences>): void {
+export function saveSettingsPreferences(
+  preferences: Partial<Preferences>,
+): void {
   if (typeof localStorage === "undefined") {
     return;
   }
 
-  const sanitized = sanitizePreferences({
+  const sanitized = sanitizeSettingsPreferences({
     ...DEFAULT_PREFERENCES,
     ...preferences,
   });
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitized));
 }
 
-function createPreferencesStore(): Writable<Preferences> {
-  const initialPreferences = loadPreferences();
+function createSettingsPreferencesStore(): Writable<Preferences> {
+  const initialPreferences = loadSettingsPreferences();
   const store = writable<Preferences>(initialPreferences);
 
   store.subscribe((preferences) => {
-    savePreferences(preferences);
+    saveSettingsPreferences(preferences);
   });
 
   return store;
 }
 
-export const preferences = createPreferencesStore();
+export const settingsPreferences = createSettingsPreferencesStore();
 
-export function updatePreferences(patch: PreferencesPatch): void {
-  preferences.update((currentPreferences) => ({
+export function updateSettingsPreferences(patch: PreferencesPatch): void {
+  settingsPreferences.update((currentPreferences) => ({
     ...currentPreferences,
     ...patch,
   }));
