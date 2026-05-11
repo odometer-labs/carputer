@@ -88,7 +88,7 @@ class TrackClient:
                     cursor.execute("""SELECT gps.create_track();""")
                 else:
                     cursor.execute("""SELECT gps.create_track(%s)""", (final_name,))
-                track_id = cursor.fetchone()[0]
+                track_id = cursor.fetchone()
                 conn.commit()
                 return track_id
 
