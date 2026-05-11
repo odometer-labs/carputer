@@ -68,31 +68,6 @@ def test_track_name(db_conn):
         )
         assert cur.fetchone()["track_name"] == "Hello"
 
-        
-
-def test_track_name(db_conn):
-    """
-    Test track creation with name parameter.
-    """
-
-    with db_conn.cursor() as cur:
-        cur.execute("SELECT gps.create_track(%s) as id", ("Hello",))
-        track_id = cur.fetchone()["id"]
-        assert track_id is not None
-
-        cur.execute("SELECT count(*) from gps.tracks as id;")
-        assert cur.fetchone()["count"] == 1
-
-        cur.execute("CALL gps.end_track();")
-
-        cur.execute("SELECT end_time FROM gps.tracks WHERE track_id = %s;", (track_id,))
-        assert cur.fetchone()["end_time"] is not None
-
-        cur.execute(
-            "SELECT track_name FROM gps.tracks WHERE track_id = %s;", (track_id,)
-        )
-        assert cur.fetchone()["track_name"] == "Hello"
-
 
 def test_add_track_point(db_conn, sample_track_points):
     """
@@ -609,7 +584,7 @@ def test_retrieve_tracks(db_conn, sample_track_points):
 
         cur.execute("SELECT * FROM gps.retrieve_track(%s);", (track_ids[0],))
         result = cur.fetchone()
-        assert len(result) == 5
+        assert len(result) == 6
         assert result["geom"] is not None
         assert result["track_id"] == track_ids[0]
         assert result["track_name"] == "Hello"
@@ -617,6 +592,27 @@ def test_retrieve_tracks(db_conn, sample_track_points):
         # NOW VERIFY GEOJSON
         # Extract the geom column
         geojson = result["geom"]
+
+        # VERIFY
+        # Check if it's a dictionary (JSONB is auto-parsed by the driver)
+        assert isinstance(geojson, dict), "The geom column should be a dictionary"
+
+        # Check for standard GeoJSON keys
+        assert geojson["type"] == "LineString", "GeoJSON type should be LineString"
+        assert "coordinates" in geojson, "GeoJSON must contain a 'coordinates' key"
+
+        # Check if coordinates are a list of points
+        assert isinstance(geojson["coordinates"], list)
+        assert len(geojson["coordinates"]) >= 2
+
+        # Verify the coordinate structure [longitude, latitude]
+        # GeoJSON is ALWAYS [Long, Lat], whereas PostGIS functions often use [Lat, Long]
+        first_coord = geojson["coordinates"][0]
+        assert len(first_coord) == 2
+        assert isinstance(first_coord[0], float)  # Longitude
+        assert isinstance(first_coord[1], float)  # Latitude
+
+        geojson = result["geom_wm"]
 
         # VERIFY
         # Check if it's a dictionary (JSONB is auto-parsed by the driver)
@@ -691,6 +687,8 @@ def test_import_track(db_conn, sample_track_points):
         assert "geom" in result
         assert result["geom"]["type"] == "LineString"
         assert isinstance(result["geom"], dict)
+
+        assert result["geom_wm"] is not None
 
 
 def test_import_track_timing_and_geom(db_conn):

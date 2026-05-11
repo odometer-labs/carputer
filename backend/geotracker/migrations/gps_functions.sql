@@ -113,35 +113,6 @@ END;
 $$;
 -- Add track point with track id
 CREATE OR REPLACE PROCEDURE gps.add_track_point(
-        p_time_stamp TIMESTAMPTZ,
-        p_latitude DOUBLE PRECISION,
-        p_longitude DOUBLE PRECISION,
-        p_speed_mps DOUBLE PRECISION,
-        p_heading_deg DOUBLE PRECISION
-    ) LANGUAGE plpgsql AS $$
-DECLARE p_track_id BIGINT;
-BEGIN
-SELECT track_id INTO p_track_id
-FROM gps.tracks
-WHERE end_time is NULL;
-INSERT INTO gps.track_points (
-        track_id,
-        time_stamp,
-        geom,
-        speed_mps,
-        heading_deg
-    )
-VALUES (
-        p_track_id,
-        p_time_stamp,
-        ST_Point(p_longitude, p_latitude, 4326)::GEOGRAPHY,
-        p_speed_mps,
-        p_heading_deg
-    );
-END;
-$$;
--- Add track point with track id
-CREATE OR REPLACE PROCEDURE gps.add_track_point(
         p_track_id BIGINT,
         p_time_stamp TIMESTAMPTZ,
         p_latitude DOUBLE PRECISION,
@@ -294,12 +265,14 @@ $$;
 CREATE OR REPLACE FUNCTION gps.retrieve_track(retrieve_track_id INTEGER) RETURNS TABLE (
         track_id BIGINT,
         geom JSONB,
+        geom_wm JSONB,
         start_time TIMESTAMPTZ,
         end_time TIMESTAMPTZ,
         track_name VARCHAR(50)
     ) LANGUAGE plpgsql AS $$ BEGIN RETURN QUERY
 SELECT t.track_id,
     ST_AsGeoJSON(tl.geom, 6)::jsonb,
+    ST_AsGEOJSON(tl.geom_wm, 6)::jsonb,
     t.start_time,
     t.end_time,
     t.track_name
@@ -453,14 +426,17 @@ $$;
 -- Utility for batch-importing external data sets as completed tracks
 CREATE OR REPLACE FUNCTION gps.import_track(geojson_data TEXT) RETURNS INTEGER LANGUAGE plpgsql AS $$
 DECLARE new_track_id INTEGER;
+new_geom GEOMETRY;
 BEGIN
 INSERT INTO gps.tracks(start_time, end_time)
 VALUES (NOW(), NOW())
 RETURNING track_id INTO new_track_id;
-INSERT INTO gps.track_lines(track_id, geom)
+SELECT ST_SetSRID(ST_GeomFromGeoJSON(geojson_data), 4326) INTO new_geom;
+INSERT INTO gps.track_lines(track_id, geom, geom_wm)
 VALUES (
         new_track_id,
-        ST_SetSRID(ST_GeomFromGeoJSON(geojson_data), 4326)
+        new_geom,
+        ST_Transform(new_geom, 3857)
     );
 RETURN new_track_id;
 END;
