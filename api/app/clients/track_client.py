@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from ..dependencies import get_connection
 from ..models.track import Track
 from ..models.track_point import TrackPoint
+from ..beaconing import SmartBeacon, BeaconConfig
 import json
 
 
@@ -12,6 +13,7 @@ class TrackClient:
         self.longitude: float = 0.0
         self.speed: float = 0.0
         self.heading: float = 0.0
+        self._smart_beacon: SmartBeacon = SmartBeacon()
 
     def get_lat_long(self):
         return {"latitude": self.latitude, "longitude": self.longitude}
@@ -80,6 +82,9 @@ class TrackClient:
                 return {"result": "success"}
 
     def start_track(self, name: str = None):
+        # Reset smart beacon state for new track
+        self._smart_beacon.reset()
+        
         with get_connection() as conn:
             with conn.cursor() as cursor:
 
@@ -160,6 +165,82 @@ class TrackClient:
                 )
                 result = cursor.fetchone()
                 return {"track_id": result["track_id"], "status": "imported"}
+
+    def is_tracking_active(self) -> bool:
+        """Check if there is an active track (end_time IS NULL)."""
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "SELECT EXISTS(SELECT 1 FROM gps.tracks WHERE end_time IS NULL);"
+                )
+                result = cursor.fetchone()
+                return result[0] if result else False
+
+    def process_gps_update(
+        self,
+        lat: float,
+        lon: float,
+        speed_mps: float,
+        heading: float
+    ) -> dict:
+        """Process a GPS update with smart beaconing.
+        
+        Updates the current position and, if tracking is active, uses the
+        smart beaconing algorithm to decide whether to save a track point.
+        
+        Args:
+            lat: Latitude in decimal degrees
+            lon: Longitude in decimal degrees
+            speed_mps: Speed in meters per second (gpsd native unit)
+            heading: Heading in degrees (0-360)
+            
+        Returns:
+            dict with keys:
+                - position_updated: always True
+                - point_saved: True if a track point was saved
+                - tracking_active: True if a track is currently recording
+        """
+        # Convert speed from m/s to km/h for smart beaconing
+        speed_kmh = speed_mps * 3.6 if speed_mps else 0.0
+        
+        # Always update current position
+        self.latitude = lat
+        self.longitude = lon
+        self.speed = speed_mps
+        self.heading = heading
+        
+        result = {
+            "position_updated": True,
+            "point_saved": False,
+            "tracking_active": False
+        }
+        
+        # Check if tracking is active
+        if not self.is_tracking_active():
+            return result
+        
+        result["tracking_active"] = True
+        
+        # Use smart beaconing to decide if we should save this point
+        if self._smart_beacon.should_beacon(lat, lon, speed_kmh, heading):
+            track_point = TrackPoint(
+                latitude=lat,
+                longitude=lon,
+                speed=speed_mps,
+                heading=heading
+            )
+            self.add_track_point(track_point)
+            result["point_saved"] = True
+        
+        return result
+
+    def reset_beacon_state(self) -> None:
+        """Reset smart beacon state (call when starting a new track)."""
+        self._smart_beacon.reset()
+
+    def get_beacon_stats(self) -> dict:
+        """Get smart beacon statistics."""
+        return self._smart_beacon.get_stats()
 
 
 # singleton object
