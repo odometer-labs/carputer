@@ -1,56 +1,423 @@
 openapi: 3.0.0
 info:
-  title: A title
-  description: Project description
-  version: 0.1.0
+  title: Carputer API
+  description: |
+    REST API for the Carputer GPS tracking and APRS system.
+    
+    ## Features
+    - GPS track recording and retrieval
+    - APRS packet ingestion and station tracking
+    - Real-time WebSocket updates
+    
+    ## Auto-generated docs
+    FastAPI also generates interactive documentation at `/docs` (Swagger UI) 
+    and `/redoc` (ReDoc).
+  version: 1.0.0
+  contact:
+    name: Odometer Labs
 servers:
-  - url: https://localhost/api/v1
-    description: Main server
+  - url: http://localhost:8000
+    description: Local development server
+  - url: http://api:8000
+    description: Docker container
+tags:
+  - name: APRS
+    description: APRS packet ingestion and station tracking
+  - name: Tracks
+    description: GPS track recording and retrieval
+  - name: Health
+    description: System health checks
+
 paths:
-  /users:
+  /health:
     get:
-      summary: Get a list of users
-      operationId: listUsers
+      summary: Health check
+      tags:
+        - Health
+      operationId: healthCheck
       responses:
         '200':
-          description: An array of users
+          description: Service is healthy
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/User'
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+
+  /v1/aprs/ingest:
     post:
-      summary: Create a new user
-      operationId: createUser
+      summary: Ingest parsed APRS packet
+      description: |
+        Receives a pre-parsed APRS packet from the bridge service.
+        The bridge reads from Direwolf's KISS interface, parses the
+        packet, and sends structured data to this endpoint.
+      tags:
+        - APRS
+      operationId: ingestAprsPacket
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/User'
+              $ref: '#/components/schemas/APRSPacketIn'
       responses:
-        '201':
-          description: User created successfully
+        '200':
+          description: Packet ingested successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APRSPacketOut'
+        '500':
+          description: Server error during ingestion
+
+  /v1/aprs/ingest-raw:
+    post:
+      summary: Ingest raw APRS packet string
+      description: |
+        Accepts a raw APRS packet string, parses it server-side,
+        and stores the result. Useful for direct packet injection
+        without going through the bridge.
+      tags:
+        - APRS
+      operationId: ingestRawAprsPacket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/APRSRawPacket'
+      responses:
+        '200':
+          description: Packet parsed and ingested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APRSPacketOut'
         '400':
-          description: Invalid input
+          description: Could not parse packet
+        '500':
+          description: Server error
+
+  /v1/aprs/stations:
+    get:
+      summary: Get nearby APRS stations
+      description: |
+        Returns APRS stations near the current GPS position.
+        Only stations seen in the last 24 hours are returned.
+      tags:
+        - APRS
+      operationId: getNearbyStations
+      parameters:
+        - name: radius_m
+          in: query
+          description: Search radius in meters
+          schema:
+            type: number
+            default: 50000
+            minimum: 100
+            maximum: 500000
+      responses:
+        '200':
+          description: List of nearby stations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/APRSStation'
+        '500':
+          description: Server error
+
+  /v1/aprs/stations/{callsign}:
+    get:
+      summary: Get APRS station details
+      description: Get information about a specific APRS station by callsign.
+      tags:
+        - APRS
+      operationId: getStation
+      parameters:
+        - name: callsign
+          in: path
+          required: true
+          description: Station callsign (e.g., W1ABC-9)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Station details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APRSStation'
+        '404':
+          description: Station not found
+        '500':
+          description: Server error
+
+  /v1/aprs/stations/{callsign}/history:
+    get:
+      summary: Get station position history
+      description: |
+        Returns historical position data for a specific station.
+        Up to 7 days of history can be retrieved.
+      tags:
+        - APRS
+      operationId: getStationHistory
+      parameters:
+        - name: callsign
+          in: path
+          required: true
+          description: Station callsign
+          schema:
+            type: string
+        - name: hours
+          in: query
+          description: Hours of history to retrieve (1-168)
+          schema:
+            type: integer
+            default: 24
+            minimum: 1
+            maximum: 168
+      responses:
+        '200':
+          description: Position history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/APRSStationHistory'
+        '404':
+          description: No history found
+        '500':
+          description: Server error
+
+  /v1/aprs/stats:
+    get:
+      summary: Get APRS statistics
+      description: Returns aggregate statistics for the APRS system dashboard.
+      tags:
+        - APRS
+      operationId: getAprsStats
+      responses:
+        '200':
+          description: APRS statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APRSStats'
+        '500':
+          description: Server error
+
+  /v1/aprs/cleanup:
+    post:
+      summary: Cleanup old APRS data
+      description: |
+        Triggers cleanup of old APRS data. Typically called by a cron job
+        but can be triggered manually. Deletes old history and raw packets.
+      tags:
+        - APRS
+      operationId: cleanupAprsData
+      parameters:
+        - name: history_days
+          in: query
+          description: Delete history older than this many days
+          schema:
+            type: integer
+            default: 30
+            minimum: 1
+            maximum: 365
+        - name: raw_days
+          in: query
+          description: Delete raw packets older than this many days
+          schema:
+            type: integer
+            default: 7
+            minimum: 1
+            maximum: 30
+      responses:
+        '200':
+          description: Cleanup completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: cleanup completed
+                  history_days:
+                    type: integer
+                  raw_days:
+                    type: integer
+        '500':
+          description: Cleanup failed
 
 components:
   schemas:
-    User:
+    APRSPacketIn:
       type: object
       required:
-        - id
-        - name
+        - callsign
+        - latitude
+        - longitude
       properties:
-        id:
+        callsign:
+          type: string
+          description: Station callsign with optional SSID
+          minLength: 1
+          maxLength: 20
+          example: W1ABC-9
+        latitude:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+          example: 42.3601
+        longitude:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+          example: -71.0589
+        symbol_table:
+          type: string
+          maxLength: 1
+          default: /
+          description: APRS symbol table ('/' or '\')
+        symbol_code:
+          type: string
+          maxLength: 1
+          default: k
+          description: APRS symbol code (e.g., 'k' = car)
+        comment:
+          type: string
+          maxLength: 500
+          description: Status or comment from station
+        altitude_m:
+          type: number
+          format: double
+          description: Altitude in meters
+        speed_knots:
+          type: number
+          format: double
+          minimum: 0
+          description: Speed in knots
+        course_deg:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 360
+          description: Course/heading in degrees
+        raw_packet:
+          type: string
+          maxLength: 2000
+          description: Original raw packet for debugging
+
+    APRSPacketOut:
+      type: object
+      properties:
+        callsign:
+          type: string
+          example: W1ABC-9
+        status:
+          type: string
+          example: ingested
+
+    APRSRawPacket:
+      type: object
+      required:
+        - raw_packet
+      properties:
+        raw_packet:
+          type: string
+          maxLength: 2000
+          description: Raw APRS packet string
+          example: "W1ABC-9>APRS,WIDE1-1:!4221.61N/07103.53W-Mobile"
+
+    APRSStation:
+      type: object
+      properties:
+        callsign:
+          type: string
+          example: W1ABC-9
+        symbol_table:
+          type: string
+          example: /
+        symbol_code:
+          type: string
+          example: k
+        last_comment:
+          type: string
+          nullable: true
+          example: Mobile
+        last_seen:
+          type: string
+          format: date-time
+        latitude:
+          type: number
+          format: double
+          example: 42.3601
+        longitude:
+          type: number
+          format: double
+          example: -71.0589
+        distance_m:
+          type: number
+          format: double
+          nullable: true
+          description: Distance from current GPS position in meters
+        packet_count:
           type: integer
-          format: int64
-          example: 101
-        name:
+          description: Total packets received from this station
+
+    APRSStationHistory:
+      type: object
+      properties:
+        time_stamp:
           type: string
-          example: Foobar
-        email:
+          format: date-time
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        altitude_m:
+          type: number
+          format: double
+          nullable: true
+        speed_knots:
+          type: number
+          format: double
+          nullable: true
+        course_deg:
+          type: number
+          format: double
+          nullable: true
+        comment:
           type: string
-          format: email
-          example: foobar@example.com
+          nullable: true
+
+    APRSStats:
+      type: object
+      properties:
+        total_stations:
+          type: integer
+          description: Total unique stations ever received
+          example: 150
+        stations_24h:
+          type: integer
+          description: Stations seen in last 24 hours
+          example: 42
+        total_packets:
+          type: integer
+          description: Total packets received
+          example: 5280
+        packets_24h:
+          type: integer
+          description: Packets received in last 24 hours
+          example: 312
