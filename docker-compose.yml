@@ -116,7 +116,8 @@ services:
       timeout: 5s
       retries: 5
     volumes:
-      - ./backend/geotracker/migrations/gps_functions.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./backend/geotracker/migrations/gps_functions.sql:/docker-entrypoint-initdb.d/01_gps_functions.sql
+      - ./backend/geotracker/migrations/aprs_tables.sql:/docker-entrypoint-initdb.d/02_aprs_tables.sql
       - postgres_data:/var/lib/postgresql/data
     networks:
       - carputer
@@ -131,6 +132,27 @@ services:
       - 8080:8080
     networks:
       - carputer
+
+
+  # ---------------------------------------------------------------------------
+  # Wifi Management Service
+  # ---------------------------------------------------------------------------
+  wifi-manager:
+    build: ./infrastructure/wifi-manager/
+    restart: always
+    ports:
+        - "${WIFI_MANAGER_PORT}:80"
+    environment:
+        - WIFI_MANAGER_PORT=${WIFI_MANAGER_PORT:-8888}
+        - WIFI_INTERFACE=${WIFI_INTERFACE:-wlan0}
+    volumes:
+        - "/var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket"
+    healthcheck:
+        test: ["CMD", "curl", "-f", "http://localhost:80/wifi/version"]
+        interval: 60s
+        timeout: 5s
+        retries: 3
+        start_period: 30s
 
 volumes:
   postgres_data:

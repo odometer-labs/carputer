@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { derived } from 'svelte/store';
   import Map from 'ol/Map.js';
   import View from 'ol/View.js';
   import TileLayer from 'ol/layer/Tile.js';
@@ -8,6 +9,7 @@
   import { fromLonLat, toLonLat } from 'ol/proj.js';
   import Feature from 'ol/Feature.js';
   import Point from 'ol/geom/Point.js';
+  import LineString from 'ol/geom/LineString.js'
   import VectorLayer from 'ol/layer/Vector.js';
   import VectorSource from 'ol/source/Vector.js';
   import { Style, Circle, Fill, Stroke, RegularShape, Icon, Text } from 'ol/style.js';
@@ -17,16 +19,25 @@
   import { push } from 'svelte-spa-router';
   import { Cluster } from 'ol/source';
   import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
-  import { preferences } from '../services/preferences';
+  import { settingsPreferences, type TrackRange } from '../services/settings_preferences';
   import aprsIconUrl from '../assets/icons/aprs-bold.svg';
   import userArrowIconUrl from '../assets/icons/maps-arrow-blue-white.svg';
   import { trackStore } from '../stores/trackStore'
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
   import SystemIndicators from "../assets/components/SystemIndicators.svelte";
+  //remove this later
+  import type { Track } from '../api/types';
 
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
   let locationStatus: string = 'Getting location...';
+
+  // roadhistory and current track line
+  let oldTrackLayer: VectorLayer | undefined;
+  let oldTrackSource: VectorSource | undefined;
+  let currentTrackLayer: VectorLayer | undefined;
+  let currentTrackSource: VectorSource | undefined;
+  let currentTrackFeature: Feature<LineString> | undefined;
 
   //APRS locations
   let aprsLayer: VectorLayer | undefined;
@@ -62,14 +73,122 @@
   let stopGPSSubscription: (() => void) | null = null;
 
   let zoomLevel: number = 18;
-  $: zoomLevel = $preferences.defaultZoom; // default zoom level when centering on user
+  $: zoomLevel = $settingsPreferences.defaultZoom; // default zoom level when centering on user
+
+  //this is to prevent having too many calls for $trackStore.checkIfNewRoad
+  let lastCheckTime: number = 0;
+  const CHECK_ROAD_INTERVAL: number = 1000; //one second
+
+  // this is used to prevent the user track having too many points on 1 spot
+  let lastUserTrackCoord: [number, number] | null = null;
+
+  // this is the list of tracks that is shown on the page, filtered
+  const filteredTracks = derived(
+    [trackStore, settingsPreferences],
+    ([$trackStore, $settingsPreferences]) => {
+      //disable all tracks 
+      if (!$settingsPreferences.areAllTracksOn) {
+        //set the selectedTrackID to null
+        $trackStore.selectedTrackId = null;
+
+        //return just an empty tracks
+        return {
+          tracks: [],
+          selectedTrackId: $trackStore.selectedTrackId
+        };
+      }
+
+      const afterDate = getAfterDate($settingsPreferences.trackRange);
+
+      return {
+        tracks: $trackStore.tracks.filter(track => {
+          const start = new Date(track.start_time);
+
+          //this is for after the date
+          if ((afterDate) && (start < afterDate)) return false;
+
+          return true;
+        }),
+        selectedTrackId: $trackStore.selectedTrackId
+      };
+    }
+  );
+
+  // this function gets the date by 1 day, week, month or year. 
+  // if there shouldn't be a date, if the user has selected all tracks
+  // to show then it should default to null
+  function getAfterDate(range: TrackRange) : Date | null {
+    if (range === "all") return null;
+
+    const date = new Date();
+
+    // set to midnight
+    date.setHours(0, 0, 0, 0);
+
+    switch (range) {
+      case "day":
+        date.setDate(date.getDate() - 1);
+        break;
+      case "week":
+        date.setDate(date.getDate() - 7);
+        break;
+      case "month":
+        date.setMonth(date.getMonth() - 1);
+        break;
+      case "year":
+        date.setFullYear(date.getFullYear() - 1);
+        break;
+    }
+
+    return date;
+  }
 
   function getUserIconScale(): number {
-    return 0.6 + ($preferences.iconSizeLevel * 0.2);
+    return 0.6 + ($settingsPreferences.iconSizeLevel * 0.2);
   }
 
   function getUserMarkerRadius(): number {
-    return 5 + $preferences.iconSizeLevel;
+    return 5 + $settingsPreferences.iconSizeLevel;
+  }
+
+  function hexToRgba(hex: string, alpha: number): string {
+    const normalized = hex.trim().replace("#", "");
+
+    if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+      return `rgba(255, 52, 241, ${alpha})`;
+    }
+
+    const red = parseInt(normalized.slice(0, 2), 16);
+    const green = parseInt(normalized.slice(2, 4), 16);
+    const blue = parseInt(normalized.slice(4, 6), 16);
+
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+  }
+
+  function getSelectedTrackColor(alpha: number = 1): string {
+    return hexToRgba($settingsPreferences.selectedTrackColor, alpha);
+  }
+
+  function getRestingTrackColor(alpha: number = 1): string {
+    return hexToRgba($settingsPreferences.restingTrackColor, alpha);
+  }
+
+  function getTrackWidth(offset: number = 0): number {
+    return Math.max(1, $settingsPreferences.trackThickness + offset);
+  }
+
+  $: if (oldTrackLayer) {
+    $settingsPreferences.selectedTrackColor;
+    $settingsPreferences.restingTrackColor;
+    $settingsPreferences.trackThickness;
+    oldTrackLayer.changed();
+  }
+
+  $: if (currentTrackLayer) {
+    $settingsPreferences.selectedTrackColor;
+    $settingsPreferences.restingTrackColor;
+    $settingsPreferences.trackThickness;
+    currentTrackLayer.changed();
   }
 
   // run once when the Svelte component is mounted
@@ -82,6 +201,7 @@
 
     }
 
+    ///TODO: remove this after getting real APRS data.
     // this will be removed in the future but for now this sets up 10 aprs points around the 
     // the user, to display an aprs icon.
     const interval = setInterval(() => {
@@ -94,7 +214,19 @@
       clearInterval(interval); // run once
     }, 500);
 
+    // subscribes to track changes
+    const unsubscribeTracks = filteredTracks.subscribe(({ tracks, selectedTrackId }) => {
+      renderTracks(tracks, selectedTrackId);
+    });
+    //TODO: uncomment this for real data from back end
+    //trackStore.loadTracks();  //this loads in the old tracks from backend.
+
+    //TODO: remove this line when we don't want mock data anymore
+    trackStore.setTrack(mockTracks);
+
     return () => {
+      unsubscribeTracks();
+
       map?.setTarget(undefined);
       stopGPSSubscription?.();
       stopGPSSubscription = null;
@@ -131,13 +263,48 @@
         })
       ],
       view: new View({
-        center: fromLonLat([0, 0]), // Default center
+        center: fromLonLat([-122.6765, 45.5231]), // Default center: Portland, OR (fallback when GPS is unavailable)
         zoom: zoomLevel
       }),
       controls: defaultControls({
         rotate: false, // disable default rotation control since we handle it ourselves
       })
     });
+
+    // ------this is the track layer----------
+    oldTrackSource = new VectorSource();
+
+    // this determines the color/shape/size of the old tracks
+    oldTrackLayer = new VectorLayer({
+      source: oldTrackSource,
+      minZoom: 13,
+      style: (feature) => {
+        const isActive = feature.get('isActive');
+
+        return new Style({
+          stroke: new Stroke({
+            color: isActive ? getSelectedTrackColor(0.95) : getRestingTrackColor(0.55),
+            width: isActive ? getTrackWidth(1) : getTrackWidth(0)
+          })
+        })
+      }
+    });
+
+    currentTrackSource = new VectorSource();
+
+    // this determines the color/shape/size of the current track the user is making
+    currentTrackLayer = new VectorLayer({
+      source: currentTrackSource,
+      style: () => new Style({
+        stroke: new Stroke({
+          color: getSelectedTrackColor(0.8),
+          width: getTrackWidth(0)
+        })
+      })
+    });
+
+    map.addLayer(oldTrackLayer);
+    map.addLayer(currentTrackLayer);
 
     // this is for making points for APRS locations ------------
     aprsSource = new VectorSource();
@@ -149,17 +316,12 @@
 
     aprsLayer = new VectorLayer({
       source: aprCluster,
+      minZoom: 13, //this determines how far our zoomed can the aprs still load.
       style: (feature) => {
         // make sure that map exists before doing anything
         if (!map) return;
 
         const size = feature.get('features').length;
-        const zoom = map.getView().getZoom() ?? 0;
-
-        //at a certain distance the clusters/points will dissapear
-        if (zoom < 13) {
-          return;
-        }
 
         // Single point = normal APRS icon
         if (size === 1) {
@@ -182,7 +344,7 @@
     });
 
     map.addLayer(aprsLayer);
-
+    
 
     if (mapElement) {
       pointerDownListener = (event: PointerEvent) => {
@@ -227,6 +389,21 @@
         isFollowingHeading = false;
         updateUserMarkerStyle();
       }
+    });
+
+    map.on('singleclick', (event) => {
+      map?.forEachFeatureAtPixel(event.pixel, (featureLike) => {
+        if (!(featureLike instanceof Feature)) return;
+
+        const trackId = featureLike.get('trackId');
+        if (trackId != null) {
+          trackStore.selectTrack(trackId);
+        }
+      },
+      {
+        layerFilter: (layer) => layer === oldTrackLayer,
+        hitTolerance: 13
+      });
     });
   }
 
@@ -341,6 +518,7 @@
       .catch((error: unknown) => {
         const message = `Initial GPS fetch failed: ${String(error)}`;
         locationStatus = message;
+        console.warn('GPS unavailable — map defaulting to Portland, OR');
         reportNonVitalError(error, 'HomeMapPage.getCurrentPosition');
       });
 
@@ -374,6 +552,12 @@
     if (!map) {
       return;
     }
+
+    // use the coord from the user to add it to the current users track line
+    applyTrackLine(coords);
+
+    // checks if the current road is a new road or not.
+    checkRoadHistory();
 
     if (!userMarker) {
       // first fix: create marker feature and add to map
@@ -466,6 +650,134 @@
       resetMapRotation();
     }
   }
+
+  //TODO remove this when we have working tracks to recieve from the database
+  export const mockTracks: Track[] = [
+    {
+      track_id: 1,
+      start_time: "2026-04-15T10:00:00Z",
+      end_time: "2026-04-15T10:20:00Z",
+      geom: {
+        type: "LineString",
+        coordinates: [
+          [-122.6865, 45.5120],
+          [-122.6862, 45.5125],
+          [-122.6859, 45.5130],
+          [-122.6850, 45.5147],
+          [-122.6825, 45.5140]
+        ]
+      }
+    },
+    {
+      track_id: 2,
+      start_time: "2026-04-16T14:00:00Z",
+      end_time: "2026-04-16T14:35:00Z",
+      geom: {
+        type: "LineString",
+        coordinates: [
+          [-122.6855, 45.5115],
+          [-122.6805, 45.5120],
+          [-122.6835, 45.5125],
+          [-122.6815, 45.5130],
+          [-122.6815, 45.5135],
+          [-122.6805, 45.5140]
+        ]
+      }
+    }
+  ];
+
+  // this function checks if the user has passed a certain amount of distance
+  // I made this becuase I realized that the applyTrackLine will add multiple 
+  // points on the same spot on the map and that just seem very wastefull.
+  function hasMovedEnough(newCoords : [number, number], minimumDistance = 5) : boolean {
+    if (!lastUserTrackCoord) return true;
+
+    const dx = newCoords[0] - lastUserTrackCoord[0];
+    const dy = newCoords[1] - lastUserTrackCoord[1];
+
+    return (Math.sqrt(dx * dx + dy * dy) > minimumDistance);
+  }
+
+  // this is used to make the track line for the user, given that the coordnates pushed
+  // in are the user's coordinates.
+  function applyTrackLine(coords : number[]) : void {
+    // this adds a line (blue line) so the user can see where they have been (current track) 
+    if ($trackStore.isTracking) { 
+      //this determines if this is the beggining of a new line 
+      if (!currentTrackFeature) { 
+        currentTrackFeature = new Feature({
+          geometry: new LineString([coords])
+        }); 
+        
+        currentTrackSource?.addFeature(currentTrackFeature);
+        
+        lastUserTrackCoord = coords as [number, number];
+      } 
+      else if (hasMovedEnough(coords as [number, number])){ 
+        const geom = currentTrackFeature.getGeometry();
+        if (geom) {
+          geom.appendCoordinate(coords);
+
+          lastUserTrackCoord = coords as [number, number];
+        }
+      }
+    }
+  }
+
+  // this function is used to check if the current road the user is on is a road
+  // that the user has never driven on before.
+  function checkRoadHistory() : void {
+    const now = Date.now();
+
+    // makes sure that the most a call for checking if the road is new is at most 1 per sec
+    if (now - lastCheckTime > CHECK_ROAD_INTERVAL) {
+      lastCheckTime = now;
+
+      trackStore.checkIfNewRoad();
+    }
+  }
+
+
+  // set up the old tracks that the user has been on previously
+  function renderTracks(tracks: Track[], selectedTrackId: number | null) : void {
+    //check if the trackSource exists
+    if (!oldTrackSource) return;
+
+    // remove any of the old tracks on the map to prevent duplicates
+    oldTrackSource.clear();
+
+    tracks.forEach((track) => {
+      const coords = track.geom.coordinates.map(([lon, lat]) =>
+        fromLonLat([lon, lat])
+      );
+
+      const feature = new Feature({
+        geometry: new LineString(coords),
+        trackId: track.track_id
+      });
+
+      feature.set("isActive", track.track_id === selectedTrackId)
+
+      oldTrackSource?.addFeature(feature);
+    });
+  }
+
+  // this function helps start the tracking for backend and end
+  // it also refreshes the TrackLayer from the current track when the user 
+  // presses end track
+  async function startEndTracking() : Promise<void> {
+    if ($trackStore.isTracking) {
+      await trackStore.end();
+      currentTrackSource?.clear(); // remove the current user track (red line)
+      currentTrackFeature = undefined;
+
+      await trackStore.loadTracks(); //this way when the new track was made it will
+                                // be added to the track list from backend.
+    } else {
+      await trackStore.start();
+    }
+  }
+
 
   // TODO: there are appearently many different kinds of aprs icons so it may need
   // to be able to shift through different icons for the situation. or if we decided
@@ -636,7 +948,7 @@
   <!-- this is the button for letting backend know when to start/end a track-->
   <button 
     class="start-end-track_butn"
-    on:click={() => $trackStore.isTracking ? trackStore.end() : trackStore.start()}
+    on:click={() => startEndTracking()}
     style="background-color: {$trackStore.isTracking ? 'lightcoral' : 'lightgreen'}"
   >
     <strong>{$trackStore.isTracking ? "Stop Track" : "Start Track"}</strong>
@@ -698,7 +1010,7 @@
     background-color: rgba(188, 188, 188, 0.9);
     color: #333;
     font-weight: 500;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);   
     transition: all 0.2s;
     outline: none;
   }
