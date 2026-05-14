@@ -131,14 +131,10 @@ export async function checkNewRoad(): Promise<CheckNewRoadResponse> {
 
 // gets the most recent position snapshot from the backend.
 export async function getCurrentPosition(): Promise<GPSData> {
-  const url = new URL(ENDPOINTS.getCurrentPosition, getApiHttpBaseUrl());
-  const res = await fetch(url.toString(), {
-    method: "GET",
-  });
-
-  if (!res.ok) throw new Error("Failed to fetch current GPS position");
-
-  return res.json();
+  return fetchJsonWithFallback<GPSData>(
+    ENDPOINTS.getCurrentPosition,
+    "Failed to fetch current GPS position",
+  );
 }
 
 function getApiHttpBaseUrl(): string {
@@ -155,47 +151,151 @@ function getApiHttpBaseUrl(): string {
   return window.location.origin;
 }
 
+function getApiHttpFallbackBaseUrl(primaryBase: string): string | null {
+  const sameOriginBase = window.location.origin;
+  if (sameOriginBase !== primaryBase) {
+    return sameOriginBase;
+  }
+
+  return null;
+}
+
+async function fetchJsonWithFallback<T>(
+  endpoint: string,
+  errorMessage: string,
+  searchParams?: Record<string, string>,
+): Promise<T> {
+  const primaryBase = getApiHttpBaseUrl();
+  const primaryUrl = new URL(endpoint, primaryBase);
+  if (searchParams) {
+    Object.entries(searchParams).forEach(([key, value]) => {
+      primaryUrl.searchParams.set(key, value);
+    });
+  }
+
+  try {
+    const primaryRes = await fetch(primaryUrl.toString(), { method: "GET" });
+    if (!primaryRes.ok) {
+      throw new Error(`Primary request failed: ${primaryRes.status}`);
+    }
+    return primaryRes.json();
+  } catch {
+    const fallbackBase = getApiHttpFallbackBaseUrl(primaryBase);
+    if (!fallbackBase) {
+      throw new Error(errorMessage);
+    }
+
+    const fallbackUrl = new URL(endpoint, fallbackBase);
+    if (searchParams) {
+      Object.entries(searchParams).forEach(([key, value]) => {
+        fallbackUrl.searchParams.set(key, value);
+      });
+    }
+
+    const fallbackRes = await fetch(fallbackUrl.toString(), { method: "GET" });
+    if (!fallbackRes.ok) {
+      throw new Error(errorMessage);
+    }
+
+    return fallbackRes.json();
+  }
+}
+
 // subscribes to backend websocket stream of live GPS data.
 export function subscribeToPositionStream(
   onMessage: (position: GPSData) => void,
   onError?: (error: string) => void,
 ): () => void {
-  const ws = new WebSocket(getPositionWebSocketUrl());
+  const primaryUrl = getPositionWebSocketUrl();
+  const fallbackUrl = getPositionWebSocketFallbackUrl(primaryUrl);
 
-  ws.onmessage = (event: MessageEvent) => {
-    try {
-      const raw = JSON.parse(event.data);
-      const latitude = Number(raw.latitude);
-      const longitude = Number(raw.longitude);
-      const heading = Number(raw.heading);
-      const speed = Number(raw.speed);
+  let socket: WebSocket | null = null;
+  let hasAttemptedFallback = false;
+  let isClosedByCaller = false;
 
-      if (
-        !Number.isFinite(latitude) ||
-        !Number.isFinite(longitude) ||
-        !Number.isFinite(heading) ||
-        !Number.isFinite(speed)
-      ) {
+  const tryFallback = (): boolean => {
+    if (hasAttemptedFallback || !fallbackUrl || isClosedByCaller) {
+      return false;
+    }
+
+    hasAttemptedFallback = true;
+    connect(fallbackUrl);
+    return true;
+  };
+
+  const bindHandlers = (ws: WebSocket): void => {
+    ws.onmessage = (event: MessageEvent) => {
+      try {
+        const raw = JSON.parse(event.data);
+        const latitude = Number(raw.latitude);
+        const longitude = Number(raw.longitude);
+        const heading = Number(raw.heading);
+        const speed = Number(raw.speed);
+
+        if (
+          !Number.isFinite(latitude) ||
+          !Number.isFinite(longitude) ||
+          !Number.isFinite(heading) ||
+          !Number.isFinite(speed)
+        ) {
+          return;
+        }
+
+        onMessage({ latitude, longitude, heading, speed });
+      } catch (error: unknown) {
+        if (onError)
+          onError(`Failed to parse GPS websocket payload: ${String(error)}`);
+      }
+    };
+
+    ws.onerror = () => {
+      if (tryFallback()) {
         return;
       }
 
-      onMessage({ latitude, longitude, heading, speed });
-    } catch (error: unknown) {
-      if (onError)
-        onError(`Failed to parse GPS websocket payload: ${String(error)}`);
-    }
+      if (onError) {
+        onError("GPS websocket connection failed");
+      }
+    };
+
+    ws.onclose = () => {
+      if (isClosedByCaller) {
+        return;
+      }
+
+      if (tryFallback()) {
+        return;
+      }
+
+      if (onError) {
+        onError("GPS websocket connection closed");
+      }
+    };
   };
 
-  ws.onerror = () => {
-    if (onError) onError("GPS websocket connection failed");
+  const connect = (url: string): void => {
+    if (
+      socket &&
+      (socket.readyState === WebSocket.OPEN ||
+        socket.readyState === WebSocket.CONNECTING)
+    ) {
+      socket.close();
+    }
+    socket = new WebSocket(url);
+    bindHandlers(socket);
   };
+
+  connect(primaryUrl);
 
   return () => {
+    isClosedByCaller = true;
+
     if (
-      ws.readyState === WebSocket.OPEN ||
-      ws.readyState === WebSocket.CONNECTING
+      socket &&
+      (socket.readyState === WebSocket.OPEN ||
+        socket.readyState === WebSocket.CONNECTING)
     ) {
-      ws.close();
+      socket.close();
     }
   };
 }
@@ -218,15 +318,24 @@ function getPositionWebSocketUrl(): string {
   return `${protocol}//${window.location.host}${ENDPOINTS.getPositionStream}`;
 }
 
+function getPositionWebSocketFallbackUrl(primaryUrl: string): string | null {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const sameOriginUrl = `${protocol}//${window.location.host}${ENDPOINTS.getPositionStream}`;
+
+  if (sameOriginUrl !== primaryUrl) {
+    return sameOriginUrl;
+  }
+
+  return null;
+}
+
 // fetches APRS stations near the current GPS position.
 export async function getAprsStations(
   radiusM: number = 50000,
 ): Promise<APRSStation[]> {
-  const url = new URL(ENDPOINTS.getAprsStations, getApiHttpBaseUrl());
-  url.searchParams.set("radius_m", String(radiusM));
-  const res = await fetch(url.toString(), { method: "GET" });
-
-  if (!res.ok) throw new Error("Failed to fetch APRS stations");
-
-  return res.json();
+  return fetchJsonWithFallback<APRSStation[]>(
+    ENDPOINTS.getAprsStations,
+    "Failed to fetch APRS stations",
+    { radius_m: String(radiusM) },
+  );
 }
