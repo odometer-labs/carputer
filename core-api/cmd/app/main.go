@@ -32,10 +32,21 @@ func main() {
 			OperationID: "Create Track",
 			Method:      http.MethodPost,
 			Path:        "/v1/tracks",
-			Summary:     "Create and starts a track recording.",
+			Summary:     "Create Track",
 			Description: "Create and starts a track recording. You will be then be able to record track points with the track points endpoint.",
 			Tags:        []string{"Tracks"},
 		}, handler.CreateTrackHander)
+
+	huma.Register(
+		api,
+		huma.Operation{
+			OperationID: "End Track",
+			Method:      http.MethodGet,
+			Path:        "/v1/tracks",
+			Summary:     "End Track",
+			Description: "Ends track recording.",
+			Tags:        []string{"Tracks"},
+		}, handler.EndTrackHander)
 
 	fmt.Println("Visit http://127.0.0.1:8000/docs")
 	http.ListenAndServe("0.0.0.0:8000", router)

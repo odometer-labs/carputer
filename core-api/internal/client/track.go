@@ -36,12 +36,15 @@ func (t Track) CreateTrack(ctx context.Context) (*v1.StartTrackResponse, error) 
 	return &resp, nil
 }
 
-func (t Track) EndTrack(ctx context.Context) error {
-	_, err := t.Pool.Exec(ctx, "select gps.end_track();")
+func (t Track) EndTrack(ctx context.Context) (*v1.EndTrackResponse, error) {
+	_, err := t.Pool.Exec(ctx, "call gps.end_track();")
 	if err != nil {
-		return fmt.Errorf("failed to end track: %w", err)
+		return nil, fmt.Errorf("failed to end track: %w", err)
 	}
-	return nil
+
+	resp := v1.EndTrackResponse{}
+
+	return &resp, nil
 }
 
 func (t Track) ImportTrackPoint(ctx context.Context) {}

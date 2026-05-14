@@ -21,3 +21,12 @@ func CreateTrackHander(ctx context.Context, request *v1.StartTrackRequest) (*v1.
 
 	return resp, err
 }
+
+func EndTrackHander(ctx context.Context, request *v1.EndTrackRequest) (*v1.EndTrackResponse, error) {
+	resp, err := trackClient.EndTrack(ctx)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Unable to stop track: %v", err)
+	}
+
+	return resp, err
+}
