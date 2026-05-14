@@ -7,18 +7,36 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"github.com/odometer-labs/carputer/core-api/internal/handler"
+	"github.com/odometer-labs/carputer/core-api/internal/postgis"
 )
 
 func main() {
+	postgis.Initialize()
 	router := http.NewServeMux()
 	api := humago.New(router, huma.DefaultConfig("Carputer API", "1.0.0"))
 
-	huma.Get(
+	huma.Register(
 		api,
-		"/v1/root",
-		handler.RootHandler,
-	)
+		huma.Operation{
+			OperationID: "root",
+			Method:      http.MethodGet,
+			Path:        "/v1/root",
+			Summary:     "Prints Hello World!",
+			Description: "Prints Hello World to you.",
+			Tags:        []string{"Root"},
+		}, handler.RootHandler)
 
-	fmt.Println("Visit http://127.0.0.1:8888/docs")
-	http.ListenAndServe("127.0.0.1:8888", router)
+	huma.Register(
+		api,
+		huma.Operation{
+			OperationID: "Create Track",
+			Method:      http.MethodPost,
+			Path:        "/v1/tracks",
+			Summary:     "Create and starts a track recording.",
+			Description: "Create and starts a track recording. You will be then be able to record track points with the track points endpoint.",
+			Tags:        []string{"Tracks"},
+		}, handler.CreateTrackHander)
+
+	fmt.Println("Visit http://127.0.0.1:8000/docs")
+	http.ListenAndServe("0.0.0.0:8000", router)
 }
