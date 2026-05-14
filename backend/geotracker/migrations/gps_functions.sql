@@ -21,7 +21,7 @@ CREATE TABLE gps.track_points (
     geom GEOGRAPHY(Point, 4326) NOT NULL,
     -- WGS84 Standard
     speed_mps DOUBLE PRECISION,
-    -- Units: Miles per Hour
+    -- Units: meters per second
     heading_deg DOUBLE PRECISION -- Units: 0-360 Degrees (0 = North)
 );
 CREATE TABLE gps.track_lines (
