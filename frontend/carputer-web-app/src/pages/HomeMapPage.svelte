@@ -6,7 +6,7 @@
   import TileLayer from 'ol/layer/Tile.js';
   import OSM from 'ol/source/OSM.js';
   import { defaults as defaultControls } from 'ol/control/defaults.js';
-  import { fromLonLat, toLonLat } from 'ol/proj.js';
+  import { fromLonLat } from 'ol/proj.js';
   import Feature from 'ol/Feature.js';
   import Point from 'ol/geom/Point.js';
   import LineString from 'ol/geom/LineString.js'
@@ -14,8 +14,8 @@
   import VectorSource from 'ol/source/Vector.js';
   import { Style, Circle, Fill, Stroke, RegularShape, Icon, Text } from 'ol/style.js';
   import 'ol/ol.css';
-  import { getCurrentPosition, subscribeToPositionStream } from '../api/restApi';
-  import type { GPSData } from '../api/types';
+  import { getAprsStations, getCurrentPosition, subscribeToPositionStream } from '../api/restApi';
+  import type { APRSStation, GPSData } from '../api/types';
   import { push } from 'svelte-spa-router';
   import { Cluster } from 'ol/source';
   import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
@@ -71,6 +71,14 @@
   // device orientation listener (reserved for future compass integration)
   let orientationListener: ((event: DeviceOrientationEvent) => void) | null = null;
   let stopGPSSubscription: (() => void) | null = null;
+  let aprsRefreshIntervalId: ReturnType<typeof setInterval> | null = null;
+
+  type AprsPopupData = {
+    callsign: string;
+    comment: string | null;
+  };
+
+  let selectedAprsPopup: AprsPopupData | null = null;
 
   let zoomLevel: number = 18;
   $: zoomLevel = $settingsPreferences.defaultZoom; // default zoom level when centering on user
@@ -196,23 +204,11 @@
     try {
       loadMap();             // create map instance and hook events
       startGPSTracking();    // begin receiving backend GPS data
+      startAprsTracking();   // begin receiving APRS station data
     } catch (error: unknown) {
       reportVitalError(error, 'HomeMapPage.onMount');
 
     }
-
-    ///TODO: remove this after getting real APRS data.
-    // this will be removed in the future but for now this sets up 10 aprs points around the 
-    // the user, to display an aprs icon.
-    const interval = setInterval(() => {
-      if (!latestUserCoords) return;
-
-      for (let i = 0; i < 10; i++) {
-        setRandomAprsPoints();
-      }
-
-      clearInterval(interval); // run once
-    }, 500);
 
     // subscribes to track changes
     const unsubscribeTracks = filteredTracks.subscribe(({ tracks, selectedTrackId }) => {
@@ -244,6 +240,10 @@
 
       if (rotationProgrammaticGuardTimeout !== null) {
         clearTimeout(rotationProgrammaticGuardTimeout);
+      }
+
+      if (aprsRefreshIntervalId !== null) {
+        clearInterval(aprsRefreshIntervalId);
       }
     };
   });
@@ -392,6 +392,35 @@
     });
 
     map.on('singleclick', (event) => {
+      const clickedAprsFeature = map?.forEachFeatureAtPixel(
+        event.pixel,
+        (featureLike) => featureLike,
+        {
+          layerFilter: (layer) => layer === aprsLayer,
+          hitTolerance: 13
+        }
+      );
+
+      if (clickedAprsFeature instanceof Feature) {
+        const clusteredFeatures = clickedAprsFeature.get('features') as Feature[] | undefined;
+        if (clusteredFeatures && clusteredFeatures.length === 1) {
+          const stationFeature = clusteredFeatures[0];
+          const callsign = stationFeature?.get('callsign') as string | undefined;
+          const comment = stationFeature?.get('comment') as string | null | undefined;
+
+          selectedAprsPopup = {
+            callsign: callsign ?? 'Unknown Station',
+            comment: (typeof comment === 'string' && comment.trim().length > 0) ? comment.trim() : null
+          };
+        } else {
+          selectedAprsPopup = null;
+        }
+
+        return;
+      }
+
+      selectedAprsPopup = null;
+
       map?.forEachFeatureAtPixel(event.pixel, (featureLike) => {
         if (!(featureLike instanceof Feature)) return;
 
@@ -532,6 +561,31 @@
         reportNonVitalError(error, 'HomeMapPage.subscribeToPositionStream');
       }
     );
+  }
+
+  function startAprsTracking(): void {
+    loadAprsStations();
+
+    aprsRefreshIntervalId = setInterval(() => {
+      loadAprsStations();
+    }, 15000);
+  }
+
+  async function loadAprsStations(): Promise<void> {
+    if (!aprsSource) return;
+
+    try {
+      const stations = await getAprsStations();
+
+      aprsSource.clear();
+      selectedAprsPopup = null;
+
+      stations.forEach((station) => {
+        addAprsPoint(station);
+      });
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'HomeMapPage.getAprsStations');
+    }
   }
 
   function handleGPSPosition(position: GPSData): void {
@@ -792,15 +846,19 @@
    * version. it simply is putting points onto the map. 
    * in the future we should make it so that the points can be updated.
    */
-  function addAprsPoint(lat: number, long: number): void {
+  function addAprsPoint(station: APRSStation): void {
     //if the aprsSource hasn't been set up then don't do anything
     if (!aprsSource) return;
 
     //create marker feature and add to map
     // make the point(feature) using lat and long
     const aprsMarker = new Feature({
-      geometry: new Point(fromLonLat([long, lat])),
-      name: 'aprs point'
+      geometry: new Point(fromLonLat([station.longitude, station.latitude])),
+      name: 'aprs point',
+      callsign: station.callsign,
+      comment: station.last_comment ?? null,
+      lastSeen: station.last_seen,
+      packetCount: station.packet_count,
     });
 
     aprsSource.addFeature(aprsMarker);
@@ -843,23 +901,8 @@
     ];
   }
 
-  //This is just for testing purposes and eventually will be removed when we get APRS data
-  // this gets a random location near the user and sends that information to the addAprsPoint()
-  // to make a aprs feature point.
-  function setRandomAprsPoints(): void{
-    if (!latestUserCoords) return;
-
-    const coords = toLonLat(latestUserCoords); //gets the coordnates
-
-    const long = coords[0];
-    const lat = coords[1];
-
-    if (lat === undefined || long === undefined) return; //makes sure it isn't null
-
-    addAprsPoint(
-      lat + (Math.random() - 0.5)* 0.01,
-      long + (Math.random() - 0.5)* 0.01
-    );
+  function closeAprsPopup(): void {
+    selectedAprsPopup = null;
   }
 
   // this function changes route to /SettingPreference
@@ -957,6 +1000,18 @@
   <div class="map-container">
     <div bind:this={mapElement} class="map" style="width: 100%; height: 100%;"></div>
   </div>
+
+  {#if selectedAprsPopup}
+    <div class="aprs-popup" role="dialog" aria-label="APRS station details">
+      <div class="aprs-popup-title">{selectedAprsPopup.callsign}</div>
+      {#if selectedAprsPopup.comment}
+        <p class="aprs-popup-comment">{selectedAprsPopup.comment}</p>
+      {:else}
+        <p class="aprs-popup-empty">No APRS message.</p>
+      {/if}
+      <button class="aprs-popup-close" on:click={closeAprsPopup}>Close</button>
+    </div>
+  {/if}
 
 </main>
 
@@ -1111,6 +1166,54 @@
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
     transition: all 0.2s;
     outline: none;
+  }
+
+  .aprs-popup {
+    position: absolute;
+    left: 20px;
+    top: 95px;
+    z-index: 1200;
+    width: min(320px, calc(100vw - 40px));
+    background: rgba(250, 250, 250, 0.95);
+    border: 1px solid #bcbcbc;
+    border-radius: 10px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+    padding: 12px;
+  }
+
+  .aprs-popup-title {
+    font-weight: 700;
+    font-size: 1rem;
+    color: #1a1a1a;
+    margin-bottom: 8px;
+  }
+
+  .aprs-popup-comment,
+  .aprs-popup-empty {
+    margin: 0 0 10px 0;
+    color: #333;
+    font-size: 0.95rem;
+    line-height: 1.35;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .aprs-popup-empty {
+    color: #666;
+    font-style: italic;
+  }
+
+  .aprs-popup-close {
+    border: 1px solid #999;
+    background: #efefef;
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+    color: #222;
+  }
+
+  .aprs-popup-close:hover {
+    background: #e3e3e3;
   }
 
   :global(.ol-zoom button) {

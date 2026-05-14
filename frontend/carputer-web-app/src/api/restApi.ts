@@ -12,6 +12,7 @@ import type {
   LatestTrackPoint,
   CheckNewRoadResponse,
   GPSData,
+  APRSStation,
 } from "./types";
 import { ENDPOINTS } from "../utils/constants";
 
@@ -135,6 +136,18 @@ export async function getCurrentPosition(): Promise<GPSData> {
   });
 
   if (!res.ok) throw new Error("Failed to fetch current GPS position");
+
+  return res.json();
+}
+
+// fetch APRS stations near the current GPS position.
+export async function getAprsStations(radiusM = 50000): Promise<APRSStation[]> {
+  const radius = Math.max(100, Math.min(500000, Math.floor(radiusM)));
+  const res = await fetch(`${ENDPOINTS.aprsStations}?radius_m=${radius}`, {
+    method: "GET",
+  });
+
+  if (!res.ok) throw new Error("Failed to fetch APRS stations");
 
   return res.json();
 }
