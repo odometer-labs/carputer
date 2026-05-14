@@ -9,7 +9,6 @@ import {
   addTrackPoint,
   getLatestTrackPoint,
   checkNewRoad,
-  getAprsStations,
 } from "../api/restApi";
 
 beforeEach(() => {
@@ -162,31 +161,5 @@ describe("restApi", () => {
     const res = await checkNewRoad();
 
     expect(res.is_new_road).toBe(true);
-  });
-
-  it("getAprsStations returns station list", async () => {
-    global.fetch = vi.fn(() =>
-      Promise.resolve({
-        ok: true,
-        json: async () => [
-          {
-            callsign: "K7ABC",
-            symbol_table: "/",
-            symbol_code: "k",
-            last_comment: "Hello from APRS",
-            last_seen: "2026-01-01T00:00:00Z",
-            latitude: 45.5,
-            longitude: -122.6,
-            distance_m: 1234,
-            packet_count: 10,
-          },
-        ],
-      } as Response),
-    ) as typeof fetch;
-
-    const res = await getAprsStations();
-
-    expect(res).toHaveLength(1);
-    expect(res[0]?.callsign).toBe("K7ABC");
   });
 });

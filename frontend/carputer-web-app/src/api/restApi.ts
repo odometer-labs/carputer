@@ -140,18 +140,6 @@ export async function getCurrentPosition(): Promise<GPSData> {
   return res.json();
 }
 
-// fetch APRS stations near the current GPS position.
-export async function getAprsStations(radiusM = 50000): Promise<APRSStation[]> {
-  const radius = Math.max(100, Math.min(500000, Math.floor(radiusM)));
-  const res = await fetch(`${ENDPOINTS.aprsStations}?radius_m=${radius}`, {
-    method: "GET",
-  });
-
-  if (!res.ok) throw new Error("Failed to fetch APRS stations");
-
-  return res.json();
-}
-
 // subscribes to backend websocket stream of live GPS data.
 export function subscribeToPositionStream(
   onMessage: (position: GPSData) => void,
@@ -211,4 +199,17 @@ function getPositionWebSocketUrl(): string {
   }
 
   return `${protocol}//${window.location.host}${ENDPOINTS.getPositionStream}`;
+}
+
+// fetches APRS stations near the current GPS position.
+export async function getAprsStations(
+  radiusM: number = 50000,
+): Promise<APRSStation[]> {
+  const url = new URL(ENDPOINTS.getAprsStations, window.location.origin);
+  url.searchParams.set("radius_m", String(radiusM));
+  const res = await fetch(url.toString(), { method: "GET" });
+
+  if (!res.ok) throw new Error("Failed to fetch APRS stations");
+
+  return res.json();
 }

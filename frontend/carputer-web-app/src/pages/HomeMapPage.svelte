@@ -14,8 +14,8 @@
   import VectorSource from 'ol/source/Vector.js';
   import { Style, Circle, Fill, Stroke, RegularShape, Icon, Text } from 'ol/style.js';
   import 'ol/ol.css';
-  import { getAprsStations, getCurrentPosition, subscribeToPositionStream } from '../api/restApi';
-  import type { APRSStation, GPSData } from '../api/types';
+  import { getCurrentPosition, subscribeToPositionStream, getAprsStations } from '../api/restApi';
+  import type { GPSData, APRSStation } from '../api/types';
   import { push } from 'svelte-spa-router';
   import { Cluster } from 'ol/source';
   import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
@@ -71,14 +71,6 @@
   // device orientation listener (reserved for future compass integration)
   let orientationListener: ((event: DeviceOrientationEvent) => void) | null = null;
   let stopGPSSubscription: (() => void) | null = null;
-  let aprsRefreshIntervalId: ReturnType<typeof setInterval> | null = null;
-
-  type AprsPopupData = {
-    callsign: string;
-    comment: string | null;
-  };
-
-  let selectedAprsPopup: AprsPopupData | null = null;
 
   let zoomLevel: number = 18;
   $: zoomLevel = $settingsPreferences.defaultZoom; // default zoom level when centering on user
@@ -204,11 +196,15 @@
     try {
       loadMap();             // create map instance and hook events
       startGPSTracking();    // begin receiving backend GPS data
-      startAprsTracking();   // begin receiving APRS station data
     } catch (error: unknown) {
       reportVitalError(error, 'HomeMapPage.onMount');
 
     }
+
+    ///TODO: remove this after getting real APRS data.
+    // this will be removed in the future but for now this sets up 10 aprs points around the 
+    // the user, to display an aprs icon.
+    loadAprsStations();
 
     // subscribes to track changes
     const unsubscribeTracks = filteredTracks.subscribe(({ tracks, selectedTrackId }) => {
@@ -240,10 +236,6 @@
 
       if (rotationProgrammaticGuardTimeout !== null) {
         clearTimeout(rotationProgrammaticGuardTimeout);
-      }
-
-      if (aprsRefreshIntervalId !== null) {
-        clearInterval(aprsRefreshIntervalId);
       }
     };
   });
@@ -392,35 +384,7 @@
     });
 
     map.on('singleclick', (event) => {
-      const clickedAprsFeature = map?.forEachFeatureAtPixel(
-        event.pixel,
-        (featureLike) => featureLike,
-        {
-          layerFilter: (layer) => layer === aprsLayer,
-          hitTolerance: 13
-        }
-      );
-
-      if (clickedAprsFeature instanceof Feature) {
-        const clusteredFeatures = clickedAprsFeature.get('features') as Feature[] | undefined;
-        if (clusteredFeatures && clusteredFeatures.length === 1) {
-          const stationFeature = clusteredFeatures[0];
-          const callsign = stationFeature?.get('callsign') as string | undefined;
-          const comment = stationFeature?.get('comment') as string | null | undefined;
-
-          selectedAprsPopup = {
-            callsign: callsign ?? 'Unknown Station',
-            comment: (typeof comment === 'string' && comment.trim().length > 0) ? comment.trim() : null
-          };
-        } else {
-          selectedAprsPopup = null;
-        }
-
-        return;
-      }
-
-      selectedAprsPopup = null;
-
+      // Handle track selection clicks
       map?.forEachFeatureAtPixel(event.pixel, (featureLike) => {
         if (!(featureLike instanceof Feature)) return;
 
@@ -433,6 +397,30 @@
         layerFilter: (layer) => layer === oldTrackLayer,
         hitTolerance: 13
       });
+
+      // Handle APRS station clicks — only show popup for single (non-clustered) points
+      let hitAprs = false;
+      map?.forEachFeatureAtPixel(event.pixel, (featureLike) => {
+        if (!(featureLike instanceof Feature)) return;
+
+        const clusteredFeatures = featureLike.get('features') as Feature[] | undefined;
+        if (!clusteredFeatures || clusteredFeatures.length !== 1) return;
+
+        const inner = clusteredFeatures[0];
+        const callsign = inner?.get('callsign') as string | undefined;
+        if (callsign) {
+          aprsPopupData = { callsign, comment: inner.get('comment') ?? null };
+          hitAprs = true;
+        }
+      },
+      {
+        layerFilter: (layer) => layer === aprsLayer,
+        hitTolerance: 10
+      });
+
+      if (!hitAprs) {
+        aprsPopupData = null;
+      }
     });
   }
 
@@ -561,31 +549,6 @@
         reportNonVitalError(error, 'HomeMapPage.subscribeToPositionStream');
       }
     );
-  }
-
-  function startAprsTracking(): void {
-    loadAprsStations();
-
-    aprsRefreshIntervalId = setInterval(() => {
-      loadAprsStations();
-    }, 15000);
-  }
-
-  async function loadAprsStations(): Promise<void> {
-    if (!aprsSource) return;
-
-    try {
-      const stations = await getAprsStations();
-
-      aprsSource.clear();
-      selectedAprsPopup = null;
-
-      stations.forEach((station) => {
-        addAprsPoint(station);
-      });
-    } catch (error: unknown) {
-      reportNonVitalError(error, 'HomeMapPage.getAprsStations');
-    }
   }
 
   function handleGPSPosition(position: GPSData): void {
@@ -842,23 +805,16 @@
   }
 
   /**
-   * Sets up feature points for APRS points, this isn't ment to be the final
-   * version. it simply is putting points onto the map. 
-   * in the future we should make it so that the points can be updated.
+   * Sets up feature points for APRS stations fetched from the backend API.
    */
-  function addAprsPoint(station: APRSStation): void {
+  function addAprsPoint(lat: number, long: number, callsign: string, comment: string | null): void {
     //if the aprsSource hasn't been set up then don't do anything
     if (!aprsSource) return;
 
-    //create marker feature and add to map
-    // make the point(feature) using lat and long
     const aprsMarker = new Feature({
-      geometry: new Point(fromLonLat([station.longitude, station.latitude])),
-      name: 'aprs point',
-      callsign: station.callsign,
-      comment: station.last_comment ?? null,
-      lastSeen: station.last_seen,
-      packetCount: station.packet_count,
+      geometry: new Point(fromLonLat([long, lat])),
+      callsign,
+      comment,
     });
 
     aprsSource.addFeature(aprsMarker);
@@ -901,8 +857,18 @@
     ];
   }
 
-  function closeAprsPopup(): void {
-    selectedAprsPopup = null;
+  //This is just for testing purposes and eventually will be removed when we get APRS data
+  // this gets a random location near the user and sends that information to the addAprsPoint()
+  // to make a aprs feature point.
+  async function loadAprsStations(): Promise<void> {
+    try {
+      const stations: APRSStation[] = await getAprsStations();
+      stations.forEach((station) => {
+        addAprsPoint(station.latitude, station.longitude, station.callsign, station.last_comment ?? null);
+      });
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'HomeMapPage.loadAprsStations');
+    }
   }
 
   // this function changes route to /SettingPreference
@@ -921,6 +887,9 @@
   }
 
   let isDropdownOpen: boolean = false;
+
+  // APRS popup: set when the user clicks a single APRS station on the map
+  let aprsPopupData: { callsign: string; comment: string | null } | null = null;
 </script>
 
 <main style="margin: 0; padding: 0; height: 100%; width: 100%;">
@@ -1001,15 +970,21 @@
     <div bind:this={mapElement} class="map" style="width: 100%; height: 100%;"></div>
   </div>
 
-  {#if selectedAprsPopup}
-    <div class="aprs-popup" role="dialog" aria-label="APRS station details">
-      <div class="aprs-popup-title">{selectedAprsPopup.callsign}</div>
-      {#if selectedAprsPopup.comment}
-        <p class="aprs-popup-comment">{selectedAprsPopup.comment}</p>
+  <!-- APRS station popup: shown when the user clicks a single APRS point -->
+  {#if aprsPopupData !== null}
+    <div class="aprs-popup">
+      <div class="aprs-popup-header">
+        <span class="aprs-popup-callsign">{aprsPopupData.callsign}</span>
+        <!-- svelte-ignore a11y_consider_explicit_label -->
+        <button class="aprs-popup-close" on:click={() => aprsPopupData = null}>
+          <i class="iconoir-xmark" style="font-size: 16px;"></i>
+        </button>
+      </div>
+      {#if aprsPopupData.comment}
+        <p class="aprs-popup-comment">{aprsPopupData.comment}</p>
       {:else}
-        <p class="aprs-popup-empty">No APRS message.</p>
+        <p class="aprs-popup-comment aprs-popup-no-comment">No message</p>
       {/if}
-      <button class="aprs-popup-close" on:click={closeAprsPopup}>Close</button>
     </div>
   {/if}
 
@@ -1168,54 +1143,6 @@
     outline: none;
   }
 
-  .aprs-popup {
-    position: absolute;
-    left: 20px;
-    top: 95px;
-    z-index: 1200;
-    width: min(320px, calc(100vw - 40px));
-    background: rgba(250, 250, 250, 0.95);
-    border: 1px solid #bcbcbc;
-    border-radius: 10px;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
-    padding: 12px;
-  }
-
-  .aprs-popup-title {
-    font-weight: 700;
-    font-size: 1rem;
-    color: #1a1a1a;
-    margin-bottom: 8px;
-  }
-
-  .aprs-popup-comment,
-  .aprs-popup-empty {
-    margin: 0 0 10px 0;
-    color: #333;
-    font-size: 0.95rem;
-    line-height: 1.35;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  .aprs-popup-empty {
-    color: #666;
-    font-style: italic;
-  }
-
-  .aprs-popup-close {
-    border: 1px solid #999;
-    background: #efefef;
-    border-radius: 6px;
-    padding: 6px 10px;
-    cursor: pointer;
-    color: #222;
-  }
-
-  .aprs-popup-close:hover {
-    background: #e3e3e3;
-  }
-
   :global(.ol-zoom button) {
     width: 2.25em;
     height: 2.25em;
@@ -1232,6 +1159,62 @@
 
   :global(.ol-zoom) {
     font-size: 1.1em;
+  }
+
+  .aprs-popup {
+    position: absolute;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1001;
+    background-color: rgba(255, 255, 255, 0.96);
+    border: 1px solid #bbb;
+    border-radius: 8px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+    padding: 10px 14px;
+    min-width: 180px;
+    max-width: 280px;
+    pointer-events: all;
+  }
+
+  .aprs-popup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .aprs-popup-callsign {
+    font-weight: bold;
+    font-size: 15px;
+    color: #222;
+  }
+
+  .aprs-popup-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 4px;
+    color: #555;
+    display: flex;
+    align-items: center;
+    outline: none;
+  }
+
+  .aprs-popup-close:hover {
+    color: #000;
+  }
+
+  .aprs-popup-comment {
+    margin: 0;
+    font-size: 13px;
+    color: #444;
+    word-break: break-word;
+  }
+
+  .aprs-popup-no-comment {
+    color: #999;
+    font-style: italic;
   }
 
 </style>

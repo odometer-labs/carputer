@@ -69,7 +69,7 @@ export interface APRSStation {
   symbol_table: string;
   symbol_code: string;
   last_comment: string | null;
-  last_seen: string;
+  last_seen: string; // ISO format datetime
   latitude: number;
   longitude: number;
   distance_m: number | null;
