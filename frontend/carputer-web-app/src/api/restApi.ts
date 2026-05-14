@@ -131,13 +131,28 @@ export async function checkNewRoad(): Promise<CheckNewRoadResponse> {
 
 // gets the most recent position snapshot from the backend.
 export async function getCurrentPosition(): Promise<GPSData> {
-  const res = await fetch(ENDPOINTS.getCurrentPosition, {
+  const url = new URL(ENDPOINTS.getCurrentPosition, getApiHttpBaseUrl());
+  const res = await fetch(url.toString(), {
     method: "GET",
   });
 
   if (!res.ok) throw new Error("Failed to fetch current GPS position");
 
   return res.json();
+}
+
+function getApiHttpBaseUrl(): string {
+  const env = import.meta.env as Record<string, string | undefined>;
+  if (env.VITE_API_HTTP_URL) {
+    return env.VITE_API_HTTP_URL;
+  }
+
+  // In Docker frontend (:3000) and Vite dev (:5173), target the API directly.
+  if (window.location.port === "3000" || window.location.port === "5173") {
+    return `${window.location.protocol}//${window.location.hostname}:8000`;
+  }
+
+  return window.location.origin;
 }
 
 // subscribes to backend websocket stream of live GPS data.
@@ -207,7 +222,7 @@ function getPositionWebSocketUrl(): string {
 export async function getAprsStations(
   radiusM: number = 50000,
 ): Promise<APRSStation[]> {
-  const url = new URL(ENDPOINTS.getAprsStations, window.location.origin);
+  const url = new URL(ENDPOINTS.getAprsStations, getApiHttpBaseUrl());
   url.searchParams.set("radius_m", String(radiusM));
   const res = await fetch(url.toString(), { method: "GET" });
 
