@@ -193,8 +193,10 @@ function getPositionWebSocketUrl(): string {
 
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
-  // Vite dev server commonly runs on :5173 while API runs on :8000.
-  if (window.location.port === "5173") {
+  // In dev mode (Vite on :5173) or Docker frontend (nginx on :3000), connect
+  // directly to the API server on port 8000 — the API port is always exposed
+  // to the host in docker-compose, so this bypasses any nginx WebSocket proxy issues.
+  if (window.location.port === "5173" || window.location.port === "3000") {
     return `${protocol}//${window.location.hostname}:8000${ENDPOINTS.getPositionStream}`;
   }
 
