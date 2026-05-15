@@ -12,6 +12,7 @@ import type {
   LatestTrackPoint,
   CheckNewRoadResponse,
   GPSData,
+  APRSStation,
 } from "./types";
 import { ENDPOINTS } from "../utils/constants";
 
@@ -130,13 +131,74 @@ export async function checkNewRoad(): Promise<CheckNewRoadResponse> {
 
 // gets the most recent position snapshot from the backend.
 export async function getCurrentPosition(): Promise<GPSData> {
-  const res = await fetch(ENDPOINTS.getCurrentPosition, {
-    method: "GET",
-  });
+  return fetchJsonWithFallback<GPSData>(
+    ENDPOINTS.getCurrentPosition,
+    "Failed to fetch current GPS position",
+  );
+}
 
-  if (!res.ok) throw new Error("Failed to fetch current GPS position");
+function getApiHttpBaseUrl(): string {
+  const env = import.meta.env as Record<string, string | undefined>;
+  if (env.VITE_API_HTTP_URL) {
+    return env.VITE_API_HTTP_URL;
+  }
 
-  return res.json();
+  // In Docker frontend (:3000) and Vite dev (:5173), target the API directly.
+  if (window.location.port === "3000" || window.location.port === "5173") {
+    return `${window.location.protocol}//${window.location.hostname}:8000`;
+  }
+
+  return window.location.origin;
+}
+
+function getApiHttpFallbackBaseUrl(primaryBase: string): string | null {
+  const sameOriginBase = window.location.origin;
+  if (sameOriginBase !== primaryBase) {
+    return sameOriginBase;
+  }
+
+  return null;
+}
+
+async function fetchJsonWithFallback<T>(
+  endpoint: string,
+  errorMessage: string,
+  searchParams?: Record<string, string>,
+): Promise<T> {
+  const primaryBase = getApiHttpBaseUrl();
+  const primaryUrl = new URL(endpoint, primaryBase);
+  if (searchParams) {
+    Object.entries(searchParams).forEach(([key, value]) => {
+      primaryUrl.searchParams.set(key, value);
+    });
+  }
+
+  try {
+    const primaryRes = await fetch(primaryUrl.toString(), { method: "GET" });
+    if (!primaryRes.ok) {
+      throw new Error(`Primary request failed: ${primaryRes.status}`);
+    }
+    return primaryRes.json();
+  } catch {
+    const fallbackBase = getApiHttpFallbackBaseUrl(primaryBase);
+    if (!fallbackBase) {
+      throw new Error(errorMessage);
+    }
+
+    const fallbackUrl = new URL(endpoint, fallbackBase);
+    if (searchParams) {
+      Object.entries(searchParams).forEach(([key, value]) => {
+        fallbackUrl.searchParams.set(key, value);
+      });
+    }
+
+    const fallbackRes = await fetch(fallbackUrl.toString(), { method: "GET" });
+    if (!fallbackRes.ok) {
+      throw new Error(errorMessage);
+    }
+
+    return fallbackRes.json();
+  }
 }
 
 // subscribes to backend websocket stream of live GPS data.
@@ -144,42 +206,96 @@ export function subscribeToPositionStream(
   onMessage: (position: GPSData) => void,
   onError?: (error: string) => void,
 ): () => void {
-  const ws = new WebSocket(getPositionWebSocketUrl());
+  const primaryUrl = getPositionWebSocketUrl();
+  const fallbackUrl = getPositionWebSocketFallbackUrl(primaryUrl);
 
-  ws.onmessage = (event: MessageEvent) => {
-    try {
-      const raw = JSON.parse(event.data);
-      const latitude = Number(raw.latitude);
-      const longitude = Number(raw.longitude);
-      const heading = Number(raw.heading);
-      const speed = Number(raw.speed);
+  let socket: WebSocket | null = null;
+  let hasAttemptedFallback = false;
+  let isClosedByCaller = false;
 
-      if (
-        !Number.isFinite(latitude) ||
-        !Number.isFinite(longitude) ||
-        !Number.isFinite(heading) ||
-        !Number.isFinite(speed)
-      ) {
+  const tryFallback = (): boolean => {
+    if (hasAttemptedFallback || !fallbackUrl || isClosedByCaller) {
+      return false;
+    }
+
+    hasAttemptedFallback = true;
+    connect(fallbackUrl);
+    return true;
+  };
+
+  const bindHandlers = (ws: WebSocket): void => {
+    ws.onmessage = (event: MessageEvent) => {
+      try {
+        const raw = JSON.parse(event.data);
+        const latitude = Number(raw.latitude);
+        const longitude = Number(raw.longitude);
+        const heading = Number(raw.heading);
+        const speed = Number(raw.speed);
+
+        if (
+          !Number.isFinite(latitude) ||
+          !Number.isFinite(longitude) ||
+          !Number.isFinite(heading) ||
+          !Number.isFinite(speed)
+        ) {
+          return;
+        }
+
+        onMessage({ latitude, longitude, heading, speed });
+      } catch (error: unknown) {
+        if (onError)
+          onError(`Failed to parse GPS websocket payload: ${String(error)}`);
+      }
+    };
+
+    ws.onerror = () => {
+      if (tryFallback()) {
         return;
       }
 
-      onMessage({ latitude, longitude, heading, speed });
-    } catch (error: unknown) {
-      if (onError)
-        onError(`Failed to parse GPS websocket payload: ${String(error)}`);
-    }
+      if (onError) {
+        onError("GPS websocket connection failed");
+      }
+    };
+
+    ws.onclose = () => {
+      if (isClosedByCaller) {
+        return;
+      }
+
+      if (tryFallback()) {
+        return;
+      }
+
+      if (onError) {
+        onError("GPS websocket connection closed");
+      }
+    };
   };
 
-  ws.onerror = () => {
-    if (onError) onError("GPS websocket connection failed");
+  const connect = (url: string): void => {
+    if (
+      socket &&
+      (socket.readyState === WebSocket.OPEN ||
+        socket.readyState === WebSocket.CONNECTING)
+    ) {
+      socket.close();
+    }
+    socket = new WebSocket(url);
+    bindHandlers(socket);
   };
+
+  connect(primaryUrl);
 
   return () => {
+    isClosedByCaller = true;
+
     if (
-      ws.readyState === WebSocket.OPEN ||
-      ws.readyState === WebSocket.CONNECTING
+      socket &&
+      (socket.readyState === WebSocket.OPEN ||
+        socket.readyState === WebSocket.CONNECTING)
     ) {
-      ws.close();
+      socket.close();
     }
   };
 }
@@ -192,10 +308,34 @@ function getPositionWebSocketUrl(): string {
 
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
-  // Vite dev server commonly runs on :5173 while API runs on :8000.
-  if (window.location.port === "5173") {
+  // In dev mode (Vite on :5173) or Docker frontend (nginx on :3000), connect
+  // directly to the API server on port 8000 — the API port is always exposed
+  // to the host in docker-compose, so this bypasses any nginx WebSocket proxy issues.
+  if (window.location.port === "5173" || window.location.port === "3000") {
     return `${protocol}//${window.location.hostname}:8000${ENDPOINTS.getPositionStream}`;
   }
 
   return `${protocol}//${window.location.host}${ENDPOINTS.getPositionStream}`;
+}
+
+function getPositionWebSocketFallbackUrl(primaryUrl: string): string | null {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const sameOriginUrl = `${protocol}//${window.location.host}${ENDPOINTS.getPositionStream}`;
+
+  if (sameOriginUrl !== primaryUrl) {
+    return sameOriginUrl;
+  }
+
+  return null;
+}
+
+// fetches APRS stations near the current GPS position.
+export async function getAprsStations(
+  radiusM: number = 50000,
+): Promise<APRSStation[]> {
+  return fetchJsonWithFallback<APRSStation[]>(
+    ENDPOINTS.getAprsStations,
+    "Failed to fetch APRS stations",
+    { radius_m: String(radiusM) },
+  );
 }

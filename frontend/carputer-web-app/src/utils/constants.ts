@@ -12,4 +12,5 @@ export const ENDPOINTS = {
   checkNewRoad: `${API_BASE}/tracks-check-new-road`,
   getCurrentPosition: "/ws/get-current-pos",
   getPositionStream: "/ws/get-position",
+  getAprsStations: `${API_BASE}/aprs/stations`,
 };
