@@ -62,7 +62,7 @@ Unlike the previous FastAPI service, we aim to apply industry practices and guid
     ├── .gitignore
     └── README.md
 ```
-
+<small>Created with this awesome site: https://tree.nathanfriend.com/</small>
 
 ### `/cmd`
 
@@ -89,7 +89,3 @@ This folder holds your API contract definitions.
 ### `/configs`
 
 Configuration file templates or default settings (e.g., `config.yaml`, `.env.example`).
-
-## Authors
-Brian Le  
-[@ricer0ll](https://github.com/ricer0ll)
