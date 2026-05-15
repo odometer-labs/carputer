@@ -6,7 +6,7 @@ import (
 )
 
 type Track struct {
-	TrackID   int64           `json:"track_id"`
+	TrackID   uint64          `json:"track_id"`
 	Geom      json.RawMessage `json:"geom"`
 	GeomWM    json.RawMessage `json:"geom_wm"`
 	StartTime time.Time       `json:"start_time"`

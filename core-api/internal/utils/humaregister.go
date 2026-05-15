@@ -33,13 +33,14 @@ func RegisterHumaHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{
-			OperationID: "Create Track",
-			Method:      http.MethodPost,
-			Path:        "/v2/tracks",
-			Summary:     "Create Track",
-			Description: "Create and starts a track recording. You will be then be able to record track points with the track points endpoint.",
-			Tags:        []string{"Tracks"},
-		}, handler.CreateTrackHander)
+			OperationID:   "Create Track",
+			Method:        http.MethodPost,
+			Path:          "/v2/tracks",
+			Summary:       "Create Track",
+			Description:   "Create and starts a track recording. You will be then be able to record track points with the track points endpoint.",
+			Tags:          []string{"Tracks"},
+			DefaultStatus: http.StatusCreated,
+		}, handler.CreateTrackHandler)
 
 	huma.Register(
 		api,
@@ -50,17 +51,18 @@ func RegisterHumaHandlers(api huma.API) {
 			Summary:     "End Track",
 			Description: "Ends track recording.",
 			Tags:        []string{"Tracks"},
-		}, handler.EndTrackHander)
+		}, handler.EndTrackHandler)
 
 	huma.Register(
 		api,
 		huma.Operation{
-			OperationID: "Add Track Point",
-			Method:      http.MethodPost,
-			Path:        "/v2/track-point",
-			Summary:     "Add Track Point",
-			Description: "Adds a track point to the current track that you started.",
-			Tags:        []string{"Tracks"},
+			OperationID:   "Add Track Point",
+			Method:        http.MethodPost,
+			Path:          "/v2/track-point",
+			Summary:       "Add Track Point",
+			Description:   "Adds a track point to the current track that you started.",
+			Tags:          []string{"Tracks"},
+			DefaultStatus: http.StatusCreated,
 		}, handler.AddTrackPointHandler)
 
 	huma.Register(
@@ -92,7 +94,63 @@ func RegisterHumaHandlers(api huma.API) {
 			Method:      http.MethodPut,
 			Path:        "/v2/track/{track_id}",
 			Summary:     "Update Track",
-			Description: "Update a track's metadata by the track id. NOTE: This will only update start_time, end_time, and track_name.",
+			Description: "Update a track's metadata by the track id. This will only update start_time, end_time, and track_name metadata.",
 			Tags:        []string{"Tracks"},
 		}, handler.UpdateTrackHandler)
+
+	huma.Register(
+		api,
+		huma.Operation{
+			OperationID: "Delete Track",
+			Method:      http.MethodDelete,
+			Path:        "/v2/track/{track_id}",
+			Summary:     "Delete Track",
+			Description: "Delete a track by the track id.",
+			Tags:        []string{"Tracks"},
+		}, handler.DeleteTrackHandler)
+
+	huma.Register(
+		api,
+		huma.Operation{
+			OperationID: "List Tracks MVT",
+			Method:      http.MethodPost,
+			Path:        "/v2/tracks-mvt/{track_id}",
+			Summary:     "List Tracks MVT",
+			Description: "List Tracks MVT.",
+			Tags:        []string{"Tracks"},
+		}, handler.ListTracksMVTHandler)
+
+	huma.Register(
+		api,
+		huma.Operation{
+			OperationID: "Import Track",
+			Method:      http.MethodPost,
+			Path:        "/v2/import/track",
+			Summary:     "Import Track",
+			Description: "Import a Track.",
+			Tags:        []string{"Tracks"},
+		}, handler.ImportTrackHandler)
+
+	huma.Register(
+		api,
+		huma.Operation{
+			OperationID:   "Import Track Point",
+			Method:        http.MethodPost,
+			Path:          "/v2/import/track-point/{track_id}",
+			Summary:       "Import Track Point",
+			Description:   "Import a track point to the specified track.",
+			Tags:          []string{"Tracks"},
+			DefaultStatus: http.StatusCreated,
+		}, handler.ImportTrackPointHandler)
+
+	huma.Register(
+		api,
+		huma.Operation{
+			OperationID: "Check New Road",
+			Method:      http.MethodGet,
+			Path:        "/v2/check-new-road",
+			Summary:     "Check New Road",
+			Description: "Checks if we are currently on a new road.",
+			Tags:        []string{"Tracks"},
+		}, handler.CheckNewRoadHandler)
 }

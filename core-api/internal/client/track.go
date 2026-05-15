@@ -67,7 +67,26 @@ func (t Track) ListTracks(ctx context.Context, request *v2.ViewAllTracksRequest)
 	return resp, nil
 }
 
-func (t Track) ListTracksMvt(ctx context.Context) {}
+func (t Track) ListTracksMVT(ctx context.Context, request *v2.ListTracksMVTRequest) (*v2.ListTracksMVTResponse, error) {
+	resp := v2.ListTracksMVTResponse{}
+	body := request.Body
+
+	err := t.Pool.QueryRow(
+		ctx,
+		"select * from gps.get_tracks_mvt($1, $2, $3, $4, $5, $6)",
+		body.Z,
+		body.X,
+		body.Y,
+		body.Mode,
+		request.TrackID,
+		body.WithinMeters,
+	).Scan(&resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list track mvt: %w", err)
+	}
+
+	return &resp, nil
+}
 
 func (t Track) GetTrack(ctx context.Context, path *v2.GetTrackPath) (*v2.GetTrackResponse, error) {
 	resp := v2.GetTrackResponse{}
@@ -107,26 +126,34 @@ func (t Track) UpdateTrack(
 	return &resp, nil
 }
 
-func (t Track) DeleteTrack(ctx context.Context) {}
+func (t Track) DeleteTrack(ctx context.Context, request *v2.DeleteTrackRequest) (*v2.DeleteTrackResponse, error) {
+	_, err := t.Pool.Exec(ctx, "call gps.delete_track($1);", request.TrackID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to delete track: %w", err)
+	}
+
+	resp := v2.DeleteTrackResponse{}
+	return &resp, nil
+}
 
 func (t Track) CreateTrack(ctx context.Context, request *v2.CreateTrackRequest) (*v2.CreateTrackResponse, error) {
-	var trackId int64
+	var trackID int64
 	var trackName *string = request.Body.TrackName
 
 	if trackName != nil {
-		err := t.Pool.QueryRow(ctx, "select gps.create_track($1);", trackName).Scan(&trackId)
+		err := t.Pool.QueryRow(ctx, "select gps.create_track($1);", trackName).Scan(&trackID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create track: %w", err)
 		}
 	} else {
-		err := t.Pool.QueryRow(ctx, "select gps.create_track();").Scan(&trackId)
+		err := t.Pool.QueryRow(ctx, "select gps.create_track();").Scan(&trackID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create track: %w", err)
 		}
 	}
 
 	resp := v2.CreateTrackResponse{}
-	resp.Body.ID = trackId
+	resp.Body.ID = trackID
 
 	return &resp, nil
 }
@@ -142,7 +169,38 @@ func (t Track) EndTrack(ctx context.Context) (*v2.EndTrackResponse, error) {
 	return &resp, nil
 }
 
-func (t Track) ImportTrackPoint(ctx context.Context) {}
+func (t Track) ImportTrack(ctx context.Context, request *v2.ImportTrackRequest) (*v2.ImportTrackResponse, error) {
+	var trackID int64
+
+	err := t.Pool.QueryRow(ctx, "select gps.import_track();").Scan(&trackID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to import track: %w", err)
+	}
+
+	resp := v2.ImportTrackResponse{}
+	resp.Body.ID = trackID
+	return &resp, nil
+}
+
+func (t Track) ImportTrackPoint(ctx context.Context, request *v2.ImportTrackPointRequest) (*v2.ImportTrackPointResponse, error) {
+	body := request.Body
+	_, err := t.Pool.Exec(
+		ctx,
+		"call gps.add_track_point($1, $2, $3, $4, $5, $6)",
+		request.TrackID,
+		time.Now().UTC(),
+		body.Latitude,
+		body.Longitude,
+		body.Speed,
+		body.Heading,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add track point to track: %w", err)
+	}
+
+	resp := v2.ImportTrackPointResponse{}
+	return &resp, nil
+}
 
 func (t Track) AddTrackPoint(ctx context.Context, request *v2.AddTrackPointRequest) (*v2.AddTrackPointResponse, error) {
 	body := request.Body
@@ -164,8 +222,14 @@ func (t Track) AddTrackPoint(ctx context.Context, request *v2.AddTrackPointReque
 	return &resp, nil
 }
 
-func (t Track) GetLatestTrackPoint(ctx context.Context) {}
+func (t Track) CheckNewRoad(ctx context.Context, request *v2.CheckNewRoadRequest) (*v2.CheckNewRoadResponse, error) {
+	var isNewRoad bool
 
-func (t Track) CheckNewRoad(ctx context.Context) {}
+	err := t.Pool.QueryRow(ctx, "select gps.is_new_road();").Scan(&isNewRoad)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check new road: %w", err)
+	}
 
-func (t Track) ImportTrack(ctx context.Context) {}
+	resp := v2.CheckNewRoadResponse{}
+	return &resp, nil
+}

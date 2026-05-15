@@ -6,9 +6,3 @@ type TrackPoint struct {
 	Speed     float64 `json:"speed"`
 	Heading   float64 `json:"heading"`
 }
-
-type AddTrackPointRequest struct {
-	Body TrackPoint
-}
-
-type AddTrackPointResponse struct{}

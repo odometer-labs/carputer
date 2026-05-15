@@ -22,7 +22,7 @@ func GetPositionHandler(ctx context.Context, request *v2.GetPositionRequest) (*v
 	return resp, err
 }
 
-func CreateTrackHander(ctx context.Context, request *v2.CreateTrackRequest) (*v2.CreateTrackResponse, error) {
+func CreateTrackHandler(ctx context.Context, request *v2.CreateTrackRequest) (*v2.CreateTrackResponse, error) {
 	resp, err := trackClient.CreateTrack(ctx, request)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("Unable to create track: %v", err)
@@ -31,7 +31,7 @@ func CreateTrackHander(ctx context.Context, request *v2.CreateTrackRequest) (*v2
 	return resp, err
 }
 
-func EndTrackHander(ctx context.Context, request *v2.EndTrackRequest) (*v2.EndTrackResponse, error) {
+func EndTrackHandler(ctx context.Context, request *v2.EndTrackRequest) (*v2.EndTrackResponse, error) {
 	resp, err := trackClient.EndTrack(ctx)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("Unable to stop track: %v", err)
@@ -67,14 +67,56 @@ func GetTrackHandler(ctx context.Context, path *v2.GetTrackPath) (*v2.GetTrackRe
 	return resp, err
 }
 
-func UpdateTrackHandler(
-	ctx context.Context,
-	request *v2.UpdateTrackRequest,
-) (*v2.UpdateTrackResponse, error) {
+func UpdateTrackHandler(ctx context.Context, request *v2.UpdateTrackRequest) (*v2.UpdateTrackResponse, error) {
 	resp, err := trackClient.UpdateTrack(ctx, request)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("Unable to update track: %v", err)
 	}
 
 	return resp, err
+}
+
+func DeleteTrackHandler(ctx context.Context, request *v2.DeleteTrackRequest) (*v2.DeleteTrackResponse, error) {
+	resp, err := trackClient.DeleteTrack(ctx, request)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Unable to update track: %v", err)
+	}
+
+	return resp, err
+}
+
+func ListTracksMVTHandler(ctx context.Context, request *v2.ListTracksMVTRequest) (*v2.ListTracksMVTResponse, error) {
+	resp, err := trackClient.ListTracksMVT(ctx, request)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Unable to get track mvt: %v", err)
+	}
+
+	return resp, err
+}
+
+func ImportTrackHandler(ctx context.Context, request *v2.ImportTrackRequest) (*v2.ImportTrackResponse, error) {
+	resp, err := trackClient.ImportTrack(ctx, request)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Unable to import track: %v", err)
+	}
+
+	return resp, err
+}
+
+func ImportTrackPointHandler(ctx context.Context, request *v2.ImportTrackPointRequest) (*v2.ImportTrackPointResponse, error) {
+	resp, err := trackClient.ImportTrackPoint(ctx, request)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Unable to import track point: %v", err)
+	}
+
+	return resp, err
+}
+
+func CheckNewRoadHandler(ctx context.Context, request *v2.CheckNewRoadRequest) (*v2.CheckNewRoadResponse, error) {
+	resp, err := trackClient.CheckNewRoad(ctx, request)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Unable to check new road: %v", err)
+	}
+
+	return resp, nil
 }

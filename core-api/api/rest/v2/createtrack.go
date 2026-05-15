@@ -1,12 +1,8 @@
 package v2
 
-import "time"
-
 type CreateTrackRequest struct {
 	Body struct {
-		StartTime time.Time `json:"start_time"`
-		EndTime   time.Time `json:"end_time"`
-		TrackName *string   `json:"track_name"`
+		TrackName *string `json:"track_name"`
 	}
 }
 
