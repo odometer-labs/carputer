@@ -62,29 +62,27 @@ Unlike the previous FastAPI service, we aim to apply industry practices and guid
 
 This is where your **entry points** live. Each subdirectory under `cmd` represents a separate executable binary.
 
-**Keep it thin:** `main.go` files here should only handle setup, flag parsing, and dependency injection. Don't put business logic here.
 
 ### `/internal`
 
 This is a special directory in Go. Code inside `/internal` can only be imported by packages within the same parent tree.
 
-**Use it for:** Private code that you don't want external projects to use. It’s the best place for your actual business logic, services, and domain models.
 
 ### `/pkg`
 
-Unlike `internal`, code in `/pkg` is **public** and can be imported by anyone.
+Unlike `internal`, code in `/pkg` is **public** and can be imported by anyone. This really is only useful if say another go project is importing our project.
 
-**Caution:** Many modern projects are moving away from `/pkg` in favor of putting everything in `/internal` unless they explicitly want to provide a library for others. If you're building a private service, you might not need this at all.
+**Note:** Since we our Core API is a closed-ecosystem with other carputer services, we might not need this at all.
 
 ### `/api`
 
 This folder holds your API contract definitions.
 
-**Contents:** OpenAPI/Swagger specs, JSON schema files, or Protocol Buffer (`.proto`) files.
+**Examples:** OpenAPI/Swagger specs, JSON schema files, DTOs and Rest Models, etc.
 
 ### `/configs`
 
-Configuration file templates or default settings (e.g., `config.yaml`, `.env.example`). Note that you should generally not commit your actual production secrets here.  
+Configuration file templates or default settings (e.g., `config.yaml`, `.env.example`).
 
 ## Authors
 Brian Le  
