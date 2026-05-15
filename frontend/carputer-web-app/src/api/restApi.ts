@@ -12,6 +12,7 @@ import type {
   LatestTrackPoint,
   CheckNewRoadResponse,
   GPSData,
+  SysHealthData,
 } from "./types";
 import { ENDPOINTS } from "../utils/constants";
 
@@ -182,6 +183,50 @@ export function subscribeToPositionStream(
       ws.close();
     }
   };
+}
+
+export function subscribeToSysHealth(
+  onMessage: (data: SysHealthData) => void,
+  onError?: (error: string) => void,
+): () => void {
+  const ws = new WebSocket(getSysHealthWebSocketUrl());
+
+  ws.onmessage = (event: MessageEvent) => {
+    try {
+      const data = JSON.parse(event.data) as SysHealthData;
+      onMessage(data);
+    } catch (error: unknown) {
+      if (onError) onError(`Failed to parse sys-health payload: ${String(error)}`);
+    }
+  };
+
+  ws.onerror = () => {
+    if (onError) onError("sys-health websocket connection failed");
+  };
+
+  return () => {
+    if (
+      ws.readyState === WebSocket.OPEN ||
+      ws.readyState === WebSocket.CONNECTING
+    ) {
+      ws.close();
+    }
+  };
+}
+
+function getSysHealthWebSocketUrl(): string {
+  const env = import.meta.env as Record<string, string | undefined>;
+  if (env.VITE_SYS_HEALTH_WS_URL) {
+    return env.VITE_SYS_HEALTH_WS_URL;
+  }
+
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+
+  if (window.location.port === "5173") {
+    return `${protocol}//${window.location.hostname}:8090${ENDPOINTS.sysHealthStream}`;
+  }
+
+  return `${protocol}//${window.location.host}${ENDPOINTS.sysHealthStream}`;
 }
 
 function getPositionWebSocketUrl(): string {
