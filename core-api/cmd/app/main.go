@@ -20,7 +20,7 @@ func main() {
 		huma.Operation{
 			OperationID: "root",
 			Method:      http.MethodGet,
-			Path:        "/v1/root",
+			Path:        "/v2/root",
 			Summary:     "Prints Hello World!",
 			Description: "Prints Hello World to you.",
 			Tags:        []string{"Root"},
@@ -31,7 +31,7 @@ func main() {
 		huma.Operation{
 			OperationID: "Create Track",
 			Method:      http.MethodPost,
-			Path:        "/v1/tracks",
+			Path:        "/v2/tracks",
 			Summary:     "Create Track",
 			Description: "Create and starts a track recording. You will be then be able to record track points with the track points endpoint.",
 			Tags:        []string{"Tracks"},
@@ -42,7 +42,7 @@ func main() {
 		huma.Operation{
 			OperationID: "End Track",
 			Method:      http.MethodGet,
-			Path:        "/v1/tracks",
+			Path:        "/v2/tracks",
 			Summary:     "End Track",
 			Description: "Ends track recording.",
 			Tags:        []string{"Tracks"},

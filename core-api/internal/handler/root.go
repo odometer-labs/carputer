@@ -3,11 +3,11 @@ package handler
 import (
 	"context"
 
-	v1 "github.com/odometer-labs/carputer/core-api/api/rest/v1"
+	v2 "github.com/odometer-labs/carputer/core-api/api/rest/v2"
 )
 
-func RootHandler(ctx context.Context, request *v1.RootRequest) (*v1.RootResponse, error) {
-	resp := &v1.RootResponse{}
+func RootHandler(ctx context.Context, request *v2.RootRequest) (*v2.RootResponse, error) {
+	resp := &v2.RootResponse{}
 	resp.Body.Message = "Hello, World!"
 	return resp, nil
 }
