@@ -1,8 +1,8 @@
-package v1
+package v2
 
 import "time"
 
-type StartTrackRequest struct {
+type CreateTrackRequest struct {
 	Body struct {
 		StartTime time.Time `json:"start_time"`
 		EndTime   time.Time `json:"end_time"`
@@ -10,7 +10,7 @@ type StartTrackRequest struct {
 	}
 }
 
-type StartTrackResponse struct {
+type CreateTrackResponse struct {
 	Body struct {
 		ID int64 `json:"id"`
 	}

@@ -29,6 +29,17 @@ func main() {
 	huma.Register(
 		api,
 		huma.Operation{
+			OperationID: "Get Position",
+			Method:      http.MethodGet,
+			Path:        "/v2/position",
+			Summary:     "Get Position",
+			Description: "Fetches the current position according to the gpsd",
+			Tags:        []string{"Position"},
+		}, handler.GetPositionHandler)
+
+	huma.Register(
+		api,
+		huma.Operation{
 			OperationID: "Create Track",
 			Method:      http.MethodPost,
 			Path:        "/v2/tracks",
@@ -47,6 +58,39 @@ func main() {
 			Description: "Ends track recording.",
 			Tags:        []string{"Tracks"},
 		}, handler.EndTrackHander)
+
+	huma.Register(
+		api,
+		huma.Operation{
+			OperationID: "Add Track Point",
+			Method:      http.MethodPost,
+			Path:        "/v2/track-point",
+			Summary:     "Add Track Point",
+			Description: "Adds a track point to the current track that you started.",
+			Tags:        []string{"Tracks"},
+		}, handler.AddTrackPointHandler)
+
+	huma.Register(
+		api,
+		huma.Operation{
+			OperationID: "List Tracks",
+			Method:      http.MethodGet,
+			Path:        "/v2/list-tracks",
+			Summary:     "List Tracks",
+			Description: "List all tracks.",
+			Tags:        []string{"Tracks"},
+		}, handler.ListTracksHandler)
+
+	huma.Register(
+		api,
+		huma.Operation{
+			OperationID: "Get Track",
+			Method:      http.MethodGet,
+			Path:        "/v2/track/{track_id}",
+			Summary:     "Get Track",
+			Description: "Get a track by the track id.",
+			Tags:        []string{"Tracks"},
+		}, handler.GetTrackHandler)
 
 	fmt.Println("Visit http://127.0.0.1:8000/docs")
 	http.ListenAndServe("0.0.0.0:8000", router)

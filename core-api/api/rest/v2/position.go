@@ -1,7 +1,6 @@
-package v1
+package v2
 
-type GetPositionRequest struct {
-}
+type GetPositionRequest struct{}
 
 type GetPositionResponse struct {
 	Body struct {
