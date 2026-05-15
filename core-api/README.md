@@ -73,7 +73,7 @@ This is a special directory in Go. Code inside `/internal` can only be imported 
 
 Unlike `internal`, code in `/pkg` is **public** and can be imported by anyone. This really is only useful if say another go project is importing our project.
 
-**Note:** Since we our Core API is a closed-ecosystem with other carputer services, we might not need this at all.
+**Note:** Since our Core API is a closed-ecosystem with other carputer services, we might not need this at all.
 
 ### `/api`
 
