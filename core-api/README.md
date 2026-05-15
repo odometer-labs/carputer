@@ -20,7 +20,7 @@ That's it! You're ready to develop!
 Ensure your current working directory is in the project's root
 ```
 $ pwd
-/home/user/Documents/repo/carputer/core-api
+/home/user/.../repo/carputer/core-api
 ```
 
 Run the go command  
@@ -29,7 +29,7 @@ Run the go command
 That's it! You can visit http://localhost:8000/docs to see all the endpoints we got!
 
 ## Project Structure
-Unlike the previous FastAPI service, we aim to apply industry practices and guidelines in this project. We structured are this go project close to what production-ready Go projects and packages follow.
+Unlike the previous FastAPI service, we aim to apply industry practices and guidelines in this project. We structured this Go project close to what production-ready Go projects and packages follow.
 ```
 .
 └── core-api/
