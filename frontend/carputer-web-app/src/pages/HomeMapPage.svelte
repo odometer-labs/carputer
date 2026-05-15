@@ -81,6 +81,11 @@
 
   // this is used to prevent the user track having too many points on 1 spot
   let lastUserTrackCoord: [number, number] | null = null;
+  let lastRoadHistoryCoord: [number, number] | null = null;
+
+  const GPS_JITTER_DISTANCE_METERS = 4;
+  const GPS_STATIONARY_SPEED_MPS = 0.8;
+  const ROAD_HISTORY_MIN_DISTANCE_METERS = 8;
 
   // this is the list of tracks that is shown on the page, filtered
   const filteredTracks = derived(
@@ -201,20 +206,15 @@
 
     }
 
-    ///TODO: remove this after getting real APRS data.
-    // this will be removed in the future but for now this sets up 10 aprs points around the 
-    // the user, to display an aprs icon.
+    // Load APRS stations from the backend API.
     loadAprsStations();
 
     // subscribes to track changes
     const unsubscribeTracks = filteredTracks.subscribe(({ tracks, selectedTrackId }) => {
       renderTracks(tracks, selectedTrackId);
     });
-    //TODO: uncomment this for real data from back end
-    //trackStore.loadTracks();  //this loads in the old tracks from backend.
-
-    //TODO: remove this line when we don't want mock data anymore
-    trackStore.setTrack(mockTracks);
+    // Load completed tracks from backend.
+    trackStore.loadTracks();
 
     return () => {
       unsubscribeTracks();
@@ -564,22 +564,35 @@
     }
 
     const coords = fromLonLat([lon, lat]);
-    latestUserCoords = coords;
+    const speedMps = Number(position.speed);
+
+    let filteredCoords = coords;
+    if (latestUserCoords) {
+      const movementMeters = getDistanceMeters(coords, latestUserCoords);
+      const isLikelyStationary = Number.isFinite(speedMps) && speedMps < GPS_STATIONARY_SPEED_MPS;
+
+      // Hold position when stationary to suppress GPS drift jitter on the marker.
+      if (isLikelyStationary && movementMeters < GPS_JITTER_DISTANCE_METERS) {
+        filteredCoords = latestUserCoords;
+      }
+    }
+
+    latestUserCoords = filteredCoords;
 
     if (!map) {
       return;
     }
 
     // use the coord from the user to add it to the current users track line
-    applyTrackLine(coords);
+    applyTrackLine(filteredCoords);
 
     // checks if the current road is a new road or not.
-    checkRoadHistory();
+    checkRoadHistory(filteredCoords);
 
     if (!userMarker) {
       // first fix: create marker feature and add to map
       userMarker = new Feature({
-        geometry: new Point(coords)
+        geometry: new Point(filteredCoords)
       });
 
       userMarker.setStyle(new Style({
@@ -610,9 +623,9 @@
       // subsequent fixes: move marker and refresh style
       const geometry = userMarker.getGeometry();
       if (geometry) {
-        geometry.setCoordinates(coords);
+        geometry.setCoordinates(filteredCoords);
       } else {
-        userMarker.setGeometry(new Point(coords));
+        userMarker.setGeometry(new Point(filteredCoords));
       }
 
       if (isFollowingUser) {
@@ -668,41 +681,6 @@
     }
   }
 
-  //TODO remove this when we have working tracks to recieve from the database
-  export const mockTracks: Track[] = [
-    {
-      track_id: 1,
-      start_time: "2026-04-15T10:00:00Z",
-      end_time: "2026-04-15T10:20:00Z",
-      geom: {
-        type: "LineString",
-        coordinates: [
-          [-122.6865, 45.5120],
-          [-122.6862, 45.5125],
-          [-122.6859, 45.5130],
-          [-122.6850, 45.5147],
-          [-122.6825, 45.5140]
-        ]
-      }
-    },
-    {
-      track_id: 2,
-      start_time: "2026-04-16T14:00:00Z",
-      end_time: "2026-04-16T14:35:00Z",
-      geom: {
-        type: "LineString",
-        coordinates: [
-          [-122.6855, 45.5115],
-          [-122.6805, 45.5120],
-          [-122.6835, 45.5125],
-          [-122.6815, 45.5130],
-          [-122.6815, 45.5135],
-          [-122.6805, 45.5140]
-        ]
-      }
-    }
-  ];
-
   // this function checks if the user has passed a certain amount of distance
   // I made this becuase I realized that the applyTrackLine will add multiple 
   // points on the same spot on the map and that just seem very wastefull.
@@ -743,15 +721,26 @@
 
   // this function is used to check if the current road the user is on is a road
   // that the user has never driven on before.
-  function checkRoadHistory() : void {
+  function checkRoadHistory(coords: number[]) : void {
     const now = Date.now();
 
     // makes sure that the most a call for checking if the road is new is at most 1 per sec
-    if (now - lastCheckTime > CHECK_ROAD_INTERVAL) {
-      lastCheckTime = now;
+    if (now - lastCheckTime <= CHECK_ROAD_INTERVAL) return;
 
-      trackStore.checkIfNewRoad();
+    if (lastRoadHistoryCoord) {
+      const movementMeters = getDistanceMeters(coords, lastRoadHistoryCoord);
+      if (movementMeters < ROAD_HISTORY_MIN_DISTANCE_METERS) return;
     }
+
+    lastCheckTime = now;
+    lastRoadHistoryCoord = [coords[0], coords[1]];
+    trackStore.checkIfNewRoad();
+  }
+
+  function getDistanceMeters(a: number[], b: number[]): number {
+    const dx = a[0] - b[0];
+    const dy = a[1] - b[1];
+    return Math.sqrt(dx * dx + dy * dy);
   }
 
 
