@@ -50,7 +50,7 @@
   let vectorSource: VectorSource | undefined;
 
   // latest GPS state (map projection coords + heading)
-  let latestUserCoords: number[] | null = null;
+  let latestUserCoords: [number, number] | null = null;
   let latestHeadingDegrees: number | null = null;
 
   // follow-lock state: position only vs. position + heading (compass mode)
@@ -71,6 +71,7 @@
   // device orientation listener (reserved for future compass integration)
   let orientationListener: ((event: DeviceOrientationEvent) => void) | null = null;
   let stopGPSSubscription: (() => void) | null = null;
+  let aprsRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
   let zoomLevel: number = 18;
   $: zoomLevel = $settingsPreferences.defaultZoom; // default zoom level when centering on user
@@ -206,8 +207,11 @@
 
     }
 
-    // Load APRS stations from the backend API.
+    // Load APRS stations from backend and refresh periodically.
     loadAprsStations();
+    aprsRefreshInterval = setInterval(() => {
+      loadAprsStations();
+    }, 15000);
 
     // subscribes to track changes
     const unsubscribeTracks = filteredTracks.subscribe(({ tracks, selectedTrackId }) => {
@@ -236,6 +240,11 @@
 
       if (rotationProgrammaticGuardTimeout !== null) {
         clearTimeout(rotationProgrammaticGuardTimeout);
+      }
+
+      if (aprsRefreshInterval !== null) {
+        clearInterval(aprsRefreshInterval);
+        aprsRefreshInterval = null;
       }
     };
   });
@@ -407,6 +416,7 @@
         if (!clusteredFeatures || clusteredFeatures.length !== 1) return;
 
         const inner = clusteredFeatures[0];
+        if (!inner) return;
         const callsign = inner?.get('callsign') as string | undefined;
         if (callsign) {
           aprsPopupData = { callsign, comment: inner.get('comment') ?? null };
@@ -563,10 +573,10 @@
       latestHeadingDegrees = position.heading;
     }
 
-    const coords = fromLonLat([lon, lat]);
+    const coords = fromLonLat([lon, lat]) as [number, number];
     const speedMps = Number(position.speed);
 
-    let filteredCoords = coords;
+    let filteredCoords: [number, number] = coords;
     if (latestUserCoords) {
       const movementMeters = getDistanceMeters(coords, latestUserCoords);
       const isLikelyStationary = Number.isFinite(speedMps) && speedMps < GPS_STATIONARY_SPEED_MPS;
@@ -695,7 +705,7 @@
 
   // this is used to make the track line for the user, given that the coordnates pushed
   // in are the user's coordinates.
-  function applyTrackLine(coords : number[]) : void {
+  function applyTrackLine(coords : [number, number]) : void {
     // this adds a line (blue line) so the user can see where they have been (current track) 
     if ($trackStore.isTracking) { 
       //this determines if this is the beggining of a new line 
@@ -721,7 +731,7 @@
 
   // this function is used to check if the current road the user is on is a road
   // that the user has never driven on before.
-  function checkRoadHistory(coords: number[]) : void {
+  function checkRoadHistory(coords: [number, number]) : void {
     const now = Date.now();
 
     // makes sure that the most a call for checking if the road is new is at most 1 per sec
@@ -737,7 +747,7 @@
     trackStore.checkIfNewRoad();
   }
 
-  function getDistanceMeters(a: number[], b: number[]): number {
+  function getDistanceMeters(a: [number, number], b: [number, number]): number {
     const dx = a[0] - b[0];
     const dy = a[1] - b[1];
     return Math.sqrt(dx * dx + dy * dy);
@@ -851,7 +861,14 @@
   // to make a aprs feature point.
   async function loadAprsStations(): Promise<void> {
     try {
-      const stations: APRSStation[] = await getAprsStations();
+      let stations: APRSStation[] = await getAprsStations();
+
+      // If nothing is nearby, widen the search radius to show available APRS traffic.
+      if (stations.length === 0) {
+        stations = await getAprsStations(500000);
+      }
+
+      aprsSource?.clear();
       stations.forEach((station) => {
         addAprsPoint(station.latitude, station.longitude, station.callsign, station.last_comment ?? null);
       });
