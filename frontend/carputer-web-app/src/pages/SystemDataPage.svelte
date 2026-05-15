@@ -296,14 +296,14 @@
     const downloadedTilesFromBackend: DownloadedTile[] = [];
     applyDownloadedTileSelections(downloadedTilesFromBackend);
 
-    map.on('click', (event) => {
+    map.on('click', (event: any) => {
       if (!isSelectMode || !map || !selectionSource || !gridLayer) return;
 
       const feature = map.forEachFeatureAtPixel(
         event.pixel,
-        (candidate) => candidate,
+        (candidate: any) => candidate,
         {
-          layerFilter: (layer) => layer === gridLayer,
+          layerFilter: (layer: any) => layer === gridLayer,
           hitTolerance: 3,
         }
       );
