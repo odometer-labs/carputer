@@ -66,3 +66,15 @@ func GetTrackHandler(ctx context.Context, path *v2.GetTrackPath) (*v2.GetTrackRe
 
 	return resp, err
 }
+
+func UpdateTrackHandler(
+	ctx context.Context,
+	request *v2.UpdateTrackRequest,
+) (*v2.UpdateTrackResponse, error) {
+	resp, err := trackClient.UpdateTrack(ctx, request)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Unable to update track: %v", err)
+	}
+
+	return resp, err
+}

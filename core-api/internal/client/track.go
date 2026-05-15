@@ -87,7 +87,25 @@ func (t Track) GetTrack(ctx context.Context, path *v2.GetTrackPath) (*v2.GetTrac
 	return &resp, nil
 }
 
-func (t Track) UpdateTrack(ctx context.Context) {}
+func (t Track) UpdateTrack(
+	ctx context.Context,
+	request *v2.UpdateTrackRequest,
+) (*v2.UpdateTrackResponse, error) {
+
+	_, err := t.Pool.Exec(
+		ctx,
+		"call gps.update_track($1, $2, $3, $4);",
+		request.TrackID,
+		request.Body.StartTime,
+		request.Body.EndTime,
+		request.Body.TrackName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update track: %w", err)
+	}
+
+	resp := v2.UpdateTrackResponse{}
+	return &resp, nil
+}
 
 func (t Track) DeleteTrack(ctx context.Context) {}
 
