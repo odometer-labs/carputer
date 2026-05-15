@@ -204,8 +204,13 @@
   }
 
   $: if (aprsLayer) {
+    aprsLayer.setVisible($settingsPreferences.areAprsPointsOn);
     aprsPopupData;
     aprsLayer.changed();
+  }
+
+  $: if (!$settingsPreferences.areAprsPointsOn && aprsPopupData !== null) {
+    aprsPopupData = null;
   }
 
   // run once when the Svelte component is mounted
@@ -903,6 +908,11 @@
   // this gets a random location near the user and sends that information to the addAprsPoint()
   // to make a aprs feature point.
   async function loadAprsStations(): Promise<void> {
+    if (!$settingsPreferences.areAprsPointsOn) {
+      aprsSource?.clear();
+      return;
+    }
+
     try {
       let stations: APRSStation[] = await getAprsStations();
 

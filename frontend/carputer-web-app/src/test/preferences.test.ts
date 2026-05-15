@@ -55,6 +55,7 @@ describe("preferences service", () => {
 
     expect(loadSettingsPreferences()).toEqual({
       areAllTracksOn: true,
+      areAprsPointsOn: true,
       milesToDiscoverRoads: 100,
       selectedTrackColor: "#ff34f1",
       restingTrackColor: "#fa5fff",
@@ -105,6 +106,7 @@ describe("preferences service", () => {
     expect(after.brightness).toBe(55);
     expect(after.nightMode).toBe(true);
     expect(after.areAllTracksOn).toBe(before.areAllTracksOn);
+    expect(after.areAprsPointsOn).toBe(before.areAprsPointsOn);
     expect(after.milesToDiscoverRoads).toBe(before.milesToDiscoverRoads);
     expect(after.selectedTrackColor).toBe(before.selectedTrackColor);
     expect(after.restingTrackColor).toBe(before.restingTrackColor);
