@@ -27,8 +27,8 @@ COPY . .
 # fix perms
 RUN chown -R appuser:appuser /app
 
-ENV PORT=8888
-EXPOSE 8888
+ENV PORT=8000
+EXPOSE 8000
 
 # Switch to non-root user
 USER appuser

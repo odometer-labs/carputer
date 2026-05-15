@@ -26,7 +26,7 @@ $ pwd
 Run the go command  
 `$ go run cmd/app/main.go`
 
-That's it! You can visit http://localhost:8000/docs to see all the endpoints we got!
+That's it! You can visit http://localhost:8888/docs to see all the endpoints we got!
 
 ## Project Structure
 Unlike the previous FastAPI service, we aim to apply industry practices and guidelines in this project. We structured this Go project close to what production-ready Go projects and packages follow.
