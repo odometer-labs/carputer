@@ -7,7 +7,7 @@ The Core API project aims to replace the old FastAPI service we built during ear
 To get an idea as to how much of an upgrade this is, take a look at these benchmarks from https://www.techempower.com/benchmarks
 ![](https://huma.rocks/why/techempower.png)  
 
-The top 5 frameworks fastest frameworks (fiber, chi, aah, gin, and kami) are all written in Go! It absolutely blasts FastAPI out of the water.
+The top 5 fastest frameworks (fiber, chi, aah, gin, and kami) are all written in Go! It absolutely blasts FastAPI out of the water.
 
 ## Requirements 
 - Go version 1.26+
