@@ -16,7 +16,7 @@
   import 'ol/ol.css';
   import { getCurrentPosition, subscribeToPositionStream, getAprsStations } from '../api/restApi';
   import type { GPSData, APRSStation } from '../api/types';
-  import { push } from 'svelte-spa-router';
+  import { push, location } from 'svelte-spa-router';
   import { Cluster } from 'ol/source';
   import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
   import { settingsPreferences, type TrackRange } from '../services/settings_preferences';
@@ -29,6 +29,7 @@
   import type { Track } from '../api/types';
 
   let mapElement: HTMLDivElement | undefined;
+  let aprsPopupElement: HTMLDivElement | null = null;
   let map: Map | undefined;
   let locationStatus: string = 'Getting location...';
 
@@ -197,8 +198,37 @@
     currentTrackLayer.changed();
   }
 
+  // HomeMapPage remains mounted under overlay routes; clear popup when leaving map route.
+  $: if ($location !== '/' && aprsPopupData !== null) {
+    aprsPopupData = null;
+  }
+
+  $: if (aprsLayer) {
+    aprsPopupData;
+    aprsLayer.changed();
+  }
+
   // run once when the Svelte component is mounted
   onMount(() => {
+    const onDocumentPointerDown = (event: PointerEvent): void => {
+      if (!aprsPopupData) {
+        return;
+      }
+
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      if (aprsPopupElement?.contains(target)) {
+        return;
+      }
+
+      aprsPopupData = null;
+    };
+
+    document.addEventListener('pointerdown', onDocumentPointerDown);
+
     try {
       loadMap();             // create map instance and hook events
       startGPSTracking();    // begin receiving backend GPS data
@@ -246,6 +276,8 @@
         clearInterval(aprsRefreshInterval);
         aprsRefreshInterval = null;
       }
+
+      document.removeEventListener('pointerdown', onDocumentPointerDown);
     };
   });
 
@@ -326,7 +358,10 @@
 
         // Single point = normal APRS icon
         if (size === 1) {
-          return getAprsPinStyle(getAprsIcon());
+          const inner = feature.get('features')[0] as Feature | undefined;
+          const aprsId = inner?.get('aprsId') as string | undefined;
+          const isSelected = aprsId !== undefined && aprsPopupData?.aprsId === aprsId;
+          return getAprsPinStyle(getAprsIcon(), isSelected);
         }
 
         // Cluster (circle with number, combined close by points)
@@ -417,9 +452,14 @@
 
         const inner = clusteredFeatures[0];
         if (!inner) return;
+        const aprsId = inner?.get('aprsId') as string | undefined;
         const callsign = inner?.get('callsign') as string | undefined;
-        if (callsign) {
-          aprsPopupData = { callsign, comment: inner.get('comment') ?? null };
+        if (callsign && aprsId) {
+          aprsPopupData = {
+            aprsId,
+            callsign,
+            comment: inner.get('comment') ?? null
+          };
           hitAprs = true;
         }
       },
@@ -810,8 +850,11 @@
     //if the aprsSource hasn't been set up then don't do anything
     if (!aprsSource) return;
 
+    const aprsId = `${callsign}-${lat.toFixed(6)}-${long.toFixed(6)}`;
+
     const aprsMarker = new Feature({
       geometry: new Point(fromLonLat([long, lat])),
+      aprsId,
       callsign,
       comment,
     });
@@ -820,7 +863,7 @@
   }
 
   // this is the style for the pins, you can insert the image to the pin
-  function getAprsPinStyle(img: string): Style[] {
+  function getAprsPinStyle(img: string, isSelected: boolean = false): Style[] {
     return [
       // pin stem (triangle)
       new Style({
@@ -838,7 +881,7 @@
       new Style({
         image: new Circle({
           radius: 13,
-          fill: new Fill({ color: 'white' }),
+          fill: new Fill({ color: isSelected ? '#93e38b' : 'white' }),
           stroke: new Stroke({ color: 'black', width: 2 }),
           displacement: [0, 26]
         })
@@ -895,7 +938,7 @@
   let isDropdownOpen: boolean = false;
 
   // APRS popup: set when the user clicks a single APRS station on the map
-  let aprsPopupData: { callsign: string; comment: string | null } | null = null;
+  let aprsPopupData: { aprsId: string; callsign: string; comment: string | null } | null = null;
 </script>
 
 <main style="margin: 0; padding: 0; height: 100%; width: 100%;">
@@ -978,7 +1021,7 @@
 
   <!-- APRS station popup: shown when the user clicks a single APRS point -->
   {#if aprsPopupData !== null}
-    <div class="aprs-popup">
+    <div class="aprs-popup" bind:this={aprsPopupElement}>
       <div class="aprs-popup-header">
         <span class="aprs-popup-callsign">{aprsPopupData.callsign}</span>
         <!-- svelte-ignore a11y_consider_explicit_label -->
