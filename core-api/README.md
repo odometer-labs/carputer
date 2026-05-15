@@ -2,7 +2,12 @@
 This project is the Core API Project, which aims to facilitate communications across all teams and components in the Carputer project.
 
 ## Description
-The Core API project aims to replace the old FastAPI service we built during early development. With the concerns of concurrency, speed, efficiency, and limitations of Python and Starlette, especially on our Raspberry Pi, we decided to re-write the entire Rest Backend using the Go language, utililizing [Huma](https://huma.rocks/) and [PGX](https://pkg.go.dev/github.com/jackc/pgx/v5).
+The Core API project aims to replace the old FastAPI service we built during early development. With the concerns of concurrency, speed, efficiency, and limitations of Python and Starlette, especially on our Raspberry Pi, we decided to re-write the entire Rest Backend using the Go language, utililizing [Huma](https://huma.rocks/) and [PGX](https://pkg.go.dev/github.com/jackc/pgx/v5).  
+
+To get an idea as to how much of an upgrade this is, take a look at these benchmarks from https://www.techempower.com/benchmarks
+![](https://huma.rocks/why/techempower.png)  
+
+The top 5 frameworks fastest frameworks (fiber, chi, aah, gin, and kami) are all written in Go! It absolutely blasts FastAPI out of the water.
 
 ## Requirements 
 - Go version 1.26+
