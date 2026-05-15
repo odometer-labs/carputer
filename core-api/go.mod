@@ -4,6 +4,7 @@ go 1.26.3
 
 require (
 	github.com/danielgtaylor/huma/v2 v2.37.3
+	github.com/hessu/go-aprs-fap v0.0.12
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/joho/godotenv v1.5.1
 )

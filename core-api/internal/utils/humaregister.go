@@ -58,7 +58,7 @@ func RegisterHumaHandlers(api huma.API) {
 		huma.Operation{
 			OperationID:   "Add Track Point",
 			Method:        http.MethodPost,
-			Path:          "/v2/track-point",
+			Path:          "/v2/tracks/track-point",
 			Summary:       "Add Track Point",
 			Description:   "Adds a track point to the current track that you started.",
 			Tags:          []string{"Tracks"},
@@ -70,7 +70,7 @@ func RegisterHumaHandlers(api huma.API) {
 		huma.Operation{
 			OperationID: "List Tracks",
 			Method:      http.MethodGet,
-			Path:        "/v2/list-tracks",
+			Path:        "/v2/tracks/list-tracks",
 			Summary:     "List Tracks",
 			Description: "List all tracks.",
 			Tags:        []string{"Tracks"},
@@ -81,7 +81,7 @@ func RegisterHumaHandlers(api huma.API) {
 		huma.Operation{
 			OperationID: "Get Track",
 			Method:      http.MethodGet,
-			Path:        "/v2/track/{track_id}",
+			Path:        "/v2/tracks/{track_id}",
 			Summary:     "Get Track",
 			Description: "Get a track by the track id.",
 			Tags:        []string{"Tracks"},
@@ -92,7 +92,7 @@ func RegisterHumaHandlers(api huma.API) {
 		huma.Operation{
 			OperationID: "Update Track",
 			Method:      http.MethodPut,
-			Path:        "/v2/track/{track_id}",
+			Path:        "/v2/tracks/{track_id}",
 			Summary:     "Update Track",
 			Description: "Update a track's metadata by the track id. This will only update start_time, end_time, and track_name metadata.",
 			Tags:        []string{"Tracks"},
@@ -103,7 +103,7 @@ func RegisterHumaHandlers(api huma.API) {
 		huma.Operation{
 			OperationID: "Delete Track",
 			Method:      http.MethodDelete,
-			Path:        "/v2/track/{track_id}",
+			Path:        "/v2/tracks/{track_id}",
 			Summary:     "Delete Track",
 			Description: "Delete a track by the track id.",
 			Tags:        []string{"Tracks"},
@@ -114,7 +114,7 @@ func RegisterHumaHandlers(api huma.API) {
 		huma.Operation{
 			OperationID: "List Tracks MVT",
 			Method:      http.MethodPost,
-			Path:        "/v2/tracks-mvt/{track_id}",
+			Path:        "/v2/tracks/tracks-mvt/{track_id}",
 			Summary:     "List Tracks MVT",
 			Description: "List Tracks MVT.",
 			Tags:        []string{"Tracks"},
@@ -125,7 +125,7 @@ func RegisterHumaHandlers(api huma.API) {
 		huma.Operation{
 			OperationID: "Import Track",
 			Method:      http.MethodPost,
-			Path:        "/v2/import/track",
+			Path:        "/v2/tracks/import-track",
 			Summary:     "Import Track",
 			Description: "Import a Track.",
 			Tags:        []string{"Tracks"},
@@ -136,7 +136,7 @@ func RegisterHumaHandlers(api huma.API) {
 		huma.Operation{
 			OperationID:   "Import Track Point",
 			Method:        http.MethodPost,
-			Path:          "/v2/import/track-point/{track_id}",
+			Path:          "/v2/tracks/import-track-point/{track_id}",
 			Summary:       "Import Track Point",
 			Description:   "Import a track point to the specified track.",
 			Tags:          []string{"Tracks"},
@@ -148,9 +148,20 @@ func RegisterHumaHandlers(api huma.API) {
 		huma.Operation{
 			OperationID: "Check New Road",
 			Method:      http.MethodGet,
-			Path:        "/v2/check-new-road",
+			Path:        "/v2/tracks/check-new-road",
 			Summary:     "Check New Road",
 			Description: "Checks if we are currently on a new road.",
 			Tags:        []string{"Tracks"},
 		}, handler.CheckNewRoadHandler)
+
+	huma.Register(
+		api,
+		huma.Operation{
+			OperationID: "Ingest APRS Packet",
+			Method:      http.MethodGet,
+			Path:        "/v2/aprs/ingest/aprs",
+			Summary:     "Ingest APRS Packet",
+			Description: "Ingest an APRS Packet",
+			Tags:        []string{"APRS"},
+		}, handler.IngestAPRSPacketHandler)
 }
