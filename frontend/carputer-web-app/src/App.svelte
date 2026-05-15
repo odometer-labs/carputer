@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { location } from 'svelte-spa-router';
-  import { preferences } from './services/preferences';
+  import { settingsPreferences } from './services/settings_preferences';
   import HomeMapPage from './pages/HomeMapPage.svelte';
   import SettingPreferencePage from './pages/SettingPreferencePage.svelte';
   import WifiPage from './pages/WifiPage.svelte';
@@ -88,11 +88,11 @@
     window.location.reload();
   }
   
-  $: appBrightness = ($preferences.brightness ?? 100) / 100;
+  $: appBrightness = ($settingsPreferences.brightness ?? 100) / 100;
 </script>
 
 <main
-  class:night-mode={$preferences.nightMode}
+  class:night-mode={$settingsPreferences.nightMode}
   class="app-shell"
   style={`margin: 0; padding: 0; height: 100%; width: 100%; --app-brightness: ${appBrightness};`}
 >

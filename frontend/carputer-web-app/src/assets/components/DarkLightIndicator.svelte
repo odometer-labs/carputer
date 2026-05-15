@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { preferences } from "../../services/preferences";
+  import { settingsPreferences } from "../../services/settings_preferences";
 
   //images to use
   import light_mode from "../icons/light-mode-bold.svg";
@@ -10,7 +10,7 @@
 
 <!-- dark/light mode-->
 <div class="indicator">
-  {#if $preferences.nightMode}
+  {#if $settingsPreferences.nightMode}
       <img src={dark_mode} alt="dark_mode_indicator" style="width:24px; height:24px;" />
   {:else}
     <img src={light_mode} alt="light_mode_indicator" style="width:24px; height:24px;" />
