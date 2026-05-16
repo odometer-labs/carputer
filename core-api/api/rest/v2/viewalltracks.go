@@ -3,5 +3,7 @@ package v2
 type ViewAllTracksRequest struct{}
 
 type ViewAllTracksResponse struct {
-	Body []Track
+	Body struct {
+		Tracks []Track `json:"tracks"`
+	}
 }

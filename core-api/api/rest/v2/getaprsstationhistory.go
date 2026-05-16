@@ -8,5 +8,7 @@ type GetAPRSStationHistoryRequest struct {
 }
 
 type GetAPRSStationHistoryResponse struct {
-	Body []APRSStationHistory
+	Body struct {
+		APRSStationHistory []APRSStationHistory `json:"aprs_station_history"`
+	}
 }

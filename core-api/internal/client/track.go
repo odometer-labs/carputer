@@ -70,7 +70,7 @@ func (t Track) ListTracks(ctx context.Context, request *v2.ViewAllTracksRequest)
 			return nil, huma.Error500InternalServerError("Unable to list tracks", err)
 		}
 
-		resp.Body = append(resp.Body, item)
+		resp.Body.Tracks = append(resp.Body.Tracks, item)
 	}
 
 	return resp, nil

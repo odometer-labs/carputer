@@ -7,5 +7,7 @@ type GetAPRSStationsNearRequest struct {
 }
 
 type GetAPRSStationsNearResponse struct {
-	Body []APRSStation
+	Body struct {
+		APRSStations []APRSStation `json:"aprs_stations"`
+	}
 }

@@ -142,7 +142,7 @@ func (a APRS) GetNearbyStations(ctx context.Context, request *v2.GetAPRSStations
 			return nil, fmt.Errorf("Failed to execute rows.Scan() for GetNearbyStations: %w", err)
 		}
 
-		resp.Body = append(resp.Body, aprsStation)
+		resp.Body.APRSStations = append(resp.Body.APRSStations, aprsStation)
 	}
 
 	return &resp, nil
@@ -197,7 +197,7 @@ func (a APRS) GetStationHistory(ctx context.Context, request *v2.GetAPRSStationH
 			&aprsStationHistory.Comment,
 		)
 
-		resp.Body = append(resp.Body, aprsStationHistory)
+		resp.Body.APRSStationHistory = append(resp.Body.APRSStationHistory, aprsStationHistory)
 	}
 
 	return &resp, nil
