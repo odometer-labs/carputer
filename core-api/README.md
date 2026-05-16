@@ -2,12 +2,15 @@
 This project is the Core API Project, which aims to facilitate communications across all teams and components in the Carputer project.
 
 ## Description
-The Core API project aims to replace the old FastAPI service we built during early development. With the concerns of concurrency, speed, efficiency, and limitations of Python and Starlette, especially on our Raspberry Pi, we decided to re-write the entire Rest Backend using the Go language, utililizing [Huma](https://huma.rocks/) and [PGX](https://pkg.go.dev/github.com/jackc/pgx/v5).  
+The Core API project aims to replace the old, legacy FastAPI service we built during early development. With the concerns of concurrency, speed, efficiency, and limitations of Python and Starlette, especially on our Raspberry Pi, we decided to re-write the entire Rest Backend using the Go language, utililizing [Huma](https://huma.rocks/) and [PGX](https://pkg.go.dev/github.com/jackc/pgx/v5).  
 
 To get an idea as to how much of an upgrade this is, take a look at these benchmarks from https://www.techempower.com/benchmarks
 ![](https://huma.rocks/why/techempower.png)  
 
 The top 5 fastest frameworks (fiber, chi, aah, gin, and kami) are all written in Go! And the Huma framework acts as a guice for for these frameworks. It absolutely blasts FastAPI out of the water.
+
+## What the Core API does not cover
+**The Core API service purely covers the REST endpoints and does not serve a websocket server or cover websocket-specific endpoints**. So real-time position and Smart Beaconing algorithms are still used in the legacy FastAPI service. 
 
 ## Requirements 
 - Go version 1.26+
@@ -89,3 +92,7 @@ This folder holds your API contract definitions.
 ### `/configs`
 
 Configuration file templates or default settings (e.g., `config.yaml`, `.env.example`).
+
+### `/deployments`
+
+This folder contains any deployment specific files. For example: Dockerfile, CI/CD yaml, deploment configs, etc.
