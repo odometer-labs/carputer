@@ -14,9 +14,13 @@ func main() {
 	// Init connection pool
 	postgis.Initialize()
 
+	// Configure huma
+	var customConfigs huma.Config = huma.DefaultConfig("Carputer API", "1.0.0")
+	customConfigs.DocsRenderer = huma.DocsRendererScalar
+
 	// Init router and huma
 	router := http.NewServeMux()
-	api := humago.New(router, huma.DefaultConfig("Carputer API", "1.0.0"))
+	api := humago.New(router, customConfigs)
 
 	// register handlers/endpoints
 	utils.RegisterHumaHandlers(api)
