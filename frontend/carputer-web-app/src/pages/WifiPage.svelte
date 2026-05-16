@@ -84,6 +84,7 @@
   $: otherNetworks = dedupeAccessPointsBySsid(accessPoints)
     .filter((accessPoint) => accessPoint.ssid !== currentConnection?.ssid)
     .sort((a, b) => b.signal_strength - a.signal_strength);
+  $: visibleOtherNetworks = otherNetworks;
   $: previousConnections = dedupeConnectionsBySsid(savedConnections)
     .filter((connection) => !connection.hotspot)
     .sort((a, b) => {
@@ -91,7 +92,7 @@
       if (b.ssid === currentConnection?.ssid) return 1;
       return a.ssid.localeCompare(b.ssid);
     });
-  $: selectedAccessPoint = otherNetworks.find((ap) => ap.ssid === selectedSsid) ?? null;
+  $: selectedAccessPoint = visibleOtherNetworks.find((ap) => ap.ssid === selectedSsid) ?? null;
   $: selectedNetworkRequiresPassword = selectedAccessPoint
     ? isAccessPointSecured(selectedAccessPoint)
     : false;
@@ -439,10 +440,10 @@
   <div class="network-box">
     {#if isLoading}
       <p class="network-message">Scanning for nearby networks...</p>
-    {:else if otherNetworks.length === 0}
+    {:else if visibleOtherNetworks.length === 0}
       <p class="network-message">No additional networks found.</p>
     {:else}
-      {#each otherNetworks as accessPoint}
+      {#each visibleOtherNetworks as accessPoint}
         <div class="network-card {selectedSsid === accessPoint.ssid ? 'selected' : ''}">
           <button
             class="network-row"
