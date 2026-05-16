@@ -22,7 +22,7 @@ func RegisterHumaHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{
-			OperationID: "Get Position",
+			OperationID: "get-position",
 			Method:      http.MethodGet,
 			Path:        "/v2/position",
 			Summary:     "Get Position",
@@ -38,7 +38,7 @@ func registerTracksHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{
-			OperationID:   "Create Track",
+			OperationID:   "create-track",
 			Method:        http.MethodPost,
 			Path:          "/v2/tracks",
 			Summary:       "Create Track",
@@ -50,7 +50,7 @@ func registerTracksHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{
-			OperationID: "End Track",
+			OperationID: "end-track",
 			Method:      http.MethodGet,
 			Path:        "/v2/tracks",
 			Summary:     "End Track",
@@ -61,7 +61,7 @@ func registerTracksHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{
-			OperationID:   "Add Track Point",
+			OperationID:   "add-track-point",
 			Method:        http.MethodPost,
 			Path:          "/v2/tracks/track-point",
 			Summary:       "Add Track Point",
@@ -73,7 +73,7 @@ func registerTracksHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{
-			OperationID: "List Tracks",
+			OperationID: "list-tracks",
 			Method:      http.MethodGet,
 			Path:        "/v2/tracks/list-tracks",
 			Summary:     "List Tracks",
@@ -84,7 +84,7 @@ func registerTracksHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{
-			OperationID: "Get Track",
+			OperationID: "get-track",
 			Method:      http.MethodGet,
 			Path:        "/v2/tracks/{track_id}",
 			Summary:     "Get Track",
@@ -95,7 +95,7 @@ func registerTracksHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{
-			OperationID: "Update Track",
+			OperationID: "update-track",
 			Method:      http.MethodPut,
 			Path:        "/v2/tracks/{track_id}",
 			Summary:     "Update Track",
@@ -106,7 +106,7 @@ func registerTracksHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{
-			OperationID: "Delete Track",
+			OperationID: "delete-track",
 			Method:      http.MethodDelete,
 			Path:        "/v2/tracks/{track_id}",
 			Summary:     "Delete Track",
@@ -117,7 +117,7 @@ func registerTracksHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{
-			OperationID: "List Tracks MVT",
+			OperationID: "list-tracks-mvt",
 			Method:      http.MethodPost,
 			Path:        "/v2/tracks/tracks-mvt/{track_id}",
 			Summary:     "List Tracks MVT",
@@ -128,7 +128,7 @@ func registerTracksHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{
-			OperationID: "Import Track",
+			OperationID: "import-track",
 			Method:      http.MethodPost,
 			Path:        "/v2/tracks/import-track",
 			Summary:     "Import Track",
@@ -139,7 +139,7 @@ func registerTracksHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{
-			OperationID:   "Import Track Point",
+			OperationID:   "import-track-point",
 			Method:        http.MethodPost,
 			Path:          "/v2/tracks/import-track-point/{track_id}",
 			Summary:       "Import Track Point",
@@ -151,7 +151,7 @@ func registerTracksHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{
-			OperationID: "Check New Road",
+			OperationID: "check-new-road",
 			Method:      http.MethodGet,
 			Path:        "/v2/tracks/check-new-road",
 			Summary:     "Check New Road",
@@ -164,7 +164,7 @@ func registerAPRSHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{
-			OperationID: "Ingest APRS Packet",
+			OperationID: "ingest-aprs-packet",
 			Method:      http.MethodPost,
 			Path:        "/v2/aprs/ingest",
 			Summary:     "Ingest APRS Packet",
@@ -175,7 +175,7 @@ func registerAPRSHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{
-			OperationID: "Ingest Raw APRS Packet",
+			OperationID: "ingest-raw-aprs-packet",
 			Method:      http.MethodPost,
 			Path:        "/v2/aprs/ingest/raw-aprs",
 			Summary:     "Ingest Raw APRS Packet",
@@ -186,7 +186,7 @@ func registerAPRSHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{
-			OperationID: "Get Nearby APRS Stations",
+			OperationID: "get-nearby-aprs-stations",
 			Method:      http.MethodPost,
 			Path:        "/v2/aprs/stations",
 			Summary:     "Get Nearby APRS Stations",
@@ -197,7 +197,7 @@ func registerAPRSHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{
-			OperationID: "Get APRS Station",
+			OperationID: "get-aprs-station",
 			Method:      http.MethodPost,
 			Path:        "/v2/aprs/station",
 			Summary:     "Get APRS Stations",
@@ -208,7 +208,7 @@ func registerAPRSHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{
-			OperationID: "Get APRS Station History",
+			OperationID: "get-aprs-station-history",
 			Method:      http.MethodPost,
 			Path:        "/v2/aprs/station/history",
 			Summary:     "Get APRS Station History",
@@ -219,7 +219,7 @@ func registerAPRSHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{
-			OperationID: "Clean Up APRS Data",
+			OperationID: "clean-up-aprs-data",
 			Method:      http.MethodPost,
 			Path:        "/v2/aprs/station/cleanup",
 			Summary:     "Clean Up APRS Data",
