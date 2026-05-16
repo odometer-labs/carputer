@@ -42,6 +42,7 @@
   let userLayer: VectorLayer | undefined;
   let userMarker: Feature<Point> | undefined;
   let userSource: VectorSource | undefined;
+  let latestUserCoords: [number, number] | null = null;
   let hasCenteredOnGpsFix: boolean = false;
   let gridRenderRaf: number | null = null;
   let stopGPSSubscription: (() => void) | null = null;
@@ -75,12 +76,9 @@
     }),
   });
 
-  function updateUserMarker(position: GPSData): void {
+  function updateUserMarker(coords: [number, number]): void {
     if (!map) return;
 
-    const lon = position.longitude;
-    const lat = position.latitude;
-    const coords = fromLonLat([lon, lat]);
     const userStyle = new Style({
       image: new Circle({
         radius: 10,
@@ -125,6 +123,19 @@
       });
       hasCenteredOnGpsFix = true;
     }
+  }
+
+  function handleGPSPosition(position: GPSData): void {
+    const lon = Number(position.longitude);
+    const lat = Number(position.latitude);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return;
+    }
+
+    const coords = fromLonLat([lon, lat]) as [number, number];
+    latestUserCoords = coords;
+    updateUserMarker(coords);
   }
 
   function updateGrid(): void {
@@ -184,14 +195,14 @@
 
   function startGPSTracking(): void {
     getCurrentPosition()
-      .then((position) => updateUserMarker(position))
+      .then((position) => handleGPSPosition(position))
       .catch((error: unknown) => {
         reportNonVitalError(error, 'DashboardPage.getCurrentPosition');
       });
 
     stopGPSSubscription = subscribeToPositionStream(
       (position: GPSData) => {
-        updateUserMarker(position);
+        handleGPSPosition(position);
       },
       (error: string) => {
         reportNonVitalError(error, 'DashboardPage.subscribeToPositionStream');
@@ -214,7 +225,7 @@
         updateCheckState = 'no-updates';
       }
     } catch (error: unknown) {
-      reportNonVitalError(error, 'DashboardPage.handleCheckForUpdates');
+      reportNonVitalError(error, 'DashboardPage.handleCheckForUpdates', true);
       updateCheckState = 'idle';
     }
   }
@@ -226,7 +237,7 @@
       await new Promise(resolve => setTimeout(resolve, 2500));
       updateCheckState = 'updated';
     } catch (error: unknown) {
-      reportNonVitalError(error, 'DashboardPage.handleUpdate');
+      reportNonVitalError(error, 'DashboardPage.handleUpdate', true);
       updateCheckState = 'updates-available';
     }
   }
