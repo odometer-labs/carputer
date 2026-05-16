@@ -36,7 +36,12 @@ Run the go command
 
 That's it! You can visit http://localhost:8888/docs to see all the endpoints we got!
 
-## Project Structure
+## Contribution Guide
+
+### Huma Framework
+We use the Huma framework to develop the REST backend. Visit https://huma.rocks/ for documentations. When implementing new endpoints, be sure to follow the [Operations Guide](https://huma.rocks/features/operations/) for best practices when naming endpoints.
+
+### Project Structure
 Unlike the previous FastAPI service, we aim to apply industry practices and guidelines in this project. We structured this Go project close to what production-ready Go projects and packages follow.
 ```
 .
@@ -100,3 +105,4 @@ This folder contains any deployment specific files. For example: Dockerfile, CI/
 ## Overall Backend Architecture
 To help understand the codebase and it's overall integration with other services, check the diagram below.  
 ![alt text](img/architecture.png)
+
