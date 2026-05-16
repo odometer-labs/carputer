@@ -25,6 +25,6 @@ func main() {
 	// register handlers/endpoints
 	utils.RegisterHumaHandlers(api)
 
-	fmt.Println("Visit http://127.0.0.1:8000/docs")
-	http.ListenAndServe("0.0.0.0:8000", router)
+	fmt.Println("Visit http://127.0.0.1:8888/docs")
+	http.ListenAndServe("0.0.0.0:8888", router)
 }
