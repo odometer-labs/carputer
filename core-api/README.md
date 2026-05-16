@@ -98,5 +98,5 @@ Configuration file templates or default settings (e.g., `config.yaml`, `.env.exa
 This folder contains any deployment specific files. For example: Dockerfile, CI/CD yaml, deploment configs, etc.
 
 ## Overall Backend Architecture
-To help understand the code base and it's overall integration with other services, check the diagram below.  
+To help understand the codebase and it's overall integration with other services, check the diagram below.  
 ![alt text](img/architecture.png)

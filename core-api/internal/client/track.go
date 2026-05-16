@@ -19,6 +19,9 @@ type Track struct {
 	Pool *pgxpool.Pool
 }
 
+// GetPosition retrieves the current GPS position from the upstream v1 position
+// service at GetLongLatUrl, decodes the JSON response, and returns it as a v2
+// response. Returns a 500 if the HTTP request or JSON decoding fails.
 func (t Track) GetPosition(ctx context.Context) (*v2.GetPositionResponse, error) {
 	var longitude float64 = 0.0
 	var latitude float64 = 0.0
@@ -46,6 +49,8 @@ func (t Track) GetPosition(ctx context.Context) (*v2.GetPositionResponse, error)
 	return &v2Resp, nil
 }
 
+// ListTracks returns all tracks from the database by calling gps.view_all_tracks().
+// Returns a 404 if no rows are found, or a 500 if the query or any row scan fails.
 func (t Track) ListTracks(ctx context.Context, request *v2.ViewAllTracksRequest) (*v2.ViewAllTracksResponse, error) {
 	rows, err := t.Pool.Query(ctx, "select * from gps.view_all_tracks();")
 	if err == pgx.ErrNoRows {
@@ -71,6 +76,10 @@ func (t Track) ListTracks(ctx context.Context, request *v2.ViewAllTracksRequest)
 	return resp, nil
 }
 
+// ListTracksMVT returns a Mapbox Vector Tile (MVT) for the given tile coordinates
+// (Z, X, Y) and optional filtering parameters (Mode, TrackID, WithinMeters) by
+// calling gps.get_tracks_mvt(). Returns a 404 if no rows are found, or a 500 on
+// any other query or scan failure.
 func (t Track) ListTracksMVT(ctx context.Context, request *v2.ListTracksMVTRequest) (*v2.ListTracksMVTResponse, error) {
 	resp := v2.ListTracksMVTResponse{}
 	body := request.Body
@@ -95,6 +104,9 @@ func (t Track) ListTracksMVT(ctx context.Context, request *v2.ListTracksMVTReque
 	return &resp, nil
 }
 
+// GetTrack retrieves a single track by its TrackID by calling gps.retrieve_track(),
+// returning geometry in both native and Web Mercator projections along with its
+// time bounds and name. Returns a 404 on any query or scan failure.
 func (t Track) GetTrack(ctx context.Context, path *v2.GetTrackPath) (*v2.GetTrackResponse, error) {
 	resp := v2.GetTrackResponse{}
 
@@ -113,6 +125,9 @@ func (t Track) GetTrack(ctx context.Context, path *v2.GetTrackPath) (*v2.GetTrac
 	return &resp, nil
 }
 
+// UpdateTrack updates the start time, end time, and name of an existing track
+// identified by TrackID via the gps.update_track() stored procedure. Returns a 500
+// if the database call fails.
 func (t Track) UpdateTrack(
 	ctx context.Context,
 	request *v2.UpdateTrackRequest,
@@ -133,16 +148,22 @@ func (t Track) UpdateTrack(
 	return &resp, nil
 }
 
+// DeleteTrack permanently removes a track from the database by its TrackID via the
+// gps.delete_track() stored procedure. Returns a 500 if the database call fails.
 func (t Track) DeleteTrack(ctx context.Context, request *v2.DeleteTrackRequest) (*v2.DeleteTrackResponse, error) {
 	_, err := t.Pool.Exec(ctx, "call gps.delete_track($1);", request.TrackID)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Unable to update track", err)
+		return nil, huma.Error500InternalServerError("Unable to delete track", err)
 	}
 
 	resp := v2.DeleteTrackResponse{}
 	return &resp, nil
 }
 
+// CreateTrack creates a new track in the database via gps.create_track(), optionally
+// accepting a track name. If no name is provided, the stored procedure is called
+// without arguments. Returns the new track's ID, a 404 if no rows are returned, or
+// a 500 on any other database error.
 func (t Track) CreateTrack(ctx context.Context, request *v2.CreateTrackRequest) (*v2.CreateTrackResponse, error) {
 	var trackID int64
 	var trackName *string = request.Body.TrackName
@@ -171,6 +192,8 @@ func (t Track) CreateTrack(ctx context.Context, request *v2.CreateTrackRequest) 
 	return &resp, nil
 }
 
+// EndTrack marks the currently active track as ended by calling gps.end_track().
+// Returns a 500 if the database call fails.
 func (t Track) EndTrack(ctx context.Context) (*v2.EndTrackResponse, error) {
 	_, err := t.Pool.Exec(ctx, "call gps.end_track();")
 	if err != nil {
@@ -182,10 +205,13 @@ func (t Track) EndTrack(ctx context.Context) (*v2.EndTrackResponse, error) {
 	return &resp, nil
 }
 
+// ImportTrack creates a new track record in the database for import purposes by
+// calling gps.import_track(), returning the new track's ID. Returns a 404 if no
+// rows are returned, or a 500 on any other database error.
 func (t Track) ImportTrack(ctx context.Context, request *v2.ImportTrackRequest) (*v2.ImportTrackResponse, error) {
 	var trackID int64
 
-	err := t.Pool.QueryRow(ctx, "select gps.import_track();").Scan(&trackID)
+	err := t.Pool.QueryRow(ctx, "select gps.import_track($1);", request.Body.GeoJSONData).Scan(&trackID)
 	if err == pgx.ErrNoRows {
 		return nil, huma.Error404NotFound("No rows from gps.import_track()", err)
 	}
@@ -198,6 +224,9 @@ func (t Track) ImportTrack(ctx context.Context, request *v2.ImportTrackRequest) 
 	return &resp, nil
 }
 
+// ImportTrackPoint appends a single track point to the specified track by calling
+// gps.add_track_point() with the current UTC time and the provided latitude,
+// longitude, speed, and heading. Returns a 500 if the database call fails.
 func (t Track) ImportTrackPoint(ctx context.Context, request *v2.ImportTrackPointRequest) (*v2.ImportTrackPointResponse, error) {
 	body := request.Body
 	_, err := t.Pool.Exec(
@@ -218,6 +247,10 @@ func (t Track) ImportTrackPoint(ctx context.Context, request *v2.ImportTrackPoin
 	return &resp, nil
 }
 
+// AddTrackPoint appends a track point to the currently active track (no explicit
+// TrackID) by calling gps.add_track_point() with the current UTC time and the
+// provided latitude, longitude, speed, and heading. Returns a 500 if the database
+// call fails.
 func (t Track) AddTrackPoint(ctx context.Context, request *v2.AddTrackPointRequest) (*v2.AddTrackPointResponse, error) {
 	body := request.Body
 
@@ -238,6 +271,9 @@ func (t Track) AddTrackPoint(ctx context.Context, request *v2.AddTrackPointReque
 	return &resp, nil
 }
 
+// CheckNewRoad queries gps.is_new_road() to determine whether the current position
+// falls on a road not previously tracked. Returns a 404 if no rows are returned, or
+// a 500 on any other database error.
 func (t Track) CheckNewRoad(ctx context.Context, request *v2.CheckNewRoadRequest) (*v2.CheckNewRoadResponse, error) {
 	var isNewRoad bool
 
