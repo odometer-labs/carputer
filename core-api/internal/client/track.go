@@ -93,7 +93,7 @@ func (t Track) ListTracksMVT(ctx context.Context, request *v2.ListTracksMVTReque
 		body.Mode,
 		request.TrackID,
 		body.WithinMeters,
-	).Scan(&resp.Body)
+	).Scan(&resp.Body.Bytes)
 	if err == pgx.ErrNoRows {
 		return nil, huma.Error404NotFound("No rows from gps.get_tracks_mvt()", err)
 	}

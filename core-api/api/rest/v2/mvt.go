@@ -12,5 +12,7 @@ type ListTracksMVTRequest struct {
 }
 
 type ListTracksMVTResponse struct {
-	Body []byte
+	Body struct {
+		Bytes []byte `json:"bytes"`
+	}
 }
