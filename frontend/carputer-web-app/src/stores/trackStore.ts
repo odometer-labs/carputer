@@ -1,6 +1,12 @@
 import { writable, type Writable } from "svelte/store";
-import { startTrack, endTrack, listTracks, checkNewRoad } from "../api/restApi";
-import type { Track } from "../api/types"
+import { 
+  startTrack, 
+  endTrack, 
+  listTracks, 
+  checkNewRoad,
+  addTrackPoint
+} from "../api/restApi";
+import type { Track, TrackPoint } from "../api/types"
 
 
 export interface Tracks {
@@ -62,6 +68,30 @@ export class TrackStore {
       }));
     } catch (error) {
       console.error(error);
+    }
+  }
+
+  // adds a track point to the currently active track
+  async addPoint(point: TrackPoint) {
+    try {
+      let currentTrackId: number | null = null;
+
+      //get the current trackID from the store
+      this.store.update(state => {
+        currentTrackId = state.trackId;
+        return state;
+      });
+
+      //check if there is currently an active track
+      if (currentTrackId == null) {
+        throw new Error("No active tracks currently")
+      }
+
+      // send the point to backend
+      await addTrackPoint(point);
+
+    } catch (error) {
+      console.error(error)
     }
   }
 

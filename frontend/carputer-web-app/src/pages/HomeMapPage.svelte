@@ -639,7 +639,7 @@
     }
 
     // use the coord from the user to add it to the current users track line
-    applyTrackLine(filteredCoords);
+    applyTrackLine(filteredCoords, lon, lat, speedMps, position.heading);
 
     // checks if the current road is a new road or not.
     checkRoadHistory(filteredCoords);
@@ -750,9 +750,23 @@
 
   // this is used to make the track line for the user, given that the coordnates pushed
   // in are the user's coordinates.
-  function applyTrackLine(coords : [number, number]) : void {
-    // this adds a line (blue line) so the user can see where they have been (current track) 
+  async function applyTrackLine(
+    coords : [number, number],
+    lon: number,
+    lat: number,
+    speed: number,
+    heading: number | null
+  ) : Promise<void> {
+    // this adds a line so the user can see where they have been (current track) 
     if ($trackStore.isTracking) { 
+
+      const pointToSend = {
+        latitude: lat,
+        longitude: lon,
+        speed: Number.isFinite(speed) ? speed : 0,
+        heading: heading ?? 0
+      };
+
       //this determines if this is the beggining of a new line 
       if (!currentTrackFeature) { 
         currentTrackFeature = new Feature({
@@ -761,14 +775,20 @@
         
         currentTrackSource?.addFeature(currentTrackFeature);
         
-        lastUserTrackCoord = coords as [number, number];
+        lastUserTrackCoord = coords;
+
+        await trackStore.addPoint(pointToSend);
+        return;
       } 
-      else if (hasMovedEnough(coords as [number, number])){ 
+
+      // adds a point to an existing track line
+      if (hasMovedEnough(coords as [number, number])){ 
         const geom = currentTrackFeature.getGeometry();
         if (geom) {
           geom.appendCoordinate(coords);
+          lastUserTrackCoord = coords;
 
-          lastUserTrackCoord = coords as [number, number];
+          await trackStore.addPoint(pointToSend);
         }
       }
     }

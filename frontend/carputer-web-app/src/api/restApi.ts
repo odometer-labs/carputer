@@ -93,10 +93,9 @@ export async function deleteTrack(
 
 // this usese the track id and a track point(latitude, longitude, speed, and heading)
 export async function addTrackPoint(
-  trackId: number,
-  point: TrackPoint,
+  point: TrackPoint
 ): Promise<AddTrackPointResponse> {
-  const res = await fetch(`${ENDPOINTS.addTrackPoint}/${trackId}`, {
+  const res = await fetch(`${ENDPOINTS.addTrackPoint}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
