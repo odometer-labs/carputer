@@ -30,6 +30,11 @@ func RegisterHumaHandlers(api huma.API) {
 			Tags:        []string{"Position"},
 		}, handler.GetPositionHandler)
 
+	registerTracksHandlers(api)
+	registerAPRSHandlers(api)
+}
+
+func registerTracksHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{
@@ -153,7 +158,9 @@ func RegisterHumaHandlers(api huma.API) {
 			Description: "Checks if we are currently on a new road.",
 			Tags:        []string{"Tracks"},
 		}, handler.CheckNewRoadHandler)
+}
 
+func registerAPRSHandlers(api huma.API) {
 	huma.Register(
 		api,
 		huma.Operation{

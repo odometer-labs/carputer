@@ -12,6 +12,54 @@ The top 5 fastest frameworks (fiber, chi, aah, gin, and kami) are all written in
 ## What the Core API does not cover
 **The Core API service purely covers the REST endpoints and does not serve a websocket server or cover websocket-specific endpoints**. So real-time position and Smart Beaconing algorithms are still used in the legacy FastAPI service. 
 
+## New Available Endpoints
+ 
+### Root
+ 
+| Method | Path | Summary |
+|--------|------|---------|
+| `GET` | `/v2/root` | Prints Hello World! |
+ 
+---
+ 
+### Position
+ 
+| Method | Path | Summary |
+|--------|------|---------|
+| `GET` | `/v2/position` | Get the current position from gpsd |
+ 
+---
+ 
+### Tracks
+ 
+| Method | Path | Summary |
+|--------|------|---------|
+| `POST` | `/v2/tracks` | Create and start a new track recording |
+| `GET` | `/v2/tracks` | End the current track recording |
+| `POST` | `/v2/tracks/track-point` | Add a track point to the current track |
+| `GET` | `/v2/tracks/list-tracks` | List all tracks |
+| `GET` | `/v2/tracks/{track_id}` | Get a track by ID |
+| `PUT` | `/v2/tracks/{track_id}` | Update a track's metadata (start_time, end_time, track_name) |
+| `DELETE` | `/v2/tracks/{track_id}` | Delete a track by ID |
+| `POST` | `/v2/tracks/tracks-mvt/{track_id}` | Get MVT data for a track |
+| `POST` | `/v2/tracks/import-track` | Import a track |
+| `POST` | `/v2/tracks/import-track-point/{track_id}` | Import a track point to a specified track |
+| `GET` | `/v2/tracks/check-new-road` | Check if currently on a new road |
+ 
+---
+ 
+### APRS
+ 
+| Method | Path | Summary |
+|--------|------|---------|
+| `POST` | `/v2/aprs/ingest` | Ingest an APRS packet |
+| `POST` | `/v2/aprs/ingest/raw-aprs` | Ingest a raw APRS packet |
+| `POST` | `/v2/aprs/stations` | Get nearby APRS stations (default search radius: 500,000 km) |
+| `POST` | `/v2/aprs/station` | Get a specific APRS station |
+| `POST` | `/v2/aprs/station/history` | Get an APRS station's history |
+| `POST` | `/v2/aprs/station/cleanup` | Clean up old APRS data by time range |
+
+
 ## Requirements 
 - Go version 1.26+
 
