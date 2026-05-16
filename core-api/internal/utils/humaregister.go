@@ -161,7 +161,7 @@ func RegisterHumaHandlers(api huma.API) {
 			Method:      http.MethodPost,
 			Path:        "/v2/aprs/ingest",
 			Summary:     "Ingest APRS Packet",
-			Description: "Ingest an APRS Packet",
+			Description: "Ingest an APRS packet",
 			Tags:        []string{"APRS"},
 		}, handler.IngestAPRSPacketHandler)
 
@@ -172,7 +172,51 @@ func RegisterHumaHandlers(api huma.API) {
 			Method:      http.MethodPost,
 			Path:        "/v2/aprs/ingest/raw-aprs",
 			Summary:     "Ingest Raw APRS Packet",
-			Description: "Ingest a Raw APRS Packet",
+			Description: "Ingest a raw APRS packet",
 			Tags:        []string{"APRS"},
 		}, handler.IngestRawAPRSPacketHandler)
+
+	huma.Register(
+		api,
+		huma.Operation{
+			OperationID: "Get Nearby APRS Stations",
+			Method:      http.MethodPost,
+			Path:        "/v2/aprs/stations",
+			Summary:     "Get Nearby APRS Stations",
+			Description: "Get all nearby APRS stations. You can specify the search distance in kilometers (default is 500000km).",
+			Tags:        []string{"APRS"},
+		}, handler.GetNearbyStationsHandler)
+
+	huma.Register(
+		api,
+		huma.Operation{
+			OperationID: "Get APRS Station",
+			Method:      http.MethodPost,
+			Path:        "/v2/aprs/station",
+			Summary:     "Get APRS Stations",
+			Description: "Get an APRS station. You can specify the search distance in kilometers (default is 500000km).",
+			Tags:        []string{"APRS"},
+		}, handler.GetNearbyStationsHandler)
+
+	huma.Register(
+		api,
+		huma.Operation{
+			OperationID: "Get APRS Station History",
+			Method:      http.MethodPost,
+			Path:        "/v2/aprs/station/history",
+			Summary:     "Get APRS Station History",
+			Description: "Get an APRS station's history.",
+			Tags:        []string{"APRS"},
+		}, handler.GetStationHistoryHandler)
+
+	huma.Register(
+		api,
+		huma.Operation{
+			OperationID: "Clean Up APRS Data",
+			Method:      http.MethodPost,
+			Path:        "/v2/aprs/station/cleanup",
+			Summary:     "Clean Up APRS Data",
+			Description: "Clean up old APRS data. You can specify the time range.",
+			Tags:        []string{"APRS"},
+		}, handler.CleanupAPRSDataHandler)
 }

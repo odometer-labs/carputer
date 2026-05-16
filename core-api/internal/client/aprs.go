@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/danielgtaylor/huma/v2"
 	fap "github.com/hessu/go-aprs-fap"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	v2 "github.com/odometer-labs/carputer/core-api/api/rest/v2"
 )
@@ -29,8 +31,11 @@ func (a APRS) IngestAPRSPacket(ctx context.Context, request *v2.UpsertAPRSStatio
 		request.Body.SpeedKnots,
 		request.Body.CourseDeg,
 		request.Body.RawPacket).Scan(&callsign)
+	if err == pgx.ErrNoRows {
+		return nil, huma.Error404NotFound("Now rows from gps.upsert_aprs_station()", err)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to ingest APRS packet: %w", err)
+		return nil, huma.Error500InternalServerError("Unable to ingest APRS packet", err)
 	}
 
 	resp := v2.UpsertAPRSStationResponse{}
@@ -47,10 +52,10 @@ func (a APRS) IngestRawAPRSPacket(ctx context.Context, request *v2.IngestRawAPRS
 	p, err := fap.Parse(request.Body.RawPacket)
 	if err != nil {
 		// Log unsuccessful aprs parse
-		temp := "failed to parse raw APRS packet"
+		temp := "Failed to parse raw APRS packet"
 		parseError = &temp
-		err := a.LogRawAPRSPacket(ctx, p.OrigPacket, false, parseError)
-		return nil, fmt.Errorf("failed to parse raw APRS packet: %w", err)
+		err := a.logRawAPRSPacket(ctx, p.OrigPacket, false, parseError)
+		return nil, huma.Error500InternalServerError("Failed to parse raw APRS packet", err)
 	}
 
 	// Convert to Rest DTO
@@ -80,25 +85,132 @@ func (a APRS) IngestRawAPRSPacket(ctx context.Context, request *v2.IngestRawAPRS
 	resp, err := a.IngestAPRSPacket(ctx, &ingestRequest)
 
 	// Log the successful raw packet
-	err = a.LogRawAPRSPacket(ctx, packet.RawPacket, ingestOk, parseError)
+	err = a.logRawAPRSPacket(ctx, packet.RawPacket, ingestOk, parseError)
 	if err != nil {
-		return nil, fmt.Errorf("failed to log raw APRS packet: %w", err)
+		return nil, fmt.Errorf("Failed to log raw APRS packet: %w", err)
 	}
 
 	return resp, nil
 }
 
-func (a APRS) GetNearbyStations(ctx context.Context) {}
+func (a APRS) GetNearbyStations(ctx context.Context, request *v2.GetAPRSStationsNearRequest) (*v2.GetAPRSStationsNearResponse, error) {
+	var meters float64 = 50000
 
-func (a APRS) GetStation(ctx context.Context) {}
+	if request.Body.Meters != nil {
+		meters = *request.Body.Meters
+	}
 
-func (a APRS) GetStationHistory(ctx context.Context) {}
+	rows, err := a.Pool.Query(ctx, "select * from gps.get_aprs_stations_near($1);", meters)
+	if err == pgx.ErrNoRows {
+		return nil, huma.Error404NotFound("Now rows from gps.get_aprs_stations_near()", err)
+	}
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Unable to get nearby ARPS stations", err)
+	}
 
-func (a APRS) GetStats(ctx context.Context) {}
+	var resp v2.GetAPRSStationsNearResponse
+	for rows.Next() {
+		var aprsStation v2.APRSStation
 
-func (a APRS) CleanupOldData(ctx context.Context) {}
+		err := rows.Scan(
+			&aprsStation.Callsign,
+			&aprsStation.SymbolTable,
+			&aprsStation.SymbolCode,
+			&aprsStation.LastComment,
+			&aprsStation.LastSeen,
+			&aprsStation.Latitude,
+			&aprsStation.Longitude,
+			&aprsStation.DistanceM,
+			&aprsStation.PacketCount,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to execute rows.Scan() for GetNearbyStations: %w", err)
+		}
 
-func (a APRS) LogRawAPRSPacket(
+		resp.Body = append(resp.Body, aprsStation)
+	}
+
+	return &resp, nil
+}
+
+func (a APRS) GetStation(ctx context.Context, request *v2.GetAPRSStationRequest) (*v2.GetAPRSStationsNearResponse, error) {
+	getStationsNearRequest := v2.GetAPRSStationsNearRequest{
+		Body: request.Body,
+	}
+
+	resp, err := a.GetNearbyStations(ctx, &getStationsNearRequest)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Unable to get ARPS stations", err)
+	}
+
+	return resp, nil
+}
+
+func (a APRS) GetStationHistory(ctx context.Context, request *v2.GetAPRSStationHistoryRequest) (*v2.GetAPRSStationHistoryResponse, error) {
+	rows, err := a.Pool.Query(
+		ctx,
+		"select * from gps.get_aprs_station_history($1, $2);",
+		request.Body.Callsign,
+		request.Body.Hours,
+	)
+	if err == pgx.ErrNoRows {
+		return nil, huma.Error404NotFound("Now rows from gps.get_aprs_station_history()", err)
+	}
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Unable to get ARPS station history", err)
+	}
+
+	resp := v2.GetAPRSStationHistoryResponse{}
+
+	for rows.Next() {
+		var aprsStationHistory v2.APRSStationHistory
+
+		rows.Scan(
+			&aprsStationHistory.TimeStamp,
+			&aprsStationHistory.Latitude,
+			&aprsStationHistory.Longitude,
+			&aprsStationHistory.AltitudeM,
+			&aprsStationHistory.SpeedKnots,
+			&aprsStationHistory.CourseDeg,
+			&aprsStationHistory.Comment,
+		)
+
+		resp.Body = append(resp.Body, aprsStationHistory)
+	}
+
+	return &resp, nil
+}
+
+func (a APRS) GetAPRSStats(ctx context.Context, request *v2.GetAPRSStatsRequest) (*v2.GetAPRSStatsResponse, error) {
+	var resp v2.GetAPRSStatsResponse
+
+	err := a.Pool.QueryRow(ctx, "select * from gps.get_aprs_stats();").Scan(
+		&resp.Body.TotalStations,
+		&resp.Body.Stations24h,
+		&resp.Body.TotalPackets,
+		&resp.Body.Packets24h,
+	)
+	if err == pgx.ErrNoRows {
+		return &resp, nil
+	}
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Failed to get APRS Stats: %w", err)
+	}
+
+	return &resp, nil
+}
+
+func (a APRS) CleanupOldData(ctx context.Context, request *v2.CleanUpOldDataRequest) (*v2.CleanupOldDataResponse, error) {
+	_, err := a.Pool.Exec(ctx, "call gps.cleanup_aprs_data($1, $2);", request.Body.HistoryDays, request.Body.RawDays)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Failed to cleanup APRS data: %w", err)
+	}
+
+	resp := v2.CleanupOldDataResponse{}
+	return &resp, nil
+}
+
+func (a APRS) logRawAPRSPacket(
 	ctx context.Context,
 	rawPacket string,
 	parsedOk bool,
