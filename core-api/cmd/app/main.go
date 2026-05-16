@@ -11,10 +11,14 @@ import (
 )
 
 func main() {
+	// Init connection pool
 	postgis.Initialize()
+
+	// Init router and huma
 	router := http.NewServeMux()
 	api := humago.New(router, huma.DefaultConfig("Carputer API", "1.0.0"))
 
+	// register handlers/endpoints
 	utils.RegisterHumaHandlers(api)
 
 	fmt.Println("Visit http://127.0.0.1:8000/docs")

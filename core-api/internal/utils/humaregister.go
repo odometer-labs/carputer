@@ -158,10 +158,21 @@ func RegisterHumaHandlers(api huma.API) {
 		api,
 		huma.Operation{
 			OperationID: "Ingest APRS Packet",
-			Method:      http.MethodGet,
-			Path:        "/v2/aprs/ingest/aprs",
+			Method:      http.MethodPost,
+			Path:        "/v2/aprs/ingest",
 			Summary:     "Ingest APRS Packet",
 			Description: "Ingest an APRS Packet",
 			Tags:        []string{"APRS"},
 		}, handler.IngestAPRSPacketHandler)
+
+	huma.Register(
+		api,
+		huma.Operation{
+			OperationID: "Ingest Raw APRS Packet",
+			Method:      http.MethodPost,
+			Path:        "/v2/aprs/ingest/raw-aprs",
+			Summary:     "Ingest Raw APRS Packet",
+			Description: "Ingest a Raw APRS Packet",
+			Tags:        []string{"APRS"},
+		}, handler.IngestRawAPRSPacketHandler)
 }

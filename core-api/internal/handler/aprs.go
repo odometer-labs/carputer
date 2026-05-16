@@ -16,13 +16,20 @@ var aprsClient client.APRS = client.APRS{
 func IngestAPRSPacketHandler(ctx context.Context, request *v2.UpsertAPRSStationRequest) (*v2.UpsertAPRSStationResponse, error) {
 	resp, err := aprsClient.IngestAPRSPacket(ctx, request)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("")
+		return nil, huma.Error500InternalServerError("Unable to ingest APRS packet: %v", err)
 	}
 
 	return resp, nil
 }
 
-func IngestRawAPRSPacketHandler(ctx context.Context) {}
+func IngestRawAPRSPacketHandler(ctx context.Context, request *v2.IngestRawAPRSPacketRequest) (*v2.UpsertAPRSStationResponse, error) {
+	resp, err := aprsClient.IngestRawAPRSPacket(ctx, request)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Unable to ingest raw APRS packet: %v", err)
+	}
+
+	return resp, nil
+}
 
 func GetNearbyStationsHandler(ctx context.Context) {}
 
