@@ -7,6 +7,7 @@
   import wifi1 from "../assets/icons/wifi-signal1-bold.svg";
   import wifi2 from "../assets/icons/wifi-signal2-bold.svg";
   import wifi3 from "../assets/icons/wifi-signal3-bold.svg";
+  import lock_icon from "../assets/icons/lock-bold.svg";
 
   const wifiIcons = [wifi0, wifi1, wifi2, wifi3];
 
@@ -71,7 +72,6 @@
   let busySsid = "";
   let selectedSsid = "";
   let selectedPassword = "";
-  let passwordRequiredOverride = null;
   let networkScanIntervalId = null;
   let isNetworkScanInFlight = false;
   let hasMounted = false;
@@ -93,7 +93,7 @@
     });
   $: selectedAccessPoint = otherNetworks.find((ap) => ap.ssid === selectedSsid) ?? null;
   $: selectedNetworkRequiresPassword = selectedAccessPoint
-    ? (passwordRequiredOverride ?? isAccessPointSecured(selectedAccessPoint))
+    ? isAccessPointSecured(selectedAccessPoint)
     : false;
 
   onMount(async () => {
@@ -308,20 +308,17 @@
     if (selectedSsid === accessPoint.ssid) {
       selectedSsid = "";
       selectedPassword = "";
-      passwordRequiredOverride = null;
       return;
     }
 
     selectedSsid = accessPoint.ssid;
     selectedPassword = "";
-    passwordRequiredOverride = isAccessPointSecured(accessPoint);
     errorMessage = "";
   }
 
   function clearSelection() {
     selectedSsid = "";
     selectedPassword = "";
-    passwordRequiredOverride = null;
   }
 
   async function connectToNetwork(accessPoint) {
@@ -336,7 +333,7 @@
       if (existing?.uuid) {
         await activateWifiConnection(existing.uuid);
       } else {
-        const requiresPassword = passwordRequiredOverride ?? isAccessPointSecured(accessPoint);
+        const requiresPassword = isAccessPointSecured(accessPoint);
         if (requiresPassword && !selectedPassword.trim()) {
           errorMessage = `Password required for ${accessPoint.ssid}.`;
           return;
@@ -456,6 +453,10 @@
           >
             <span class="network-ssid">{accessPoint.ssid}</span>
             <span class="network-signal">
+              {#if isAccessPointSecured(accessPoint)}
+                <!-- <i class="iconoir-lock network-lock-icon" aria-hidden="true"></i> -->
+                 <img src={lock_icon} alt="Locked" style="width:22px; height:22px;" />
+              {/if}
               {#if busySsid === accessPoint.ssid}
                 Connecting...
               {:else}
@@ -468,19 +469,8 @@
             <div class="network-details">
               <p class="network-security">{formatSecurity(accessPoint)}</p>
 
-              <label class="password-toggle">
-                <input
-                  type="checkbox"
-                  checked={selectedNetworkRequiresPassword}
-                  onchange={(event) => (passwordRequiredOverride = event.currentTarget.checked)}
-                  disabled={!!busySsid}
-                />
-                Requires password
-              </label>
-
               {#if selectedNetworkRequiresPassword}
                 <label class="password-input-wrap">
-                  <span>Password</span>
                   <input
                     type="password"
                     bind:value={selectedPassword}
@@ -572,14 +562,6 @@
     font-size: 0.85rem;
   }
 
-  .password-toggle {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.9rem;
-    color: #222;
-  }
-
   .password-input-wrap {
     display: grid;
     gap: 4px;
@@ -630,6 +612,7 @@
     font-size: 0.9rem;
     display: flex;
     align-items: center;
+    gap: 6px;
   }
 
   .network-message {
