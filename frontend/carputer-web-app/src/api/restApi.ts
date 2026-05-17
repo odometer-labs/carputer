@@ -13,6 +13,8 @@ import type {
   CheckNewRoadResponse,
   GPSData,
   APRSStation,
+  ImportTrackResponse,
+  LineString
 } from "./types";
 import { ENDPOINTS } from "../utils/constants";
 
@@ -104,6 +106,24 @@ export async function addTrackPoint(
   });
 
   if (!res.ok) throw new Error("Failed to add track point");
+
+  return res.json();
+}
+
+// imports a full geojson track into backend
+export async function importTrack(geojson: LineString) : Promise<ImportTrackResponse> {
+  const res = await fetch(`${ENDPOINTS.addTrack}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(geojson),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Failed to import track: ${errorText}`);
+  }
 
   return res.json();
 }

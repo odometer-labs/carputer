@@ -25,8 +25,7 @@
   import { trackStore } from '../stores/trackStore'
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
   import SystemIndicators from "../assets/components/SystemIndicators.svelte";
-  //remove this later
-  import type { Track } from '../api/types';
+  import type { Track, LineString as ApiLineString } from '../api/types';
 
   let mapElement: HTMLDivElement | undefined;
   let aprsPopupElement: HTMLDivElement | null = null;
@@ -39,6 +38,9 @@
   let currentTrackLayer: VectorLayer | undefined;
   let currentTrackSource: VectorSource | undefined;
   let currentTrackFeature: Feature<LineString> | undefined;
+
+  // this is to store the tracks points to be sent to backend
+  let trackCoords: [number, number][] = [];
 
   //APRS locations
   let aprsLayer: VectorLayer | undefined;
@@ -639,7 +641,7 @@
     }
 
     // use the coord from the user to add it to the current users track line
-    applyTrackLine(filteredCoords, lon, lat, speedMps, position.heading);
+    applyTrackLine(filteredCoords, lon, lat);
 
     // checks if the current road is a new road or not.
     checkRoadHistory(filteredCoords);
@@ -753,19 +755,10 @@
   async function applyTrackLine(
     coords : [number, number],
     lon: number,
-    lat: number,
-    speed: number,
-    heading: number | null
+    lat: number
   ) : Promise<void> {
     // this adds a line so the user can see where they have been (current track) 
     if ($trackStore.isTracking) { 
-
-      const pointToSend = {
-        latitude: lat,
-        longitude: lon,
-        speed: Number.isFinite(speed) ? speed : 0,
-        heading: heading ?? 0
-      };
 
       //this determines if this is the beggining of a new line 
       if (!currentTrackFeature) { 
@@ -777,7 +770,7 @@
         
         lastUserTrackCoord = coords;
 
-        await trackStore.addPoint(pointToSend);
+        trackCoords = [[lon, lat]];
         return;
       } 
 
@@ -788,7 +781,7 @@
           geom.appendCoordinate(coords);
           lastUserTrackCoord = coords;
 
-          await trackStore.addPoint(pointToSend);
+          trackCoords.push([lon, lat])
         }
       }
     }
@@ -848,6 +841,10 @@
   // presses end track
   async function startEndTracking() : Promise<void> {
     if ($trackStore.isTracking) {
+      // send track to backend
+      await finalizeTrack();
+
+      //update trackstore to end
       await trackStore.end();
       currentTrackSource?.clear(); // remove the current user track (red line)
       currentTrackFeature = undefined;
@@ -855,8 +852,27 @@
       await trackStore.loadTracks(); //this way when the new track was made it will
                                 // be added to the track list from backend.
     } else {
+      trackCoords = []; //just to make sure it's empty
       await trackStore.start();
     }
+  }
+
+  // this puts the trackCoords into a LineString type to be put into back end DB
+  async function finalizeTrack() {
+    //must have atleast 2 points
+    if (trackCoords.length < 2) {
+      trackCoords = [];
+      return;
+    }
+
+    const lineString: ApiLineString= {
+      type: "LineString",
+      coordinates: trackCoords,
+    };
+
+    await trackStore.addTrack(lineString)
+
+    trackCoords = [];
   }
 
 

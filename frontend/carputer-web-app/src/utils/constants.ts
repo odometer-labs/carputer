@@ -13,4 +13,5 @@ export const ENDPOINTS = {
   getCurrentPosition: "/ws/get-current-pos",
   getPositionStream: "/ws/get-position",
   getAprsStations: `${API_BASE}/aprs/stations`,
+  addTrack: `${API_BASE}/tracks/import`,
 };

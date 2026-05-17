@@ -1,12 +1,11 @@
 import { writable, type Writable } from "svelte/store";
 import { 
-  startTrack, 
-  endTrack, 
   listTracks, 
   checkNewRoad,
-  addTrackPoint
+  addTrackPoint,
+  importTrack
 } from "../api/restApi";
-import type { Track, TrackPoint } from "../api/types"
+import type { Track, TrackPoint, LineString } from "../api/types"
 
 
 export interface Tracks {
@@ -43,12 +42,13 @@ export class TrackStore {
   //A function that calls the rest api startTrack and changes values from this class
   async start() {
     try {
-      const res = await startTrack();
+      //TODO: uncomment this once we have the API add track point working
+      //const res = await startTrack();
 
       this.store.update(state => ({
         ...state,
         isTracking: true,
-        trackId: res.create_track
+        trackId: null, //TODO: change it to (trackId: res.create_track) once add track point works
       }));
     } catch (error) {
       console.error(error);
@@ -59,7 +59,8 @@ export class TrackStore {
   // to false and trackId to null
   async end() {
     try {
-      await endTrack();
+      //TODO: uncomment this once we have the API add track point working
+      //await endTrack();
 
       this.store.update(state => ({
         ...state,
@@ -119,12 +120,14 @@ export class TrackStore {
     }));
   }
 
-  //this might be deleted later, for now it helps showcase tracks on the map
-  setTrack(tracks: Track[]) {
-    this.store.update(state => ({
-      ...state, 
-      tracks
-    }));
+  //exports a whole track to backend.
+  async addTrack(line: LineString) {
+    try {
+      await importTrack(line);
+
+    } catch (error) {
+      console.error(error);
+    }
   }
 
   //checks if the current road has been driven on in the past

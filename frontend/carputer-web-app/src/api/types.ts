@@ -26,6 +26,11 @@ export interface CheckNewRoadResponse {
   is_new_road: boolean;
 }
 
+export interface ImportTrackResponse {
+  track_id: number;
+  status: string;
+}
+
 export interface LineString {
   type: "LineString";
   coordinates: [number, number][];
@@ -36,6 +41,7 @@ export interface Track {
   geom: LineString;
   start_time: string; //ISO format
   end_time: string | null; //ISO format, also it can be null incase it is the current track.
+  track_name: string | null;
 }
 
 // this if for addding a point on the track, used with the addTrackPoint api call
