@@ -120,7 +120,7 @@ describe("restApi", () => {
       } as Response),
     ) as typeof fetch;
 
-    const res = await addTrackPoint(1, {
+    const res = await addTrackPoint({
       latitude: 1,
       longitude: 2,
       speed: 30,
