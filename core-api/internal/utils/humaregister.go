@@ -7,8 +7,8 @@ import (
 	"github.com/odometer-labs/carputer/core-api/internal/handler"
 )
 
-const API_VERSION = "v2"
-const LEGACY_API_VERSION = "v1"
+const API_VERSION = "/v2"
+const LEGACY_API_VERSION = "/v1"
 
 func RegisterHumaHandlers(api huma.API) {
 	v2Grp := huma.NewGroup(api, API_VERSION)
