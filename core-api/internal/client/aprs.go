@@ -122,6 +122,7 @@ func (a APRS) GetNearbyStations(ctx context.Context, request *v2.GetAPRSStations
 	if err != nil {
 		return nil, huma.Error500InternalServerError("Unable to get nearby ARPS stations", err)
 	}
+	defer rows.Close()
 
 	var resp v2.GetAPRSStationsNearResponse
 	for rows.Next() {
@@ -181,6 +182,7 @@ func (a APRS) GetStationHistory(ctx context.Context, request *v2.GetAPRSStationH
 	if err != nil {
 		return nil, huma.Error500InternalServerError("Unable to get ARPS station history", err)
 	}
+	defer rows.Close()
 
 	resp := v2.GetAPRSStationHistoryResponse{}
 
