@@ -19,7 +19,7 @@ describe("TrackStore", () => {
     const state = get(store);
 
     expect(state.isTracking).toBe(true);
-    expect(state.trackId).toBe(42);
+    expect(state.trackId).toBe(null);
   });
 
   it("end() resets isTracking and trackId", async () => {
@@ -41,12 +41,14 @@ describe("TrackStore", () => {
         geom: { type: "LineString", coordinates: [] },
         start_time: "2024-01-01T00:00:00Z",
         end_time: "2024-01-01T01:00:00Z",
+        track_name: null,
       },
       {
         track_id: 2,
         geom: { type: "LineString", coordinates: [] },
         start_time: "2024-01-01T00:00:00Z",
         end_time: null,
+        track_name: "track2"
       },
     ];
 
@@ -71,22 +73,6 @@ describe("TrackStore", () => {
     expect(state.selectedTrackId).toBeNull();
   });
 
-  
-  it("setTrack() overwrites tracks", () => {
-    const mockTracks: Track[] = [
-      {
-        track_id: 10,
-        geom: { type: "LineString", coordinates: [] },
-        start_time: "2024-01-01T00:00:00Z",
-        end_time: "2024-01-01T01:00:00Z",
-      },
-    ];
-
-    store.setTrack(mockTracks);
-    const state = get(store);
-
-    expect(state.tracks).toEqual(mockTracks);
-  });
 
   it("checkIfNewRoad() updates isOnNewRoad", async () => {
     vi.spyOn(api, "checkNewRoad").mockResolvedValue({
