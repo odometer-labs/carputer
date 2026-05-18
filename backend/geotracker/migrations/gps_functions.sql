@@ -489,7 +489,6 @@ SELECT end_track_id,
     )
 FROM gps.track_points
 WHERE track_id = end_track_id;
-END IF;
 END;
 $$;
 -- Fixes common GPS topology errors (self-intersections) to ensure spatial validity
