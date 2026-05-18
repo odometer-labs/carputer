@@ -137,10 +137,33 @@ VALUES (
 END;
 $$;
 -- Marks the current active track as finished
-CREATE OR REPLACE PROCEDURE gps.end_track() LANGUAGE plpgsql AS $$ BEGIN
+CREATE OR REPLACE PROCEDURE gps.end_track() LANGUAGE plpgsql AS $$
+DECLARE end_track_id BIGINT;
+BEGIN -- Find the currently active track
+SELECT track_id INTO end_track_id
+FROM gps.tracks
+WHERE end_time IS NULL;
+-- If no active track is found, do nothing
+IF end_track_id IS NOT NULL THEN
+INSERT INTO gps.track_lines (track_id, geom, geom_wm)
+SELECT end_track_id,
+    ST_MakeLine(
+        geom::geometry
+        ORDER BY time_stamp ASC
+    )::geography,
+    ST_Transform(
+        ST_MakeLine(
+            geom::geometry
+            ORDER BY time_stamp ASC
+        ),
+        3857
+    )
+FROM gps.track_points
+WHERE track_id = end_track_id;
 UPDATE gps.tracks
 SET end_time = NOW()
-WHERE end_time IS NULL;
+WHERE track_id = end_track_id;
+END IF;
 END;
 $$;
 -- Gets tracks vector tile based on mode -- all, single, nearby, road
@@ -450,6 +473,25 @@ RETURNING track_id INTO new_track_id;
 RETURN new_track_id;
 END;
 $$;
+CREATE OR REPLACE PROCEDURE gps.end_gpx_track(end_track_id INTEGER) LANGUAGE plpgsql AS $$ BEGIN
+INSERT INTO gps.track_lines (track_id, geom, geom_wm)
+SELECT end_track_id,
+    ST_MakeLine(
+        geom::geometry
+        ORDER BY point_id ASC
+    )::geography,
+    ST_Transform(
+        ST_MakeLine(
+            geom::geometry
+            ORDER BY point_id ASC
+        ),
+        3857
+    )
+FROM gps.track_points
+WHERE track_id = end_track_id;
+END IF;
+END;
+$$;
 -- Fixes common GPS topology errors (self-intersections) to ensure spatial validity
 CREATE OR REPLACE PROCEDURE gps.validate_geometry(finished_track_id BIGINT) LANGUAGE plpgsql AS $$
 DECLARE cleaned_geom geometry;
@@ -472,45 +514,3 @@ CREATE OR REPLACE FUNCTION ST_LevelScale(z integer) RETURNS float8 LANGUAGE plpg
     RETURN 40075016.68 / (256 * |/ 2 ^ z);
 END;
 $$;
----------------------------
--- 6. TRIGGER SYSTEM
----------------------------
--- Automation: Dynamically builds LineStrings as points are inserted. 
--- Avoids expensive recalculations of the entire track during read operations.
-CREATE OR REPLACE FUNCTION gps.update_track_line_trigger() RETURNS TRIGGER LANGUAGE plpgsql AS $$ BEGIN -- Try to create the line assuming it's the 2nd point.
-    -- If it's the 1st point, this query returns 0 rows and does nothing.
-    -- If the line already exists, it hits the EXCLUDED conflict.
-INSERT INTO gps.track_lines (track_id, geom, geom_wm)
-SELECT NEW.track_id,
-    ST_MakeLine(
-        geom::geometry
-        ORDER BY time_stamp ASC
-    )::geography,
-    ST_Transform(
-        ST_MakeLine(
-            geom::geometry
-            ORDER BY time_stamp ASC
-        ),
-        3857
-    )
-FROM gps.track_points
-WHERE track_id = NEW.track_id
-HAVING COUNT(*) = 2 ON CONFLICT (track_id) DO
-UPDATE
-SET geom = ST_AddPoint(
-        gps.track_lines.geom::geometry,
-        NEW.geom::geometry,
-        -1
-    )::geography,
-    geom_wm = ST_AddPoint(
-        gps.track_lines.geom_wm,
-        ST_Transform(NEW.geom::geometry, 3857),
-        -1
-    );
-RETURN NEW;
-END;
-$$;
-DROP TRIGGER IF EXISTS trg_update_track_line ON gps.track_points;
-CREATE TRIGGER trg_update_track_line
-AFTER
-INSERT ON gps.track_points FOR EACH ROW EXECUTE FUNCTION gps.update_track_line_trigger();
