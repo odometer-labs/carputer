@@ -15,6 +15,7 @@ export interface WifiConnectionSettings {
   connection_id: string | null;
   ssid: string;
   uuid: string | null;
+  password?: string;
   static_config: StaticNetworkSettings | null;
 }
 

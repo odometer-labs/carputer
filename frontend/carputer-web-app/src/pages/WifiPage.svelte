@@ -8,6 +8,8 @@
   import wifi2 from "../assets/icons/wifi-signal2-bold.svg";
   import wifi3 from "../assets/icons/wifi-signal3-bold.svg";
   import lock_icon from "../assets/icons/lock-bold.svg";
+  import eye_bold from "../assets/icons/eye-bold.svg";
+  import eye_closed from "../assets/icons/eye-closed-bold.svg";
 
   const wifiIcons = [wifi0, wifi1, wifi2, wifi3];
 
@@ -72,6 +74,7 @@
   let busySsid = "";
   let selectedSsid = "";
   let selectedPassword = "";
+  let showPassword = false;
   let networkScanIntervalId = null;
   let isNetworkScanInFlight = false;
   let hasMounted = false;
@@ -84,7 +87,16 @@
   $: otherNetworks = dedupeAccessPointsBySsid(accessPoints)
     .filter((accessPoint) => accessPoint.ssid !== currentConnection?.ssid)
     .sort((a, b) => b.signal_strength - a.signal_strength);
-  $: visibleOtherNetworks = otherNetworks;
+  // ── FAKE DATA ── set to false to remove demo networks ──────────────────────
+  const SHOW_FAKE_WIFI_NETWORKS = true;
+  const FAKE_WIFI_NETWORKS = [
+    { ssid: "SecuredNet_Demo",  signal_strength: 80, security: "WPA2" },
+    { ssid: "OpenNet_Demo",     signal_strength: 55, security: "none" },
+  ];
+  // ─────────────────────────────────────────────────────────────────────────────
+  $: visibleOtherNetworks = SHOW_FAKE_WIFI_NETWORKS
+    ? [...FAKE_WIFI_NETWORKS, ...otherNetworks]
+    : otherNetworks;
   $: previousConnections = dedupeConnectionsBySsid(savedConnections)
     .filter((connection) => !connection.hotspot)
     .sort((a, b) => {
@@ -302,7 +314,7 @@
   }
 
   function selectNetwork(accessPoint) {
-    if (busySsid) {
+    if (busySsid || !isAccessPointSecured(accessPoint)) {
       return;
     }
 
@@ -314,12 +326,14 @@
 
     selectedSsid = accessPoint.ssid;
     selectedPassword = "";
+    showPassword = false;
     errorMessage = "";
   }
 
   function clearSelection() {
     selectedSsid = "";
     selectedPassword = "";
+    showPassword = false;
   }
 
   async function connectToNetwork(accessPoint) {
@@ -411,7 +425,7 @@
   </div>
 
   <div class="option-box">
-    <h3>Previously Connected To:</h3>
+    <h3>Known Networks:</h3>
   </div>
   
   <div class="network-box">
@@ -446,10 +460,10 @@
       {#each visibleOtherNetworks as accessPoint}
         <div class="network-card {selectedSsid === accessPoint.ssid ? 'selected' : ''}">
           <button
-            class="network-row"
+            class="network-row {!isAccessPointSecured(accessPoint) ? 'open-network' : ''}"
             type="button"
             onclick={() => selectNetwork(accessPoint)}
-            disabled={!$wifiStore.isWifiOn || !!busySsid}
+            disabled={!$wifiStore.isWifiOn || !!busySsid || !isAccessPointSecured(accessPoint)}
             aria-expanded={selectedSsid === accessPoint.ssid}
           >
             <span class="network-ssid">{accessPoint.ssid}</span>
@@ -471,14 +485,22 @@
               <p class="network-security">{formatSecurity(accessPoint)}</p>
 
               {#if selectedNetworkRequiresPassword}
-                <label class="password-input-wrap">
+                <div class="password-input-wrap">
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     bind:value={selectedPassword}
                     placeholder="Enter Wi-Fi password"
                     disabled={!!busySsid}
                   />
-                </label>
+                  <button
+                    class="password-toggle-btn"
+                    type="button"
+                    onclick={() => (showPassword = !showPassword)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    <img src={showPassword ? eye_closed : eye_bold} alt={showPassword ? 'Hide' : 'Show'} style="width:22px; height:22px;" />
+                  </button>
+                </div>
               {/if}
 
               <button
@@ -564,28 +586,57 @@
   }
 
   .password-input-wrap {
-    display: grid;
-    gap: 4px;
+    position: relative;
     font-size: 0.85rem;
     color: #222;
   }
 
   .password-input-wrap input {
-    border: 1px solid rgba(0, 0, 0, 0.2);
+    width: 100%;
+    box-sizing: border-box;
+    border: none;
     border-radius: 8px;
-    padding: 8px 10px;
+    padding: 8px 38px 8px 10px;
     background: rgba(255, 255, 255, 0.8);
+    color: #111;
+    outline: none;
+  }
+
+  .password-toggle-btn {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: none;
+    background: transparent;
+    padding: 4px;
+    cursor: pointer;
+    color: #555;
+    font-size: 1.1rem;
+    line-height: 1;
+    outline: none;
+  }
+
+  .password-toggle-btn:active {
+    color: #111;
   }
 
   .connect-btn {
-    border: 0;
     border-radius: 8px;
     background: rgba(33, 140, 0, 0.9);
+    border: 0;
+    outline: none;
     color: white;
     padding: 8px 10px;
     font-weight: 600;
     cursor: pointer;
   }
+  
+  .connect-btn:active {
+    background: rgb(27, 117, 0);
+    
+  }
+  
 
   .connect-btn:disabled {
     opacity: 0.6;
@@ -594,6 +645,11 @@
 
   .network-row:disabled {
     opacity: 0.6;
+  }
+
+  .open-network {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
   .active-network {
