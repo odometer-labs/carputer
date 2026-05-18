@@ -106,10 +106,6 @@
   function updateUserMarker(coords: [number, number]): void {
     if (!map) return;
 
-    const lon = position.longitude;
-    const lat = position.latitude;
-    const coords = fromLonLat([lon, lat]);
-
     if (!userMarker) {
       userMarker = new Feature({
         geometry: new Point(coords),
