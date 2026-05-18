@@ -103,6 +103,7 @@ services:
       - carputer
     depends_on:
       - api
+      - wifi-manager
       - core-api
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
@@ -174,18 +175,17 @@ services:
     build: ./infrastructure/wifi-manager/
     restart: always
     ports:
-        - "${WIFI_MANAGER_PORT}:80"
-    environment:
-        - WIFI_MANAGER_PORT=${WIFI_MANAGER_PORT:-8888}
-        - WIFI_INTERFACE=${WIFI_INTERFACE:-wlan0}
+      - '9001:9001'
     volumes:
         - "/var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket"
+    networks:
+      - carputer
     healthcheck:
-        test: ["CMD", "curl", "-f", "http://localhost:80/wifi/version"]
-        interval: 60s
-        timeout: 5s
+        test: ["CMD", "curl", "-f", "http://localhost:9001/wifi/version"]
+        interval: 360s
+        timeout: 10s
         retries: 3
-        start_period: 30s
+        start_period: 60s
 
 volumes:
   postgres_data:

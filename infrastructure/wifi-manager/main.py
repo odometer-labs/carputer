@@ -99,3 +99,4 @@ def get_internet_connectivity(_=Depends(open_system_bus)) -> bool:
 
 @app.get("/wifi/access-points")
 def get_access_points(_=Depends(open_system_bus)) -> list[WifiAccessPoint]:
+    return wm.get_access_points(WIFI_INTERFACE)

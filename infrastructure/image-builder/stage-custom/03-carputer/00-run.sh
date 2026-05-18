@@ -18,5 +18,14 @@ GIT_SSH_COMMAND="ssh -i ${CARPUTER_DEPLOY_KEY}" git clone --depth 1 --single-bra
 chown -R 1000:1000 "${ROOTFS_DIR}/opt/carputer"
 chmod -R 0600 "${ROOTFS_DIR}/opt/carputer"
 
-install -m 600 "files/.env" "$ROOTFS_DIR/opt/${FIRST_USER_NAME}"
+install -m 600 "files/.env" "$ROOTFS_DIR/opt/carputer"
 install -m 600 "files/carputer.service" "$ROOTFS_DIR/etc/systemd/system"
+
+install -v -m 0744 -o 1000 -g 1000 -d "${ROOTFS_DIR}"/home/"${FIRST_USER_NAME}"/.config/labwc
+install -m 644 "files/labwc_autostart" "${ROOTFS_DIR}"/home/"${FIRST_USER_NAME}"/.config/labwc/autostart
+
+install -v -m 0744 -d "${ROOTFS_DIR}"/etc/lightdm/lightdm.conf
+cat > "${ROOTFS_DIR}"/etc/lightdm/lightdm.conf << EOF
+autologin-user=${FIRST_USER_NAME}
+autologin-user-timeout=0
+EOF
