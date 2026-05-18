@@ -87,16 +87,7 @@
   $: otherNetworks = dedupeAccessPointsBySsid(accessPoints)
     .filter((accessPoint) => accessPoint.ssid !== currentConnection?.ssid)
     .sort((a, b) => b.signal_strength - a.signal_strength);
-  // ── FAKE DATA ── set to false to remove demo networks ──────────────────────
-  const SHOW_FAKE_WIFI_NETWORKS = true;
-  const FAKE_WIFI_NETWORKS = [
-    { ssid: "SecuredNet_Demo",  signal_strength: 80, security: "WPA2" },
-    { ssid: "OpenNet_Demo",     signal_strength: 55, security: "none" },
-  ];
-  // ─────────────────────────────────────────────────────────────────────────────
-  $: visibleOtherNetworks = SHOW_FAKE_WIFI_NETWORKS
-    ? [...FAKE_WIFI_NETWORKS, ...otherNetworks]
-    : otherNetworks;
+  $: visibleOtherNetworks = otherNetworks;
   $: previousConnections = dedupeConnectionsBySsid(savedConnections)
     .filter((connection) => !connection.hotspot)
     .sort((a, b) => {
