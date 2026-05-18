@@ -1,13 +1,22 @@
-#1/bin/bash -e
+#!/bin/bash -e
 
 APP_NAME="carputer"
-PASSWORD="$(openssl rand -base64 20)"
+LOGIN_PASSWORD="$(openssl rand -base64 20)"
 PIGEN_REPO="https://github.com/RPI-Distro/pi-gen.git"
 PIGEN_BRANCH="arm64"
+
+if [ ! -f ".env" ]
+then
+	echo "Building an imagine requires creating a .env and copying it to this directory"
+	echo "See the .env.example at the root of this project for a template env file"
+	exit 1
+fi
 
 [ -d "./pi-gen" ] && rm -rf pi-gen
 
 git clone --depth 1 --single-branch --branch "$PIGEN_BRANCH" "$PIGEN_REPO"
+
+cp .env stage-custom/03-carputer/files/.env
 
 cp -r stage-custom pi-gen
 
@@ -17,7 +26,7 @@ cat > config <<HEREDOC
 IMG_NAME="$APP_NAME-img"
 TARGET_HOSTNAME="$APP_NAME"
 FIRST_USER_NAME="$APP_NAME"
-FIRST_USER_PASS="$PASSWORD"
+FIRST_USER_PASS="$LOGIN_PASSWORD"
 
 LOCALE_DEFAULT="en_US.UTF-8"
 KEYBOARD_KEYMAP="us"
@@ -27,9 +36,8 @@ ENABLE_SSH=1
 STAGE_LIST="stage0 stage1 stage2 stage3 stage-custom"
 HEREDOC
 
-./build.sh
+sudo ./build.sh
 
-echo "Built image: deploy/$APP_NAME.img"
 echo "Generated login credentials"
 echo "User: $APP_NAME"
-echo "Default Password: $PASSWORD"
+echo "Default Password: $LOGIN_PASSWORD"

@@ -14,6 +14,11 @@
     updateSettingsPreferences({ areAllTracksOn: input.checked });
   }
 
+  function handleToggleAprsPoints(event: Event): void {
+    const input = event.currentTarget as HTMLInputElement;
+    updateSettingsPreferences({ areAprsPointsOn: input.checked });
+  }
+
   function handleMilesChange(event: Event): void {
     const input = event.currentTarget as HTMLInputElement;
     updateSettingsPreferences({ milesToDiscoverRoads: Number(input.value) });
@@ -228,6 +233,23 @@
         </label>
         <h3 class={$settingsPreferences.nightMode ? "toggle_text_on" : "toggle_text_off"}>
           {$settingsPreferences.nightMode ? "ON" : "OFF"}
+        </h3>
+      </div>
+    </div>
+
+    <div class="option-box">
+      <h3>APRS Pin Points</h3>
+      <div class="switch-controls">
+        <label class="switch">
+          <input
+            type="checkbox"
+            checked={$settingsPreferences.areAprsPointsOn}
+            on:change={handleToggleAprsPoints}
+          />
+          <i class={$settingsPreferences.areAprsPointsOn ? "iconoir-switch-on" : "iconoir-switch-off"}></i>
+        </label>
+        <h3 class={$settingsPreferences.areAprsPointsOn ? "toggle_text_on" : "toggle_text_off"}>
+          {$settingsPreferences.areAprsPointsOn ? "ON" : "OFF"}
         </h3>
       </div>
     </div>

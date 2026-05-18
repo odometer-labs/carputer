@@ -95,3 +95,15 @@ export interface SysHealthData {
     send_rate_bytes: number;
   };
 }
+
+export interface APRSStation {
+  callsign: string;
+  symbol_table: string;
+  symbol_code: string;
+  last_comment: string | null;
+  last_seen: string; // ISO format datetime
+  latitude: number;
+  longitude: number;
+  distance_m: number | null;
+  packet_count: number;
+}
