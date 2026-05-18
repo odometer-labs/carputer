@@ -165,6 +165,13 @@ class TrackClient:
                 )
                 result = cursor.fetchone()
                 return {"track_id": result["track_id"], "status": "imported"}
+    
+    def get_track_lines_near_location(self, p_within_meters: float):
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""SELECT * FROM gps.get_track_lines_near_location(%s);""", (p_within_meters,))
+                result = cursor.fetchall()
+                return result
 
     def is_tracking_active(self) -> bool:
         """Check if there is an active track (end_time IS NULL)."""
