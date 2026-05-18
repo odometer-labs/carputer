@@ -56,11 +56,7 @@ type SysHealth struct {
 	Network       NetStats  `json:"network"`
 }
 
-var (
-	upgrader    = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
-	prevNet     *psnet.IOCountersStat
-	prevNetTime time.Time
-)
+var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
 
 func round2(f float64) float64 {
 	return math.Round(f*100) / 100
@@ -74,39 +70,42 @@ func roundSlice(fs []float64) []float64 {
 	return out
 }
 
-func collectStats() (*SysHealth, error) {
+func collectStats(prevNet *psnet.IOCountersStat, prevNetTime time.Time) (*SysHealth, *psnet.IOCountersStat, time.Time, error) {
 	uptime, err := host.Uptime()
 	if err != nil {
-		return nil, fmt.Errorf("uptime: %w", err)
+		return nil, nil, prevNetTime, fmt.Errorf("uptime: %w", err)
 	}
 
 	cpuTotal, err := cpu.Percent(0, false)
-	if err != nil || len(cpuTotal) == 0 {
-		return nil, fmt.Errorf("cpu total: %w", err)
+	if err != nil {
+		return nil, nil, prevNetTime, fmt.Errorf("cpu total: %w", err)
+	}
+	if len(cpuTotal) == 0 {
+		return nil, nil, prevNetTime, fmt.Errorf("cpu total: empty result")
 	}
 	cpuPerCore, err := cpu.Percent(0, true)
 	if err != nil {
-		return nil, fmt.Errorf("cpu per-core: %w", err)
+		return nil, nil, prevNetTime, fmt.Errorf("cpu per-core: %w", err)
 	}
 
 	avg, err := load.Avg()
 	if err != nil {
-		return nil, fmt.Errorf("load avg: %w", err)
+		return nil, nil, prevNetTime, fmt.Errorf("load avg: %w", err)
 	}
 
 	vmStat, err := mem.VirtualMemory()
 	if err != nil {
-		return nil, fmt.Errorf("memory: %w", err)
+		return nil, nil, prevNetTime, fmt.Errorf("memory: %w", err)
 	}
 
 	diskStat, err := disk.Usage("/")
 	if err != nil {
-		return nil, fmt.Errorf("disk: %w", err)
+		return nil, nil, prevNetTime, fmt.Errorf("disk: %w", err)
 	}
 
 	netStats, err := psnet.IOCounters(false)
 	if err != nil || len(netStats) == 0 {
-		return nil, fmt.Errorf("net: %w", err)
+		return nil, nil, prevNetTime, fmt.Errorf("net: %w", err)
 	}
 	current := netStats[0]
 	now := time.Now()
@@ -119,8 +118,6 @@ func collectStats() (*SysHealth, error) {
 			sendRate = uint64(float64(current.BytesSent-prevNet.BytesSent) / elapsed)
 		}
 	}
-	prevNet = &current
-	prevNetTime = now
 
 	return &SysHealth{
 		UptimeSeconds: uptime,
@@ -151,7 +148,7 @@ func collectStats() (*SysHealth, error) {
 			RecvRateBytes: recvRate,
 			SendRateBytes: sendRate,
 		},
-	}, nil
+	}, &current, now, nil
 }
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
@@ -162,15 +159,30 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
+	// Drain incoming frames so gorilla can process close/ping control messages.
+	go func() {
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				return
+			}
+		}
+	}()
+
+	var prevNet *psnet.IOCountersStat
+	var prevNetTime time.Time
+
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		stats, err := collectStats()
+		stats, nextNet, nextNetTime, err := collectStats(prevNet, prevNetTime)
 		if err != nil {
 			log.Printf("collect: %v", err)
 			continue
 		}
+		prevNet = nextNet
+		prevNetTime = nextNetTime
+
 		data, err := json.Marshal(stats)
 		if err != nil {
 			continue

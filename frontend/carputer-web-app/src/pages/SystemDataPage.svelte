@@ -79,6 +79,14 @@
     y: number;
   };
 
+  const userMarkerStyle = new Style({
+    image: new Circle({
+      radius: 10,
+      fill: new Fill({ color: '#3399CC' }),
+      stroke: new Stroke({ color: '#ffffff', width: 2 }),
+    }),
+  });
+
   const gridStyle = new Style({
     fill: new Fill({ color: 'rgba(255, 255, 255, 0.04)' }),
     stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.75)', width: 1 }),
@@ -100,19 +108,12 @@
     const lon = position.longitude;
     const lat = position.latitude;
     const coords = fromLonLat([lon, lat]);
-    const userStyle = new Style({
-      image: new Circle({
-        radius: 10,
-        fill: new Fill({ color: '#3399CC' }),
-        stroke: new Stroke({ color: '#ffffff', width: 2 }),
-      }),
-    });
 
     if (!userMarker) {
       userMarker = new Feature({
         geometry: new Point(coords),
       });
-      userMarker.setStyle(userStyle);
+      userMarker.setStyle(userMarkerStyle);
 
       userSource = new VectorSource({
         features: [userMarker],
@@ -132,7 +133,6 @@
       } else {
         userMarker.setGeometry(new Point(coords));
       }
-      userMarker.setStyle(userStyle);
       userSource?.changed();
     }
 
@@ -197,7 +197,7 @@
       const tracks = await listTracks();
       num_tracks = Array.isArray(tracks) ? tracks.length : 0;
     } catch (error: unknown) {
-      reportNonVitalError(error, 'DashboardPage.listTracks');
+      reportNonVitalError(error, 'SystemDataPage.listTracks');
     }
   }
 
@@ -205,7 +205,7 @@
     getCurrentPosition()
       .then((position) => updateUserMarker(position))
       .catch((error: unknown) => {
-        reportNonVitalError(error, 'DashboardPage.getCurrentPosition');
+        reportNonVitalError(error, 'SystemDataPage.getCurrentPosition');
       });
 
     stopGPSSubscription = subscribeToPositionStream(
@@ -213,7 +213,7 @@
         updateUserMarker(position);
       },
       (error: string) => {
-        reportNonVitalError(error, 'DashboardPage.subscribeToPositionStream');
+        reportNonVitalError(error, 'SystemDataPage.subscribeToPositionStream');
       }
     );
   }
@@ -233,7 +233,7 @@
         updateCheckState = 'no-updates';
       }
     } catch (error: unknown) {
-      reportNonVitalError(error, 'DashboardPage.handleCheckForUpdates');
+      reportNonVitalError(error, 'SystemDataPage.handleCheckForUpdates');
       updateCheckState = 'idle';
     }
   }
@@ -245,7 +245,7 @@
       await new Promise(resolve => setTimeout(resolve, 2500));
       updateCheckState = 'updated';
     } catch (error: unknown) {
-      reportNonVitalError(error, 'DashboardPage.handleUpdate');
+      reportNonVitalError(error, 'SystemDataPage.handleUpdate');
       updateCheckState = 'updates-available';
     }
   }
@@ -289,7 +289,7 @@
 
     stopSysHealthSubscription = subscribeToSysHealth(
       (data) => { sysHealth = data; },
-      (error: string) => { reportNonVitalError(error, 'SystemDataPage.sysHealth'); }
+      (error: string) => { sysHealth = null; reportNonVitalError(error, 'SystemDataPage.sysHealth'); }
     );
 
     // TODO: Replace this with backend response data when tile-download status API is ready.
