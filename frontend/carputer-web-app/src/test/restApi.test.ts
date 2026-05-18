@@ -93,7 +93,9 @@ describe("restApi", () => {
     ) as typeof fetch;
 
     const res = await updateTrack(1, {
+      start_time: "2002",
       end_time: "2026-01-01",
+      track_name: "non"
     });
 
     expect(res.result).toBe("success");

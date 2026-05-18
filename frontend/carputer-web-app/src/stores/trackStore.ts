@@ -3,9 +3,10 @@ import {
   listTracks, 
   checkNewRoad,
   addTrackPoint,
-  importTrack
+  importTrack,
+  updateTrack
 } from "../api/restApi";
-import type { Track, TrackPoint, LineString } from "../api/types"
+import type { Track, TrackPoint, LineString, UpdateTrackVal } from "../api/types"
 
 
 export interface Tracks {
@@ -121,9 +122,21 @@ export class TrackStore {
   }
 
   //exports a whole track to backend.
-  async addTrack(line: LineString) {
+  async addTrack(line: LineString) : Promise<number | null> {
     try {
-      await importTrack(line);
+      const res = await importTrack(line);
+
+      return res.track_id;
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
+  }
+
+  //this is used to update the track in the database
+  async updateTrack(id: number, trackVal: UpdateTrackVal) {
+    try {
+      await updateTrack(id, trackVal);
 
     } catch (error) {
       console.error(error);

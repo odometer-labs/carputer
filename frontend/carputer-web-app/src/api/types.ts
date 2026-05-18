@@ -62,6 +62,13 @@ export interface LatestTrackPoint {
   heading_deg: number;
 }
 
+//this is used when updating a track
+export interface UpdateTrackVal {
+  start_time: string;
+  end_time: string | null;
+  track_name: string | null;
+}
+
 // GPS payload returned by backend websocket /ws/get-position
 export interface GPSData {
   latitude: number;

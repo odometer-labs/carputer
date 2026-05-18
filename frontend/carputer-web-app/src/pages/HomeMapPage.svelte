@@ -41,6 +41,8 @@
 
   // this is to store the tracks points to be sent to backend
   let trackCoords: [number, number][] = [];
+  let trackName: string;
+  let startTime: Date;
 
   //APRS locations
   let aprsLayer: VectorLayer | undefined;
@@ -82,6 +84,10 @@
   //this is to prevent having too many calls for $trackStore.checkIfNewRoad
   let lastCheckTime: number = 0;
   const CHECK_ROAD_INTERVAL: number = 1000; //one second
+
+  // for the popup window to set the name
+  let showTrackNamePopup: boolean = false;
+  let pendingFinalize: boolean = false;
 
   // this is used to prevent the user track having too many points on 1 spot
   let lastUserTrackCoord: [number, number] | null = null;
@@ -841,24 +847,51 @@
   // presses end track
   async function startEndTracking() : Promise<void> {
     if ($trackStore.isTracking) {
-      // send track to backend
-      await finalizeTrack();
-
-      //update trackstore to end
-      await trackStore.end();
-      currentTrackSource?.clear(); // remove the current user track (red line)
-      currentTrackFeature = undefined;
-
-      await trackStore.loadTracks(); //this way when the new track was made it will
-                                // be added to the track list from backend.
+      //open the popup before stopping the track
+      trackName = "";
+      showTrackNamePopup = true;
+      pendingFinalize = true;
+      return;
     } else {
+      startTime = new Date();
       trackCoords = []; //just to make sure it's empty
       await trackStore.start();
     }
   }
 
+  
+  // for handling the naming of a track with the popup
+  async function confirmTrackName(): Promise<void> {
+    if (!pendingFinalize) return;
+
+    //if no name is given then defualt
+    if (!trackName || trackName.trim() === "") {
+      trackName =  `Track ${new Date().toLocaleString()}`;
+    }
+
+  
+    // send track to backend
+    await finalizeTrack(trackName);
+
+    //update trackstore to end
+    await trackStore.end();
+    currentTrackSource?.clear(); // remove the current user track (red line)
+    currentTrackFeature = undefined;
+
+    await trackStore.loadTracks(); //this way when the new track was made it will
+                                  // be added to the track list from backend.
+    showTrackNamePopup = false;
+    pendingFinalize = false;
+  }
+
+  //in case the user wishes to cancel ending the track or naming
+  function cancelTrackName(): void {
+    showTrackNamePopup = false;
+    pendingFinalize = false;
+  }
+
   // this puts the trackCoords into a LineString type to be put into back end DB
-  async function finalizeTrack() {
+  async function finalizeTrack(customTrackName: string) {
     //must have atleast 2 points
     if (trackCoords.length < 2) {
       trackCoords = [];
@@ -870,9 +903,20 @@
       coordinates: trackCoords,
     };
 
-    await trackStore.addTrack(lineString)
+    const res = await trackStore.addTrack(lineString);
 
     trackCoords = [];
+    
+    if (res === null) return;
+
+    //set the name and correct time
+    const track = {
+      start_time: startTime.toISOString(),
+      end_time: new Date().toISOString(),
+      track_name: customTrackName,
+    }
+
+    await trackStore.updateTrack(res, track)
   }
 
 
@@ -1083,6 +1127,26 @@
     </div>
   {/if}
 
+  <!-- end track popup / naming track: shown when users wishes to end tracking -->
+  {#if showTrackNamePopup}
+    <div class="track-popup-overlay">
+      <div class="track-popup">
+        <h3>Name Your Track</h3>
+
+        <input
+          type="text"
+          bind:value={trackName}
+          placeholder="Enter track name..."
+          maxlength="50"
+        />
+
+        <div class="track-popup-buttons">
+          <button on:click={confirmTrackName}>Save</button>
+          <button on:click={cancelTrackName}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </main>
 
 
@@ -1310,6 +1374,61 @@
   .aprs-popup-no-comment {
     color: #999;
     font-style: italic;
+  }
+
+
+  .track-popup-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(188, 188, 188, 0.45);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+  }
+
+  .track-popup {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    width: 280px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+    text-align: center;
+  }
+
+  .track-popup h3 {
+    margin-top: 0;
+    margin-bottom: 12px;
+    color: black;
+  }
+
+  .track-popup input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 14px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+
+  .track-popup-buttons {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .track-popup-buttons button {
+    flex: content;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    background: rgb(188,188,188);
+  }
+
+  .track-popup-buttons button:hover {
+    background: rgb(225,225,225);
   }
 
 </style>

@@ -14,7 +14,8 @@ import type {
   GPSData,
   APRSStation,
   ImportTrackResponse,
-  LineString
+  LineString,
+  UpdateTrackVal
 } from "./types";
 import { ENDPOINTS } from "../utils/constants";
 
@@ -65,14 +66,14 @@ export async function getTrack(trackId: number): Promise<Track> {
 // updates a specified track by id.
 export async function updateTrack(
   trackId: number,
-  track: Partial<Track>,
+  trackVal: UpdateTrackVal,
 ): Promise<UpdateTrackResponse> {
   const res = await fetch(`${ENDPOINTS.getTrack}/${trackId}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(track),
+    body: JSON.stringify(trackVal),
   });
 
   if (!res.ok) throw new Error("Failed to update a track");
