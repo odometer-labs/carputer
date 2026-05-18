@@ -18,8 +18,8 @@
   import { Style, Fill, Stroke, Text, Circle } from 'ol/style.js';
   import { fromLonLat } from 'ol/proj.js';
   import { createXYZ } from 'ol/tilegrid.js';
-  import { getCurrentPosition, listTracks, subscribeToPositionStream } from '../api/restApi';
-  import type { GPSData } from '../api/types';
+  import { getCurrentPosition, listTracks, subscribeToPositionStream, subscribeToSysHealth } from '../api/restApi';
+  import type { GPSData, SysHealthData } from '../api/types';
   import { reportNonVitalError } from '../stores/errorStore';
   import 'ol/ol.css';
 
@@ -28,6 +28,25 @@
   let patch_level: string = "0.1.2";
   let storage_amount_dowloaded: number = 2;
   let storage_amount_left: number = 1;
+
+  let sysHealth: SysHealthData | null = null;
+  let stopSysHealthSubscription: (() => void) | null = null;
+
+  function formatBytes(bytes: number): string {
+    if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(1)}G`;
+    if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(0)}M`;
+    if (bytes >= 1_024) return `${(bytes / 1_024).toFixed(0)}K`;
+    return `${bytes}B`;
+  }
+
+  function formatUptime(seconds: number): string {
+    const d = Math.floor(seconds / 86400);
+    const h = Math.floor((seconds % 86400) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    if (d > 0) return `${d}d ${h}h`;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  }
 
   // update checking state
   type UpdateState = 'idle' | 'checking' | 'no-updates' | 'updates-available' | 'updating' | 'updated';
@@ -60,6 +79,14 @@
     y: number;
   };
 
+  const userMarkerStyle = new Style({
+    image: new Circle({
+      radius: 10,
+      fill: new Fill({ color: '#3399CC' }),
+      stroke: new Stroke({ color: '#ffffff', width: 2 }),
+    }),
+  });
+
   const gridStyle = new Style({
     fill: new Fill({ color: 'rgba(255, 255, 255, 0.04)' }),
     stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.75)', width: 1 }),
@@ -81,19 +108,12 @@
     const lon = position.longitude;
     const lat = position.latitude;
     const coords = fromLonLat([lon, lat]);
-    const userStyle = new Style({
-      image: new Circle({
-        radius: 10,
-        fill: new Fill({ color: '#3399CC' }),
-        stroke: new Stroke({ color: '#ffffff', width: 2 }),
-      }),
-    });
 
     if (!userMarker) {
       userMarker = new Feature({
         geometry: new Point(coords),
       });
-      userMarker.setStyle(userStyle);
+      userMarker.setStyle(userMarkerStyle);
 
       userSource = new VectorSource({
         features: [userMarker],
@@ -113,7 +133,6 @@
       } else {
         userMarker.setGeometry(new Point(coords));
       }
-      userMarker.setStyle(userStyle);
       userSource?.changed();
     }
 
@@ -178,7 +197,7 @@
       const tracks = await listTracks();
       num_tracks = Array.isArray(tracks) ? tracks.length : 0;
     } catch (error: unknown) {
-      reportNonVitalError(error, 'DashboardPage.listTracks');
+      reportNonVitalError(error, 'SystemDataPage.listTracks');
     }
   }
 
@@ -186,7 +205,7 @@
     getCurrentPosition()
       .then((position) => updateUserMarker(position))
       .catch((error: unknown) => {
-        reportNonVitalError(error, 'DashboardPage.getCurrentPosition');
+        reportNonVitalError(error, 'SystemDataPage.getCurrentPosition');
       });
 
     stopGPSSubscription = subscribeToPositionStream(
@@ -194,7 +213,7 @@
         updateUserMarker(position);
       },
       (error: string) => {
-        reportNonVitalError(error, 'DashboardPage.subscribeToPositionStream');
+        reportNonVitalError(error, 'SystemDataPage.subscribeToPositionStream');
       }
     );
   }
@@ -214,7 +233,7 @@
         updateCheckState = 'no-updates';
       }
     } catch (error: unknown) {
-      reportNonVitalError(error, 'DashboardPage.handleCheckForUpdates');
+      reportNonVitalError(error, 'SystemDataPage.handleCheckForUpdates');
       updateCheckState = 'idle';
     }
   }
@@ -226,7 +245,7 @@
       await new Promise(resolve => setTimeout(resolve, 2500));
       updateCheckState = 'updated';
     } catch (error: unknown) {
-      reportNonVitalError(error, 'DashboardPage.handleUpdate');
+      reportNonVitalError(error, 'SystemDataPage.handleUpdate');
       updateCheckState = 'updates-available';
     }
   }
@@ -268,18 +287,23 @@
     loadDashboardInfo();
     startGPSTracking();
 
+    stopSysHealthSubscription = subscribeToSysHealth(
+      (data) => { sysHealth = data; },
+      (error: string) => { sysHealth = null; reportNonVitalError(error, 'SystemDataPage.sysHealth'); }
+    );
+
     // TODO: Replace this with backend response data when tile-download status API is ready.
     const downloadedTilesFromBackend: DownloadedTile[] = [];
     applyDownloadedTileSelections(downloadedTilesFromBackend);
 
-    map.on('click', (event) => {
+    map.on('click', (event: any) => {
       if (!isSelectMode || !map || !selectionSource || !gridLayer) return;
 
       const feature = map.forEachFeatureAtPixel(
         event.pixel,
-        (candidate) => candidate,
+        (candidate: any) => candidate,
         {
-          layerFilter: (layer) => layer === gridLayer,
+          layerFilter: (layer: any) => layer === gridLayer,
           hitTolerance: 3,
         }
       );
@@ -351,6 +375,8 @@
     }
     stopGPSSubscription?.();
     stopGPSSubscription = null;
+    stopSysHealthSubscription?.();
+    stopSysHealthSubscription = null;
     map?.setTarget(undefined);
   });
 
@@ -467,6 +493,64 @@
         </p>
       </div>
     </div>
+
+    <!-- system health -->
+    {#if sysHealth}
+      <div class="divider"></div>
+      <div class="sys-health">
+        <p class="sys-health-title">System Health</p>
+
+        <div class="health-metric">
+          <div class="health-metric-header">
+            <span>CPU</span>
+            <span>{sysHealth.cpu.percent_total.toFixed(1)}% · load {sysHealth.cpu.load_avg_1.toFixed(2)}</span>
+          </div>
+          <div class="bar">
+            <div
+              class="bar-fill"
+              class:bar-warn={sysHealth.cpu.percent_total >= 70}
+              class:bar-danger={sysHealth.cpu.percent_total >= 90}
+              style="width:{Math.min(sysHealth.cpu.percent_total, 100)}%"
+            ></div>
+          </div>
+        </div>
+
+        <div class="health-metric">
+          <div class="health-metric-header">
+            <span>RAM</span>
+            <span>{formatBytes(sysHealth.memory.used_bytes)} / {formatBytes(sysHealth.memory.total_bytes)}</span>
+          </div>
+          <div class="bar">
+            <div
+              class="bar-fill"
+              class:bar-warn={sysHealth.memory.used_percent >= 70}
+              class:bar-danger={sysHealth.memory.used_percent >= 90}
+              style="width:{Math.min(sysHealth.memory.used_percent, 100)}%"
+            ></div>
+          </div>
+        </div>
+
+        <div class="health-metric">
+          <div class="health-metric-header">
+            <span>Disk</span>
+            <span>{formatBytes(sysHealth.disk.used_bytes)} / {formatBytes(sysHealth.disk.total_bytes)}</span>
+          </div>
+          <div class="bar">
+            <div
+              class="bar-fill"
+              class:bar-warn={sysHealth.disk.used_percent >= 70}
+              class:bar-danger={sysHealth.disk.used_percent >= 90}
+              style="width:{Math.min(sysHealth.disk.used_percent, 100)}%"
+            ></div>
+          </div>
+        </div>
+
+        <div class="health-row">
+          <span>Net ↓ {formatBytes(sysHealth.network.recv_rate_bytes)}/s · ↑ {formatBytes(sysHealth.network.send_rate_bytes)}/s</span>
+          <span>Up {formatUptime(sysHealth.uptime_seconds)}</span>
+        </div>
+      </div>
+    {/if}
 
     <!-- divider -->
     <div class="divider"></div>
@@ -769,6 +853,71 @@
     width: 24px;
     height: 24px;
     margin-right: 8px;
+  }
+
+  .sys-health {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .sys-health-title {
+    margin: 0;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgba(0, 0, 0, 0.45);
+  }
+
+  .health-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .health-metric-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: rgba(0, 0, 0, 0.8);
+  }
+
+  .health-metric-header span:first-child {
+    font-weight: 600;
+  }
+
+  .bar {
+    width: 100%;
+    height: 4px;
+    background-color: rgba(0, 0, 0, 0.12);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    width: 0%;
+    background-color: rgba(51, 153, 204, 0.85);
+    border-radius: 2px;
+    transition: width 0.8s ease;
+  }
+
+  .bar-fill.bar-warn {
+    background-color: rgba(230, 155, 0, 0.9);
+  }
+
+  .bar-fill.bar-danger {
+    background-color: rgba(210, 50, 50, 0.9);
+  }
+
+  .health-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: rgba(0, 0, 0, 0.7);
+    margin-top: 2px;
   }
 
 </style>
