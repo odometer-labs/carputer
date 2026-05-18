@@ -1273,3 +1273,41 @@ def test_get_tracks_mvt_road_mode(db_conn):
     assert 4002 in found_ids  # nearby completed track
     assert 4001 not in found_ids  # active track excluded
     assert 4003 not in found_ids  # far track excluded
+
+
+def test_(db_conn):
+    """
+    Verify spatial filtering: find nearby tracks but ignore the current one as
+    a mapbox vector tile.
+    """
+    with db_conn.cursor() as cur:
+
+        # Create "Old Track A" (Nearby)
+        # Location: roughly (0,0)
+
+        cur.execute("SELECT gps.create_track() as id;")
+        id = cur.fetchone()["id"]
+        all_points = [
+            (id, 0, 0),
+            (id, 0, 0),
+            (id, 0, 0),
+            (id, 0, 0),
+        ]
+        cur.executemany(
+            """
+            INSERT INTO gps.track_points (track_id, geom) 
+            VALUES (%s, ST_SetSRID(ST_MakePoint(%s, %s), 4326))
+            """,
+            all_points,
+        )
+        cur.execute("SELECT COUNT(*) from gps.track_points as count;")
+        result = cur.fetchone()
+        assert result["count"] == 4
+
+        cur.execute("SELECT COUNT(*) from gps.track_lines as count;")
+        result = cur.fetchone()
+        assert result["count"] == 1
+
+        cur.execute("SELECT * from gps.track_points;")
+        result = cur.fetchall()
+        assert result[0]["time_stamp"] is None

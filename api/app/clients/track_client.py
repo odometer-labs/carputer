@@ -4,6 +4,8 @@ from ..dependencies import get_connection
 from ..models.track import Track
 from ..models.track_point import TrackPoint
 import json
+import gpxpy
+import gpxpy.gpx
 
 
 class TrackClient:
@@ -160,6 +162,45 @@ class TrackClient:
                 )
                 result = cursor.fetchone()
                 return {"track_id": result["track_id"], "status": "imported"}
+
+    def import_gpx(self, name: str, gpx_data: bytes):
+        try:
+            # gpxpy.parse() accepts both strings and bytes
+            gpx = gpxpy.parse(gpx_data)
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""SELECT gps.import_gpx(%s) as id;""", (name,))
+
+                # should fetch id
+                result = cursor.fetchone()
+                track_id = result["id"]
+
+                all_points = [
+                    (
+                        track_id,
+                        point.time or datetime.now(timezone.utc),
+                        point.longitude,
+                        point.latitude,
+                    )
+                    for track in gpx.tracks
+                    for segment in track.segments
+                    for point in segment.points
+                ]
+                if all_points:
+                    cursor.executemany(
+                        """
+                        INSERT INTO gps.track_points (track_id, time_stamp, geom) 
+                        VALUES (%s, %s, ST_SetSRID(ST_MakePoint(%s, %s), 4326))
+                        """,
+                        all_points,
+                    )
+                    conn.commit()
+                    return {"result": "success"}
+                else:
+                    return {"result": "empty GPX file"}
 
 
 # singleton object

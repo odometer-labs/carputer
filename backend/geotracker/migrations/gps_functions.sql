@@ -17,7 +17,7 @@ CREATE TABLE gps.tracks (
 CREATE TABLE gps.track_points (
     point_id BIGSERIAL PRIMARY KEY,
     track_id BIGSERIAL NOT NULL REFERENCES gps.tracks(track_id) ON DELETE CASCADE,
-    time_stamp TIMESTAMPTZ NOT NULL,
+    time_stamp TIMESTAMPTZ,
     geom GEOGRAPHY(Point, 4326) NOT NULL,
     -- WGS84 Standard
     speed_mps DOUBLE PRECISION,
@@ -438,6 +438,15 @@ VALUES (
         new_geom,
         ST_Transform(new_geom, 3857)
     );
+RETURN new_track_id;
+END;
+$$;
+CREATE OR REPLACE FUNCTION gps.import_gpx(new_track_name TEXT) RETURNS INTEGER LANGUAGE plpgsql AS $$
+DECLARE new_track_id INTEGER;
+BEGIN
+INSERT INTO gps.tracks(start_time, end_time, track_name)
+VALUES (NOW(), NOW(), new_track_name)
+RETURNING track_id INTO new_track_id;
 RETURN new_track_id;
 END;
 $$;
