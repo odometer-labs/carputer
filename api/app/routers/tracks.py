@@ -99,6 +99,29 @@ async def import_track_point(track_id: int, track_point: TrackPoint):
     return track_client.import_track_point(track_id, track_point)
 
 
+@router.get("/tracks/beacon/stats")
+async def get_beacon_stats():
+    """
+    Returns smart beaconing statistics for the current tracking session.
+    
+    Includes: point count, last beacon time, last position, and last heading.
+    """
+    return track_client.get_beacon_stats()
+
+
+@router.get("/tracks/status")
+async def get_tracking_status():
+    """
+    Returns current tracking status.
+    
+    Includes whether tracking is active and beacon statistics.
+    """
+    return {
+        "tracking_active": track_client.is_tracking_active(),
+        "beacon_stats": track_client.get_beacon_stats()
+    }
+
+
 @router.post("/tracks/point")
 async def add_track_point(track_point: TrackPoint):
     """
