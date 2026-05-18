@@ -1,5 +1,8 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { AppError } from '../../stores/errorStore';
+
+  const AUTO_DISMISS_MS = 7000;
 
   let {
     error,
@@ -26,6 +29,11 @@
   }
 
   const popupLabel = $derived(getPopupLabel(error));
+
+  onMount(() => {
+    const timer = setTimeout(() => onClose(error.id), AUTO_DISMISS_MS);
+    return () => clearTimeout(timer);
+  });
 </script>
 
 <article class="error-popup" role="alert" aria-live="assertive">
@@ -51,17 +59,14 @@
 
 <style>
   .error-popup {
-    width: min(420px, calc(100vw - 2rem));
+    width: 100%;
+    box-sizing: border-box;
     border-radius: 12px;
     border: 1px solid #f2c66d;
     background: #fff8e9;
     color: #4a3200;
     box-shadow: 0 8px 30px rgba(55, 33, 0, 0.18);
     padding: 0.75rem 0.9rem;
-    bottom: 0.5%;
-    position: fixed;
-    right: 2%;
-    transform: translateX(2%);
   }
 
   .error-popup__header {
