@@ -39,9 +39,13 @@ async def recv_position(websocket: WebSocket):
             if "lat" not in gpsd or "lon" not in gpsd:
                 continue
 
-            track_client.latitude = gpsd.get("lat", track_client.latitude)
-            track_client.longitude = gpsd.get("lon", track_client.longitude)
-            track_client.speed = gpsd.get("speed", track_client.speed)
-            track_client.heading = gpsd.get("track", track_client.heading)
+            # Process GPS update with smart beaconing
+            # This updates current position and saves track points when appropriate
+            track_client.process_gps_update(
+                lat=gpsd.get("lat"),
+                lon=gpsd.get("lon"),
+                speed_mps=gpsd.get("speed", 0.0),
+                heading=gpsd.get("track", 0.0)
+            )
     except WebSocketDisconnect as e:
         pass

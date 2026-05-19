@@ -265,12 +265,14 @@ $$;
 CREATE OR REPLACE FUNCTION gps.retrieve_track(retrieve_track_id INTEGER) RETURNS TABLE (
         track_id BIGINT,
         geom JSONB,
+        geom_wm JSONB,
         start_time TIMESTAMPTZ,
         end_time TIMESTAMPTZ,
         track_name VARCHAR(50)
     ) LANGUAGE plpgsql AS $$ BEGIN RETURN QUERY
 SELECT t.track_id,
     ST_AsGeoJSON(tl.geom, 6)::jsonb,
+    ST_AsGEOJSON(tl.geom_wm, 6)::jsonb,
     t.start_time,
     t.end_time,
     t.track_name
@@ -424,14 +426,17 @@ $$;
 -- Utility for batch-importing external data sets as completed tracks
 CREATE OR REPLACE FUNCTION gps.import_track(geojson_data TEXT) RETURNS INTEGER LANGUAGE plpgsql AS $$
 DECLARE new_track_id INTEGER;
+new_geom GEOMETRY;
 BEGIN
 INSERT INTO gps.tracks(start_time, end_time)
 VALUES (NOW(), NOW())
 RETURNING track_id INTO new_track_id;
-INSERT INTO gps.track_lines(track_id, geom)
+SELECT ST_SetSRID(ST_GeomFromGeoJSON(geojson_data), 4326) INTO new_geom;
+INSERT INTO gps.track_lines(track_id, geom, geom_wm)
 VALUES (
         new_track_id,
-        ST_SetSRID(ST_GeomFromGeoJSON(geojson_data), 4326)
+        new_geom,
+        ST_Transform(new_geom, 3857)
     );
 RETURN new_track_id;
 END;

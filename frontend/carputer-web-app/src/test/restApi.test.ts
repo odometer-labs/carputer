@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { 
-  startTrack, 
-  endTrack, 
-  listTracks, 
-  getTrack, 
-  updateTrack, 
+import {
+  startTrack,
+  endTrack,
+  listTracks,
+  getTrack,
+  updateTrack,
   deleteTrack,
   addTrackPoint,
   getLatestTrackPoint,
@@ -22,7 +22,7 @@ describe("restApi", () => {
       Promise.resolve({
         ok: true,
         json: async () => ({ create_track: 123 }),
-      } as Response)
+      } as Response),
     ) as typeof fetch;
 
     const res = await startTrack();
@@ -34,22 +34,20 @@ describe("restApi", () => {
       Promise.resolve({
         ok: true,
         json: async () => ({ result: "success" }),
-      } as Response)
+      } as Response),
     ) as typeof fetch;
 
     const res = await endTrack();
     expect(res.result).toBe("success");
   });
 
-
   it("startTrack throws on bad response", async () => {
     global.fetch = vi.fn(() =>
-      Promise.resolve({ ok: false } as Response)
+      Promise.resolve({ ok: false } as Response),
     ) as typeof fetch;
 
     await expect(startTrack()).rejects.toThrow("Failed to start track");
   });
-
 
   it("listTracks returns tracks array", async () => {
     global.fetch = vi.fn(() =>
@@ -57,9 +55,9 @@ describe("restApi", () => {
         ok: true,
         json: async () => [
           { track_id: 1, geom: {}, start_time: "", end_time: "" },
-          { track_id: 2, geom: {}, start_time: "", end_time: "" }
+          { track_id: 2, geom: {}, start_time: "", end_time: "" },
         ],
-      } as Response)
+      } as Response),
     ) as typeof fetch;
 
     const res = await listTracks();
@@ -67,7 +65,6 @@ describe("restApi", () => {
     expect(res).toHaveLength(2);
     expect(res[0]?.track_id).toBe(1);
   });
-
 
   it("getTrack returns a single track", async () => {
     global.fetch = vi.fn(() =>
@@ -77,9 +74,9 @@ describe("restApi", () => {
           track_id: 5,
           geom: {},
           start_time: "",
-          end_time: ""
+          end_time: "",
         }),
-      } as Response)
+      } as Response),
     ) as typeof fetch;
 
     const res = await getTrack(5);
@@ -87,29 +84,27 @@ describe("restApi", () => {
     expect(res.track_id).toBe(5);
   });
 
-
   it("updateTrack returns success response", async () => {
     global.fetch = vi.fn(() =>
       Promise.resolve({
         ok: true,
         json: async () => ({ result: "success" }),
-      } as Response)
+      } as Response),
     ) as typeof fetch;
 
     const res = await updateTrack(1, {
-      end_time: "2026-01-01"
+      end_time: "2026-01-01",
     });
 
     expect(res.result).toBe("success");
   });
-
 
   it("deleteTrack returns success response", async () => {
     global.fetch = vi.fn(() =>
       Promise.resolve({
         ok: true,
         json: async () => ({ result: "success" }),
-      } as Response)
+      } as Response),
     ) as typeof fetch;
 
     const res = await deleteTrack(1);
@@ -117,13 +112,12 @@ describe("restApi", () => {
     expect(res.result).toBe("success");
   });
 
-
   it("addTrackPoint sends point correctly", async () => {
     global.fetch = vi.fn(() =>
       Promise.resolve({
         ok: true,
         json: async () => ({ result: "success" }),
-      } as Response)
+      } as Response),
     ) as typeof fetch;
 
     const res = await addTrackPoint(1, {
@@ -136,7 +130,6 @@ describe("restApi", () => {
     expect(res.result).toBe("success");
   });
 
-
   it("getLatestTrackPoint returns latest point", async () => {
     global.fetch = vi.fn(() =>
       Promise.resolve({
@@ -147,9 +140,9 @@ describe("restApi", () => {
           time_stamp: "",
           geom: {},
           speed_mph: 30,
-          heading_deg: 0
+          heading_deg: 0,
         }),
-      } as Response)
+      } as Response),
     ) as typeof fetch;
 
     const res = await getLatestTrackPoint();
@@ -157,13 +150,12 @@ describe("restApi", () => {
     expect(res.point_id).toBe(1);
   });
 
-
   it("checkNewRoad returns boolean result", async () => {
     global.fetch = vi.fn(() =>
       Promise.resolve({
         ok: true,
         json: async () => ({ is_new_road: true }),
-      } as Response)
+      } as Response),
     ) as typeof fetch;
 
     const res = await checkNewRoad();

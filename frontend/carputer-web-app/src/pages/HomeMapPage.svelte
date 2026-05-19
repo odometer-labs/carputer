@@ -1,32 +1,44 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { derived } from 'svelte/store';
   import Map from 'ol/Map.js';
   import View from 'ol/View.js';
   import TileLayer from 'ol/layer/Tile.js';
   import OSM from 'ol/source/OSM.js';
   import { defaults as defaultControls } from 'ol/control/defaults.js';
-  import { fromLonLat, toLonLat } from 'ol/proj.js';
+  import { fromLonLat } from 'ol/proj.js';
   import Feature from 'ol/Feature.js';
   import Point from 'ol/geom/Point.js';
+  import LineString from 'ol/geom/LineString.js'
   import VectorLayer from 'ol/layer/Vector.js';
   import VectorSource from 'ol/source/Vector.js';
   import { Style, Circle, Fill, Stroke, RegularShape, Icon, Text } from 'ol/style.js';
   import 'ol/ol.css';
-  import { getCurrentPosition, subscribeToPositionStream } from '../api/restApi';
-  import type { GPSData } from '../api/types';
-  import { push } from 'svelte-spa-router';
+  import { getCurrentPosition, subscribeToPositionStream, getAprsStations } from '../api/restApi';
+  import type { GPSData, APRSStation } from '../api/types';
+  import { push, location } from 'svelte-spa-router';
   import { Cluster } from 'ol/source';
   import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
-  import { preferences } from '../services/preferences';
+  import { settingsPreferences, type TrackRange } from '../services/settings_preferences';
   import aprsIconUrl from '../assets/icons/aprs-bold.svg';
   import userArrowIconUrl from '../assets/icons/maps-arrow-blue-white.svg';
   import { trackStore } from '../stores/trackStore'
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
   import SystemIndicators from "../assets/components/SystemIndicators.svelte";
+  //remove this later
+  import type { Track } from '../api/types';
 
   let mapElement: HTMLDivElement | undefined;
+  let aprsPopupElement: HTMLDivElement | null = null;
   let map: Map | undefined;
   let locationStatus: string = 'Getting location...';
+
+  // roadhistory and current track line
+  let oldTrackLayer: VectorLayer | undefined;
+  let oldTrackSource: VectorSource | undefined;
+  let currentTrackLayer: VectorLayer | undefined;
+  let currentTrackSource: VectorSource | undefined;
+  let currentTrackFeature: Feature<LineString> | undefined;
 
   //APRS locations
   let aprsLayer: VectorLayer | undefined;
@@ -39,7 +51,7 @@
   let vectorSource: VectorSource | undefined;
 
   // latest GPS state (map projection coords + heading)
-  let latestUserCoords: number[] | null = null;
+  let latestUserCoords: [number, number] | null = null;
   let latestHeadingDegrees: number | null = null;
 
   // follow-lock state: position only vs. position + heading (compass mode)
@@ -60,20 +72,168 @@
   // device orientation listener (reserved for future compass integration)
   let orientationListener: ((event: DeviceOrientationEvent) => void) | null = null;
   let stopGPSSubscription: (() => void) | null = null;
+  let aprsRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
   let zoomLevel: number = 18;
-  $: zoomLevel = $preferences.defaultZoom; // default zoom level when centering on user
+  $: zoomLevel = $settingsPreferences.defaultZoom; // default zoom level when centering on user
+
+  //this is to prevent having too many calls for $trackStore.checkIfNewRoad
+  let lastCheckTime: number = 0;
+  const CHECK_ROAD_INTERVAL: number = 1000; //one second
+
+  // this is used to prevent the user track having too many points on 1 spot
+  let lastUserTrackCoord: [number, number] | null = null;
+  let lastRoadHistoryCoord: [number, number] | null = null;
+
+  const GPS_JITTER_DISTANCE_METERS = 4;
+  const GPS_STATIONARY_SPEED_MPS = 0.8;
+  const ROAD_HISTORY_MIN_DISTANCE_METERS = 8;
+
+  // this is the list of tracks that is shown on the page, filtered
+  const filteredTracks = derived(
+    [trackStore, settingsPreferences],
+    ([$trackStore, $settingsPreferences]) => {
+      //disable all tracks 
+      if (!$settingsPreferences.areAllTracksOn) {
+        //set the selectedTrackID to null
+        $trackStore.selectedTrackId = null;
+
+        //return just an empty tracks
+        return {
+          tracks: [],
+          selectedTrackId: $trackStore.selectedTrackId
+        };
+      }
+
+      const afterDate = getAfterDate($settingsPreferences.trackRange);
+
+      return {
+        tracks: $trackStore.tracks.filter(track => {
+          const start = new Date(track.start_time);
+
+          //this is for after the date
+          if ((afterDate) && (start < afterDate)) return false;
+
+          return true;
+        }),
+        selectedTrackId: $trackStore.selectedTrackId
+      };
+    }
+  );
+
+  // this function gets the date by 1 day, week, month or year. 
+  // if there shouldn't be a date, if the user has selected all tracks
+  // to show then it should default to null
+  function getAfterDate(range: TrackRange) : Date | null {
+    if (range === "all") return null;
+
+    const date = new Date();
+
+    // set to midnight
+    date.setHours(0, 0, 0, 0);
+
+    switch (range) {
+      case "day":
+        date.setDate(date.getDate() - 1);
+        break;
+      case "week":
+        date.setDate(date.getDate() - 7);
+        break;
+      case "month":
+        date.setMonth(date.getMonth() - 1);
+        break;
+      case "year":
+        date.setFullYear(date.getFullYear() - 1);
+        break;
+    }
+
+    return date;
+  }
 
   function getUserIconScale(): number {
-    return 0.6 + ($preferences.iconSizeLevel * 0.2);
+    return 0.6 + ($settingsPreferences.iconSizeLevel * 0.2);
   }
 
   function getUserMarkerRadius(): number {
-    return 5 + $preferences.iconSizeLevel;
+    return 5 + $settingsPreferences.iconSizeLevel;
+  }
+
+  function hexToRgba(hex: string, alpha: number): string {
+    const normalized = hex.trim().replace("#", "");
+
+    if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+      return `rgba(255, 52, 241, ${alpha})`;
+    }
+
+    const red = parseInt(normalized.slice(0, 2), 16);
+    const green = parseInt(normalized.slice(2, 4), 16);
+    const blue = parseInt(normalized.slice(4, 6), 16);
+
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+  }
+
+  function getSelectedTrackColor(alpha: number = 1): string {
+    return hexToRgba($settingsPreferences.selectedTrackColor, alpha);
+  }
+
+  function getRestingTrackColor(alpha: number = 1): string {
+    return hexToRgba($settingsPreferences.restingTrackColor, alpha);
+  }
+
+  function getTrackWidth(offset: number = 0): number {
+    return Math.max(1, $settingsPreferences.trackThickness + offset);
+  }
+
+  $: if (oldTrackLayer) {
+    $settingsPreferences.selectedTrackColor;
+    $settingsPreferences.restingTrackColor;
+    $settingsPreferences.trackThickness;
+    oldTrackLayer.changed();
+  }
+
+  $: if (currentTrackLayer) {
+    $settingsPreferences.selectedTrackColor;
+    $settingsPreferences.restingTrackColor;
+    $settingsPreferences.trackThickness;
+    currentTrackLayer.changed();
+  }
+
+  // HomeMapPage remains mounted under overlay routes; clear popup when leaving map route.
+  $: if ($location !== '/' && aprsPopupData !== null) {
+    aprsPopupData = null;
+  }
+
+  $: if (aprsLayer) {
+    aprsLayer.setVisible($settingsPreferences.areAprsPointsOn);
+    aprsPopupData;
+    aprsLayer.changed();
+  }
+
+  $: if (!$settingsPreferences.areAprsPointsOn && aprsPopupData !== null) {
+    aprsPopupData = null;
   }
 
   // run once when the Svelte component is mounted
   onMount(() => {
+    const onDocumentPointerDown = (event: PointerEvent): void => {
+      if (!aprsPopupData) {
+        return;
+      }
+
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      if (aprsPopupElement?.contains(target)) {
+        return;
+      }
+
+      aprsPopupData = null;
+    };
+
+    document.addEventListener('pointerdown', onDocumentPointerDown);
+
     try {
       loadMap();             // create map instance and hook events
       startGPSTracking();    // begin receiving backend GPS data
@@ -82,19 +242,22 @@
 
     }
 
-    // this will be removed in the future but for now this sets up 10 aprs points around the 
-    // the user, to display an aprs icon.
-    const interval = setInterval(() => {
-      if (!latestUserCoords) return;
+    // Load APRS stations from backend and refresh periodically.
+    loadAprsStations();
+    aprsRefreshInterval = setInterval(() => {
+      loadAprsStations();
+    }, 15000);
 
-      for (let i = 0; i < 10; i++) {
-        setRandomAprsPoints();
-      }
-
-      clearInterval(interval); // run once
-    }, 500);
+    // subscribes to track changes
+    const unsubscribeTracks = filteredTracks.subscribe(({ tracks, selectedTrackId }) => {
+      renderTracks(tracks, selectedTrackId);
+    });
+    // Load completed tracks from backend.
+    trackStore.loadTracks();
 
     return () => {
+      unsubscribeTracks();
+
       map?.setTarget(undefined);
       stopGPSSubscription?.();
       stopGPSSubscription = null;
@@ -113,6 +276,13 @@
       if (rotationProgrammaticGuardTimeout !== null) {
         clearTimeout(rotationProgrammaticGuardTimeout);
       }
+
+      if (aprsRefreshInterval !== null) {
+        clearInterval(aprsRefreshInterval);
+        aprsRefreshInterval = null;
+      }
+
+      document.removeEventListener('pointerdown', onDocumentPointerDown);
     };
   });
 
@@ -131,13 +301,48 @@
         })
       ],
       view: new View({
-        center: fromLonLat([0, 0]), // Default center
+        center: fromLonLat([-122.6765, 45.5231]), // Default center: Portland, OR (fallback when GPS is unavailable)
         zoom: zoomLevel
       }),
       controls: defaultControls({
         rotate: false, // disable default rotation control since we handle it ourselves
       })
     });
+
+    // ------this is the track layer----------
+    oldTrackSource = new VectorSource();
+
+    // this determines the color/shape/size of the old tracks
+    oldTrackLayer = new VectorLayer({
+      source: oldTrackSource,
+      minZoom: 13,
+      style: (feature) => {
+        const isActive = feature.get('isActive');
+
+        return new Style({
+          stroke: new Stroke({
+            color: isActive ? getSelectedTrackColor(0.95) : getRestingTrackColor(0.55),
+            width: isActive ? getTrackWidth(1) : getTrackWidth(0)
+          })
+        })
+      }
+    });
+
+    currentTrackSource = new VectorSource();
+
+    // this determines the color/shape/size of the current track the user is making
+    currentTrackLayer = new VectorLayer({
+      source: currentTrackSource,
+      style: () => new Style({
+        stroke: new Stroke({
+          color: getSelectedTrackColor(0.8),
+          width: getTrackWidth(0)
+        })
+      })
+    });
+
+    map.addLayer(oldTrackLayer);
+    map.addLayer(currentTrackLayer);
 
     // this is for making points for APRS locations ------------
     aprsSource = new VectorSource();
@@ -149,21 +354,19 @@
 
     aprsLayer = new VectorLayer({
       source: aprCluster,
+      minZoom: 13, //this determines how far our zoomed can the aprs still load.
       style: (feature) => {
         // make sure that map exists before doing anything
         if (!map) return;
 
         const size = feature.get('features').length;
-        const zoom = map.getView().getZoom() ?? 0;
-
-        //at a certain distance the clusters/points will dissapear
-        if (zoom < 13) {
-          return;
-        }
 
         // Single point = normal APRS icon
         if (size === 1) {
-          return getAprsPinStyle(getAprsIcon());
+          const inner = feature.get('features')[0] as Feature | undefined;
+          const aprsId = inner?.get('aprsId') as string | undefined;
+          const isSelected = aprsId !== undefined && aprsPopupData?.aprsId === aprsId;
+          return getAprsPinStyle(getAprsIcon(), isSelected);
         }
 
         // Cluster (circle with number, combined close by points)
@@ -182,7 +385,7 @@
     });
 
     map.addLayer(aprsLayer);
-
+    
 
     if (mapElement) {
       pointerDownListener = (event: PointerEvent) => {
@@ -226,6 +429,52 @@
       if (isFollowingHeading) {
         isFollowingHeading = false;
         updateUserMarkerStyle();
+      }
+    });
+
+    map.on('singleclick', (event) => {
+      // Handle track selection clicks
+      map?.forEachFeatureAtPixel(event.pixel, (featureLike) => {
+        if (!(featureLike instanceof Feature)) return;
+
+        const trackId = featureLike.get('trackId');
+        if (trackId != null) {
+          trackStore.selectTrack(trackId);
+        }
+      },
+      {
+        layerFilter: (layer) => layer === oldTrackLayer,
+        hitTolerance: 13
+      });
+
+      // Handle APRS station clicks — only show popup for single (non-clustered) points
+      let hitAprs = false;
+      map?.forEachFeatureAtPixel(event.pixel, (featureLike) => {
+        if (!(featureLike instanceof Feature)) return;
+
+        const clusteredFeatures = featureLike.get('features') as Feature[] | undefined;
+        if (!clusteredFeatures || clusteredFeatures.length !== 1) return;
+
+        const inner = clusteredFeatures[0];
+        if (!inner) return;
+        const aprsId = inner?.get('aprsId') as string | undefined;
+        const callsign = inner?.get('callsign') as string | undefined;
+        if (callsign && aprsId) {
+          aprsPopupData = {
+            aprsId,
+            callsign,
+            comment: inner.get('comment') ?? null
+          };
+          hitAprs = true;
+        }
+      },
+      {
+        layerFilter: (layer) => layer === aprsLayer,
+        hitTolerance: 10
+      });
+
+      if (!hitAprs) {
+        aprsPopupData = null;
       }
     });
   }
@@ -341,6 +590,7 @@
       .catch((error: unknown) => {
         const message = `Initial GPS fetch failed: ${String(error)}`;
         locationStatus = message;
+        console.warn('GPS unavailable — map defaulting to Portland, OR');
         reportNonVitalError(error, 'HomeMapPage.getCurrentPosition');
       });
 
@@ -368,17 +618,36 @@
       latestHeadingDegrees = position.heading;
     }
 
-    const coords = fromLonLat([lon, lat]);
-    latestUserCoords = coords;
+    const coords = fromLonLat([lon, lat]) as [number, number];
+    const speedMps = Number(position.speed);
+
+    let filteredCoords: [number, number] = coords;
+    if (latestUserCoords) {
+      const movementMeters = getDistanceMeters(coords, latestUserCoords);
+      const isLikelyStationary = Number.isFinite(speedMps) && speedMps < GPS_STATIONARY_SPEED_MPS;
+
+      // Hold position when stationary to suppress GPS drift jitter on the marker.
+      if (isLikelyStationary && movementMeters < GPS_JITTER_DISTANCE_METERS) {
+        filteredCoords = latestUserCoords;
+      }
+    }
+
+    latestUserCoords = filteredCoords;
 
     if (!map) {
       return;
     }
 
+    // use the coord from the user to add it to the current users track line
+    applyTrackLine(filteredCoords);
+
+    // checks if the current road is a new road or not.
+    checkRoadHistory(filteredCoords);
+
     if (!userMarker) {
       // first fix: create marker feature and add to map
       userMarker = new Feature({
-        geometry: new Point(coords)
+        geometry: new Point(filteredCoords)
       });
 
       userMarker.setStyle(new Style({
@@ -409,9 +678,9 @@
       // subsequent fixes: move marker and refresh style
       const geometry = userMarker.getGeometry();
       if (geometry) {
-        geometry.setCoordinates(coords);
+        geometry.setCoordinates(filteredCoords);
       } else {
-        userMarker.setGeometry(new Point(coords));
+        userMarker.setGeometry(new Point(filteredCoords));
       }
 
       if (isFollowingUser) {
@@ -467,6 +736,110 @@
     }
   }
 
+  // this function checks if the user has passed a certain amount of distance
+  // I made this becuase I realized that the applyTrackLine will add multiple 
+  // points on the same spot on the map and that just seem very wastefull.
+  function hasMovedEnough(newCoords : [number, number], minimumDistance = 5) : boolean {
+    if (!lastUserTrackCoord) return true;
+
+    const dx = newCoords[0] - lastUserTrackCoord[0];
+    const dy = newCoords[1] - lastUserTrackCoord[1];
+
+    return (Math.sqrt(dx * dx + dy * dy) > minimumDistance);
+  }
+
+  // this is used to make the track line for the user, given that the coordnates pushed
+  // in are the user's coordinates.
+  function applyTrackLine(coords : [number, number]) : void {
+    // this adds a line (blue line) so the user can see where they have been (current track) 
+    if ($trackStore.isTracking) { 
+      //this determines if this is the beggining of a new line 
+      if (!currentTrackFeature) { 
+        currentTrackFeature = new Feature({
+          geometry: new LineString([coords])
+        }); 
+        
+        currentTrackSource?.addFeature(currentTrackFeature);
+        
+        lastUserTrackCoord = coords as [number, number];
+      } 
+      else if (hasMovedEnough(coords as [number, number])){ 
+        const geom = currentTrackFeature.getGeometry();
+        if (geom) {
+          geom.appendCoordinate(coords);
+
+          lastUserTrackCoord = coords as [number, number];
+        }
+      }
+    }
+  }
+
+  // this function is used to check if the current road the user is on is a road
+  // that the user has never driven on before.
+  function checkRoadHistory(coords: [number, number]) : void {
+    const now = Date.now();
+
+    // makes sure that the most a call for checking if the road is new is at most 1 per sec
+    if (now - lastCheckTime <= CHECK_ROAD_INTERVAL) return;
+
+    if (lastRoadHistoryCoord) {
+      const movementMeters = getDistanceMeters(coords, lastRoadHistoryCoord);
+      if (movementMeters < ROAD_HISTORY_MIN_DISTANCE_METERS) return;
+    }
+
+    lastCheckTime = now;
+    lastRoadHistoryCoord = [coords[0], coords[1]];
+    trackStore.checkIfNewRoad();
+  }
+
+  function getDistanceMeters(a: [number, number], b: [number, number]): number {
+    const dx = a[0] - b[0];
+    const dy = a[1] - b[1];
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+
+  // set up the old tracks that the user has been on previously
+  function renderTracks(tracks: Track[], selectedTrackId: number | null) : void {
+    //check if the trackSource exists
+    if (!oldTrackSource) return;
+
+    // remove any of the old tracks on the map to prevent duplicates
+    oldTrackSource.clear();
+
+    tracks.forEach((track) => {
+      const coords = track.geom.coordinates.map(([lon, lat]) =>
+        fromLonLat([lon, lat])
+      );
+
+      const feature = new Feature({
+        geometry: new LineString(coords),
+        trackId: track.track_id
+      });
+
+      feature.set("isActive", track.track_id === selectedTrackId)
+
+      oldTrackSource?.addFeature(feature);
+    });
+  }
+
+  // this function helps start the tracking for backend and end
+  // it also refreshes the TrackLayer from the current track when the user 
+  // presses end track
+  async function startEndTracking() : Promise<void> {
+    if ($trackStore.isTracking) {
+      await trackStore.end();
+      currentTrackSource?.clear(); // remove the current user track (red line)
+      currentTrackFeature = undefined;
+
+      await trackStore.loadTracks(); //this way when the new track was made it will
+                                // be added to the track list from backend.
+    } else {
+      await trackStore.start();
+    }
+  }
+
+
   // TODO: there are appearently many different kinds of aprs icons so it may need
   // to be able to shift through different icons for the situation. or if we decided
   // to not implement different icons for different aprs then that fine, just remove
@@ -476,26 +849,26 @@
   }
 
   /**
-   * Sets up feature points for APRS points, this isn't ment to be the final
-   * version. it simply is putting points onto the map. 
-   * in the future we should make it so that the points can be updated.
+   * Sets up feature points for APRS stations fetched from the backend API.
    */
-  function addAprsPoint(lat: number, long: number): void {
+  function addAprsPoint(lat: number, long: number, callsign: string, comment: string | null): void {
     //if the aprsSource hasn't been set up then don't do anything
     if (!aprsSource) return;
 
-    //create marker feature and add to map
-    // make the point(feature) using lat and long
+    const aprsId = `${callsign}-${lat.toFixed(6)}-${long.toFixed(6)}`;
+
     const aprsMarker = new Feature({
       geometry: new Point(fromLonLat([long, lat])),
-      name: 'aprs point'
+      aprsId,
+      callsign,
+      comment,
     });
 
     aprsSource.addFeature(aprsMarker);
   }
 
   // this is the style for the pins, you can insert the image to the pin
-  function getAprsPinStyle(img: string): Style[] {
+  function getAprsPinStyle(img: string, isSelected: boolean = false): Style[] {
     return [
       // pin stem (triangle)
       new Style({
@@ -513,7 +886,7 @@
       new Style({
         image: new Circle({
           radius: 13,
-          fill: new Fill({ color: 'white' }),
+          fill: new Fill({ color: isSelected ? '#93e38b' : 'white' }),
           stroke: new Stroke({ color: 'black', width: 2 }),
           displacement: [0, 26]
         })
@@ -534,20 +907,27 @@
   //This is just for testing purposes and eventually will be removed when we get APRS data
   // this gets a random location near the user and sends that information to the addAprsPoint()
   // to make a aprs feature point.
-  function setRandomAprsPoints(): void{
-    if (!latestUserCoords) return;
+  async function loadAprsStations(): Promise<void> {
+    if (!$settingsPreferences.areAprsPointsOn) {
+      aprsSource?.clear();
+      return;
+    }
 
-    const coords = toLonLat(latestUserCoords); //gets the coordnates
+    try {
+      let stations: APRSStation[] = await getAprsStations();
 
-    const long = coords[0];
-    const lat = coords[1];
+      // If nothing is nearby, widen the search radius to show available APRS traffic.
+      if (stations.length === 0) {
+        stations = await getAprsStations(500000);
+      }
 
-    if (lat === undefined || long === undefined) return; //makes sure it isn't null
-
-    addAprsPoint(
-      lat + (Math.random() - 0.5)* 0.01,
-      long + (Math.random() - 0.5)* 0.01
-    );
+      aprsSource?.clear();
+      stations.forEach((station) => {
+        addAprsPoint(station.latitude, station.longitude, station.callsign, station.last_comment ?? null);
+      });
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'HomeMapPage.loadAprsStations');
+    }
   }
 
   // this function changes route to /SettingPreference
@@ -566,6 +946,9 @@
   }
 
   let isDropdownOpen: boolean = false;
+
+  // APRS popup: set when the user clicks a single APRS station on the map
+  let aprsPopupData: { aprsId: string; callsign: string; comment: string | null } | null = null;
 </script>
 
 <main style="margin: 0; padding: 0; height: 100%; width: 100%;">
@@ -636,7 +1019,7 @@
   <!-- this is the button for letting backend know when to start/end a track-->
   <button 
     class="start-end-track_butn"
-    on:click={() => $trackStore.isTracking ? trackStore.end() : trackStore.start()}
+    on:click={() => startEndTracking()}
     style="background-color: {$trackStore.isTracking ? 'lightcoral' : 'lightgreen'}"
   >
     <strong>{$trackStore.isTracking ? "Stop Track" : "Start Track"}</strong>
@@ -645,6 +1028,24 @@
   <div class="map-container">
     <div bind:this={mapElement} class="map" style="width: 100%; height: 100%;"></div>
   </div>
+
+  <!-- APRS station popup: shown when the user clicks a single APRS point -->
+  {#if aprsPopupData !== null}
+    <div class="aprs-popup" bind:this={aprsPopupElement}>
+      <div class="aprs-popup-header">
+        <span class="aprs-popup-callsign">{aprsPopupData.callsign}</span>
+        <!-- svelte-ignore a11y_consider_explicit_label -->
+        <button class="aprs-popup-close" on:click={() => aprsPopupData = null}>
+          <i class="iconoir-xmark" style="font-size: 16px;"></i>
+        </button>
+      </div>
+      {#if aprsPopupData.comment}
+        <p class="aprs-popup-comment">{aprsPopupData.comment}</p>
+      {:else}
+        <p class="aprs-popup-comment aprs-popup-no-comment">No message</p>
+      {/if}
+    </div>
+  {/if}
 
 </main>
 
@@ -698,7 +1099,7 @@
     background-color: rgba(188, 188, 188, 0.9);
     color: #333;
     font-weight: 500;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);   
     transition: all 0.2s;
     outline: none;
   }
@@ -817,6 +1218,62 @@
 
   :global(.ol-zoom) {
     font-size: 1.1em;
+  }
+
+  .aprs-popup {
+    position: absolute;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1001;
+    background-color: rgba(255, 255, 255, 0.96);
+    border: 1px solid #bbb;
+    border-radius: 8px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+    padding: 10px 14px;
+    min-width: 180px;
+    max-width: 280px;
+    pointer-events: all;
+  }
+
+  .aprs-popup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+
+  .aprs-popup-callsign {
+    font-weight: bold;
+    font-size: 15px;
+    color: #222;
+  }
+
+  .aprs-popup-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 4px;
+    color: #555;
+    display: flex;
+    align-items: center;
+    outline: none;
+  }
+
+  .aprs-popup-close:hover {
+    color: #000;
+  }
+
+  .aprs-popup-comment {
+    margin: 0;
+    font-size: 13px;
+    color: #444;
+    word-break: break-word;
+  }
+
+  .aprs-popup-no-comment {
+    color: #999;
+    font-style: italic;
   }
 
 </style>

@@ -326,7 +326,350 @@ echo ""
 # -----------------------------------------------------------------------------
 # Step 6 — Enable and start systemd services
 # -----------------------------------------------------------------------------
-info "Step 6: Enabling and starting systemd services..."
+info "Step 6: Configuring APRS reception..."
+
+# Create APRS directory
+sudo mkdir -p "$APRS_DIR"
+sudo mkdir -p /var/log/carputer/aprs
+sudo chown -R "$CURRENT_USER":"$CURRENT_USER" "$APRS_DIR"
+sudo chown -R "$CURRENT_USER":"$CURRENT_USER" /var/log/carputer
+
+# Deploy Direwolf configuration
+DIREWOLF_CONF="$APRS_DIR/direwolf.conf"
+
+if [ -f "$DIREWOLF_CONF" ]; then
+    info "Direwolf config already exists at $DIREWOLF_CONF."
+    confirm "Overwrite with default config?" || { warn "Skipping Direwolf config."; }
+fi
+
+info "Creating Direwolf configuration..."
+cat > "$DIREWOLF_CONF" <<'EOF'
+#############################################################
+# Direwolf Configuration for APRS Reception
+# Raspberry Pi Carputer Project
+#############################################################
+
+# Audio device - we'll pipe audio from rtl_fm
+ADEVICE stdin null
+
+# Channel 0: APRS 1200 baud AFSK
+CHANNEL 0
+MYCALL N0CALL-10
+MODEM 1200
+
+# Reduce console spam
+QUIET
+
+# Enable KISS interface on TCP port 8003
+KISSPORT 8003
+
+# Enable AGW port on 8005 - as far as I know we don't use this, but default overlaps with :8000
+AGWPORT 8005
+
+# Log all received packets
+LOGDIR /var/log/carputer/aprs
+LOGFILE aprs-%Y%m%d.log
+
+# Receive all packets (no filtering)
+FILTER 0 1
+
+# Digipeater DISABLED (receive-only, no license needed)
+DIGIPEAT 0 0
+
+# Internet gateway DISABLED (receive-only)
+# Don't connect to APRS-IS network
+
+# Beaconing DISABLED (receive-only, no license needed)
+EOF
+
+info "Direwolf configuration created at $DIREWOLF_CONF."
+
+# Deploy APRS reception script
+APRS_SCRIPT="$APRS_DIR/start_aprs.sh"
+
+info "Creating APRS reception script..."
+cat > "$APRS_SCRIPT" <<'EOF'
+#!/bin/bash
+#############################################################
+# APRS Reception Pipeline
+# RTL-SDR → rtl_fm → Direwolf
+#############################################################
+
+# APRS frequency for North America: 144.390 MHz
+FREQ=144390000  # Hz
+
+# RTL-SDR device (usually 0)
+DEVICE=0
+
+# Sample rate (24000 Hz is good for APRS)
+SAMPLE_RATE=24000
+
+# Create log directory
+mkdir -p /var/log/carputer/aprs
+
+# Start pipeline
+echo "Starting APRS reception on 144.390 MHz..."
+
+# rtl_fm demodulates FM audio, pipes to Direwolf
+rtl_fm -f $FREQ -s $SAMPLE_RATE -g 49.6 -p 0 -d $DEVICE - | \
+    direwolf -c /opt/carputer/aprs/direwolf.conf -r $SAMPLE_RATE -D 1 -
+EOF
+
+chmod +x "$APRS_SCRIPT"
+info "APRS reception script created at $APRS_SCRIPT."
+echo ""
+
+# -----------------------------------------------------------------------------
+# Step 7 — Deploy APRS bridge to backend
+# -----------------------------------------------------------------------------
+info "Step 7: Deploying APRS bridge from embedded/aprs_bridge..."
+
+APRS_BRIDGE_DIR="$APRS_DIR/aprs_bridge"
+
+# Copy the APRS bridge module from the repo
+if [ -d "$DEPLOY_DIR/embedded/aprs_bridge" ]; then
+    if [ -d "$APRS_BRIDGE_DIR" ]; then
+        info "APRS bridge already exists at $APRS_BRIDGE_DIR."
+        confirm "Overwrite with latest from repo?" || { warn "Skipping APRS bridge update."; }
+    fi
+    cp -r "$DEPLOY_DIR/embedded/aprs_bridge" "$APRS_DIR/"
+    info "APRS bridge deployed from embedded/aprs_bridge."
+else
+    warn "embedded/aprs_bridge not found in repo — creating minimal bridge..."
+    mkdir -p "$APRS_BRIDGE_DIR"
+    cat > "$APRS_BRIDGE_DIR/bridge.py" <<'PYEOF'
+#!/usr/bin/env python3
+"""
+APRS Bridge - Connects Direwolf to FastAPI Backend
+Reads APRS packets from Direwolf KISS interface (TCP port 8003)
+Sends to backend API for storage in PostgreSQL
+"""
+
+import socket
+import json
+import time
+import logging
+import requests
+from datetime import datetime
+import os
+
+# Configure logging
+logging.basicConfig(
+    filename='/var/log/carputer/aprs-bridge.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+# Configuration from environment
+KISS_HOST = os.environ.get('KISS_HOST', 'localhost')
+KISS_PORT = int(os.environ.get('KISS_PORT', 8003))
+AGW_HOST  = os.environ.get('AGW_HOST', 'localhost')
+AGW_PORT  = int(os.environ.get('AGW_PORT', '8005')
+BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:8000/v1/aprs/ingest-raw')
+
+def parse_kiss_frame(frame):
+    """Parse KISS frame from Direwolf"""
+    try:
+        FEND = 0xC0
+        if frame[0] == FEND:
+            frame = frame[1:]
+        if frame[-1] == FEND:
+            frame = frame[:-1]
+        if frame[0] == 0x00:
+            frame = frame[1:]
+        
+        packet_str = frame.decode('latin-1', errors='ignore')
+        return packet_str
+    except Exception as e:
+        logging.error(f"Failed to parse KISS frame: {e}")
+        return None
+
+def parse_aprs_packet(packet_str):
+    """Parse APRS packet string"""
+    try:
+        if '>' not in packet_str or ':' not in packet_str:
+            return None
+        
+        callsign = packet_str.split('>')[0].strip()
+        data = packet_str.split(':', 1)[1] if ':' in packet_str else ''
+        
+        return {
+            'callsign': callsign,
+            'raw_packet': packet_str,
+            'timestamp': datetime.utcnow().isoformat(),
+            'data': data
+        }
+    except Exception as e:
+        logging.error(f"Failed to parse APRS packet: {e}")
+        return None
+
+def send_to_backend(packet_data):
+    """Send parsed APRS packet to backend API"""
+    try:
+        response = requests.post(
+            BACKEND_URL,
+            json=packet_data,
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            logging.info(f"Sent APRS packet from {packet_data.get('callsign', 'unknown')}")
+        else:
+            logging.warning(f"Backend returned {response.status_code}")
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Failed to send to backend: {e}")
+
+def main():
+    """Main APRS bridge loop"""
+    logging.info("Starting APRS bridge...")
+    
+    while True:
+        try:
+            logging.info(f"Connecting to Direwolf at {KISS_HOST}:{KISS_PORT}")
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((KISS_HOST, KISS_PORT))
+            logging.info("Connected to Direwolf KISS interface")
+            
+            buffer = b''
+            FEND = 0xC0
+            
+            while True:
+                data = sock.recv(4096)
+                if not data:
+                    logging.warning("KISS connection closed")
+                    break
+                
+                buffer += data
+                
+                while True:
+                    start = buffer.find(bytes([FEND]))
+                    if start == -1:
+                        break
+                    
+                    end = buffer.find(bytes([FEND]), start + 1)
+                    if end == -1:
+                        break
+                    
+                    frame = buffer[start:end+1]
+                    buffer = buffer[end+1:]
+                    
+                    packet_str = parse_kiss_frame(frame)
+                    if packet_str:
+                        packet_data = parse_aprs_packet(packet_str)
+                        if packet_data:
+                            send_to_backend(packet_data)
+            
+            sock.close()
+        except ConnectionRefusedError:
+            logging.error("Cannot connect to Direwolf - is it running?")
+            time.sleep(10)
+        except Exception as e:
+            logging.error(f"APRS bridge error: {e}")
+            time.sleep(5)
+
+if __name__ == '__main__':
+    main()
+PYEOF
+
+    cat > "$APRS_BRIDGE_DIR/__main__.py" <<'PYEOF'
+from .bridge import main
+if __name__ == '__main__':
+    main()
+PYEOF
+    cat > "$APRS_BRIDGE_DIR/__init__.py" <<'PYEOF'
+PYEOF
+    chmod +x "$APRS_BRIDGE_DIR/bridge.py"
+fi
+info "APRS bridge ready at $APRS_BRIDGE_DIR."
+echo ""
+
+# -----------------------------------------------------------------------------
+# Step 8 — Deploy systemd services for APRS
+# -----------------------------------------------------------------------------
+info "Step 8: Deploying APRS systemd services..."
+
+# APRS receiver service
+APRS_RECEIVER_SERVICE="/etc/systemd/system/aprs-receiver.service"
+
+sudo tee "$APRS_RECEIVER_SERVICE" > /dev/null <<EOF
+[Unit]
+Description=APRS Receiver (RTL-SDR + Direwolf)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=$CURRENT_USER
+Group=plugdev
+WorkingDirectory=$APRS_DIR
+ExecStartPre=/bin/sleep 5
+ExecStart=$APRS_DIR/start_aprs.sh
+Restart=on-failure
+RestartSec=10
+Nice=-5
+CPUQuota=50%
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aprs-receiver
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+info "APRS receiver service created at $APRS_RECEIVER_SERVICE."
+
+# APRS bridge service
+APRS_BRIDGE_SERVICE="/etc/systemd/system/aprs-bridge.service"
+
+sudo tee "$APRS_BRIDGE_SERVICE" > /dev/null <<EOF
+[Unit]
+Description=APRS Bridge to Backend
+After=aprs-receiver.service network.target
+Requires=aprs-receiver.service
+
+[Service]
+Type=simple
+User=$CURRENT_USER
+WorkingDirectory=$APRS_DIR
+Environment="KISS_HOST=localhost"
+Environment="KISS_PORT=8003"
+Environment="AGW_HOST=localhost"
+Environment="AGW_PORT=8005"
+Environment="BACKEND_URL=http://localhost:8000"
+ExecStart=/usr/bin/python3 -m aprs_bridge
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aprs-bridge
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+info "APRS bridge service created at $APRS_BRIDGE_SERVICE."
+
+# Reload systemd and enable services
+sudo systemctl daemon-reload
+
+if confirm "Enable APRS services to start on boot?"; then
+    sudo systemctl enable aprs-receiver
+    sudo systemctl enable aprs-bridge
+    info "APRS services enabled."
+    
+    if confirm "Start APRS services now?"; then
+        sudo systemctl start aprs-receiver
+        sudo systemctl start aprs-bridge
+        info "APRS services started."
+        info "Check status: sudo systemctl status aprs-receiver aprs-bridge"
+    fi
+fi
+echo ""
+
+# -----------------------------------------------------------------------------
+# Step 9 — Enable and start systemd services
+# -----------------------------------------------------------------------------
+info "Step 9: Enabling and starting systemd services..."
 
 # chrony — GPS time sync
 if systemctl is-enabled chrony &>/dev/null; then
@@ -569,7 +912,8 @@ echo ""
 echo "  GPS device    : /dev/ttyACM0"
 echo "  gpsd socket   : /var/run/gpsd.sock"
 echo "  RTL-SDR       : 144.390 MHz (APRS)"
-echo "  Direwolf      : Installed"
+echo "  Direwolf KISS : localhost:8003"
+echo "  Direwolf AGW  : localhost:8005"
 echo "  Repo          : $DEPLOY_DIR"
 echo ""
 echo "  Services enabled:"

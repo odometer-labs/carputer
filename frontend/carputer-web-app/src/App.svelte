@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { location } from 'svelte-spa-router';
-  import { preferences } from './services/preferences';
+  import { settingsPreferences } from './services/settings_preferences';
   import HomeMapPage from './pages/HomeMapPage.svelte';
   import SettingPreferencePage from './pages/SettingPreferencePage.svelte';
   import WifiPage from './pages/WifiPage.svelte';
@@ -15,7 +15,6 @@
     reportNonVitalError,
     reportVitalError
   } from './stores/errorStore';
-  import type { AppError } from './stores/errorStore';
 
   // this is a list of paths that want to have the HomeMapPage 
   // in the background.
@@ -26,9 +25,6 @@
   // Checks if current route needs an overlay
   // this is reactive, includes() function returns a true or false
   $: isOverlayRoute = overlayRoutes.includes($location);
-
-  let nextWarning: AppError | null = null;
-  $: nextWarning = $appErrorState.notifications[0] ?? null;
 
   function consoleArgsToPayload(args: unknown[]): unknown {
     if (args.length === 1) {
@@ -88,11 +84,11 @@
     window.location.reload();
   }
   
-  $: appBrightness = ($preferences.brightness ?? 100) / 100;
+  $: appBrightness = ($settingsPreferences.brightness ?? 100) / 100;
 </script>
 
 <main
-  class:night-mode={$preferences.nightMode}
+  class:night-mode={$settingsPreferences.nightMode}
   class="app-shell"
   style={`margin: 0; padding: 0; height: 100%; width: 100%; --app-brightness: ${appBrightness};`}
 >
@@ -129,11 +125,19 @@
     
   {/if}
 
-  {#if !$appErrorState.fatalError}
+  {#if !$appErrorState.fatalError && $appErrorState.notifications.length > 0}
     <div class="warning-popup-stack" aria-live="polite" aria-label="Application warnings">
-      {#if nextWarning}
-        <ErrorPopup error={nextWarning} onClose={dismissNonVitalError} />
-      {/if}
+      {#each $appErrorState.notifications as notification, i (notification.id)}
+        {@const depth = $appErrorState.notifications.length - 1 - i}
+        {#if depth < 3}
+          <div
+            class="popup-layer"
+            style="--depth: {depth}; z-index: {2500 - depth};"
+          >
+            <ErrorPopup error={notification} onClose={dismissNonVitalError} />
+          </div>
+        {/if}
+      {/each}
     </div>
   {/if}
 
@@ -154,17 +158,31 @@
 
   .warning-popup-stack {
     position: fixed;
-    top: 0.9rem;
+    bottom: 0.9rem;
     right: 0.9rem;
+    width: min(420px, calc(100vw - 2rem));
+    box-sizing: border-box;
     z-index: 2500;
-    display: flex;
-    flex-direction: column;
-    gap: 0.7rem;
-    align-items: flex-end;
+    display: grid;
     pointer-events: none;
   }
 
-  .warning-popup-stack :global(article) {
+  /* All layers sit in the same grid cell so they physically overlap */
+  .popup-layer {
+    grid-row: 1;
+    grid-column: 1;
+    width: 100%;
+    align-self: end;
+    pointer-events: none;
+    transform:
+      translateY(calc(var(--depth, 0) * -8px))
+      scale(calc(1 - var(--depth, 0) * 0.04));
+    transform-origin: bottom center;
+    opacity: calc(1 - var(--depth, 0) * 0.12);
+    transition: transform 0.25s ease, opacity 0.25s ease;
+  }
+
+  .popup-layer :global(article) {
     pointer-events: auto;
   }
 </style>

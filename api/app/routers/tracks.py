@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter
+from fastapi import APIRouter, Response, status
 from psycopg import Connection
 from ..logging.handlers import logger
 from ..dependencies import get_connection
@@ -36,10 +36,13 @@ async def list_track_mvt(
     """
     tile_data = track_client.list_tracks_mvt(z, x, y, mode, track_id, within_meters)
     if not tile_data or len(tile_data) == 0:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-        return {"Error": "Tile data not found"}
-
-    return { "content": tile_data.decode("utf-8") }
+    return Response(
+        content=tile_data,
+        media_type="application/vnd.mapbox-vector-tile",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @router.get("/tracks/{track_id}")
@@ -94,6 +97,29 @@ async def import_track_point(track_id: int, track_point: TrackPoint):
     """
 
     return track_client.import_track_point(track_id, track_point)
+
+
+@router.get("/tracks/beacon/stats")
+async def get_beacon_stats():
+    """
+    Returns smart beaconing statistics for the current tracking session.
+    
+    Includes: point count, last beacon time, last position, and last heading.
+    """
+    return track_client.get_beacon_stats()
+
+
+@router.get("/tracks/status")
+async def get_tracking_status():
+    """
+    Returns current tracking status.
+    
+    Includes whether tracking is active and beacon statistics.
+    """
+    return {
+        "tracking_active": track_client.is_tracking_active(),
+        "beacon_stats": track_client.get_beacon_stats()
+    }
 
 
 @router.post("/tracks/point")
