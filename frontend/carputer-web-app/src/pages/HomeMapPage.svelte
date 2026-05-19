@@ -1388,7 +1388,7 @@
   }
 
   .track-popup {
-    background: white;
+    background-color: rgb(188, 188, 188);
     padding: 20px;
     border-radius: 12px;
     width: 280px;
@@ -1421,14 +1421,19 @@
   .track-popup-buttons button {
     flex: content;
     padding: 10px;
-    border: none;
     border-radius: 8px;
+    font-size: 1.3rem;
+    -webkit-text-fill-color: black;
+    line-height: 1;
+    background-color: rgb(130, 130, 130);
+    border: 1px solid #ccc; 
     cursor: pointer;
-    background: rgb(188,188,188);
+    align-items: center;
+    justify-content: center;
+    outline: none;
   }
-
-  .track-popup-buttons button:hover {
-    background: rgb(225,225,225);
+  .track-popup-buttons button:active {
+    background-color: rgb(100, 100, 100);
   }
 
 </style>
