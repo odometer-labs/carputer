@@ -36,15 +36,14 @@ func RegisterHumaHandlers(api huma.API) {
 			Tags:        []string{"Position"},
 		}, handler.GetPositionHandler)
 
-	registerTracksHandlers(api)
-	registerAPRSHandlers(api)
+	registerTracksHandlers(api, v2Grp)
+	registerAPRSHandlers(api, v2Grp)
+	registerVersionHandlers(api, v2Grp)
 }
 
-func registerTracksHandlers(api huma.API) {
-	v2Grp := huma.NewGroup(api, API_VERSION)
-
+func registerTracksHandlers(api huma.API, grp *huma.Group) {
 	huma.Register(
-		v2Grp,
+		grp,
 		huma.Operation{
 			OperationID:   "create-track",
 			Method:        http.MethodPost,
@@ -56,7 +55,7 @@ func registerTracksHandlers(api huma.API) {
 		}, handler.CreateTrackHandler)
 
 	huma.Register(
-		v2Grp,
+		grp,
 		huma.Operation{
 			OperationID: "end-track",
 			Method:      http.MethodGet,
@@ -67,7 +66,7 @@ func registerTracksHandlers(api huma.API) {
 		}, handler.EndTrackHandler)
 
 	huma.Register(
-		v2Grp,
+		grp,
 		huma.Operation{
 			OperationID:   "add-track-point",
 			Method:        http.MethodPost,
@@ -79,7 +78,7 @@ func registerTracksHandlers(api huma.API) {
 		}, handler.AddTrackPointHandler)
 
 	huma.Register(
-		v2Grp,
+		grp,
 		huma.Operation{
 			OperationID: "list-tracks",
 			Method:      http.MethodGet,
@@ -90,7 +89,7 @@ func registerTracksHandlers(api huma.API) {
 		}, handler.ListTracksHandler)
 
 	huma.Register(
-		v2Grp,
+		grp,
 		huma.Operation{
 			OperationID: "get-track",
 			Method:      http.MethodGet,
@@ -101,7 +100,7 @@ func registerTracksHandlers(api huma.API) {
 		}, handler.GetTrackHandler)
 
 	huma.Register(
-		v2Grp,
+		grp,
 		huma.Operation{
 			OperationID: "update-track",
 			Method:      http.MethodPut,
@@ -112,7 +111,7 @@ func registerTracksHandlers(api huma.API) {
 		}, handler.UpdateTrackHandler)
 
 	huma.Register(
-		v2Grp,
+		grp,
 		huma.Operation{
 			OperationID: "delete-track",
 			Method:      http.MethodDelete,
@@ -123,7 +122,7 @@ func registerTracksHandlers(api huma.API) {
 		}, handler.DeleteTrackHandler)
 
 	huma.Register(
-		v2Grp,
+		grp,
 		huma.Operation{
 			OperationID: "list-tracks-mvt",
 			Method:      http.MethodPost,
@@ -134,7 +133,7 @@ func registerTracksHandlers(api huma.API) {
 		}, handler.ListTracksMVTHandler)
 
 	huma.Register(
-		v2Grp,
+		grp,
 		huma.Operation{
 			OperationID: "import-track",
 			Method:      http.MethodPost,
@@ -145,7 +144,7 @@ func registerTracksHandlers(api huma.API) {
 		}, handler.ImportTrackHandler)
 
 	huma.Register(
-		v2Grp,
+		grp,
 		huma.Operation{
 			OperationID:   "import-track-point",
 			Method:        http.MethodPost,
@@ -157,7 +156,7 @@ func registerTracksHandlers(api huma.API) {
 		}, handler.ImportTrackPointHandler)
 
 	huma.Register(
-		v2Grp,
+		grp,
 		huma.Operation{
 			OperationID: "check-new-road",
 			Method:      http.MethodGet,
@@ -168,11 +167,9 @@ func registerTracksHandlers(api huma.API) {
 		}, handler.CheckNewRoadHandler)
 }
 
-func registerAPRSHandlers(api huma.API) {
-	v2Grp := huma.NewGroup(api, API_VERSION)
-
+func registerAPRSHandlers(api huma.API, grp *huma.Group) {
 	huma.Register(
-		v2Grp,
+		grp,
 		huma.Operation{
 			OperationID: "ingest-aprs-packet",
 			Method:      http.MethodPost,
@@ -183,7 +180,7 @@ func registerAPRSHandlers(api huma.API) {
 		}, handler.IngestAPRSPacketHandler)
 
 	huma.Register(
-		v2Grp,
+		grp,
 		huma.Operation{
 			OperationID: "ingest-raw-aprs-packet",
 			Method:      http.MethodPost,
@@ -194,7 +191,7 @@ func registerAPRSHandlers(api huma.API) {
 		}, handler.IngestRawAPRSPacketHandler)
 
 	huma.Register(
-		v2Grp,
+		grp,
 		huma.Operation{
 			OperationID: "get-nearby-aprs-stations",
 			Method:      http.MethodPost,
@@ -205,7 +202,7 @@ func registerAPRSHandlers(api huma.API) {
 		}, handler.GetNearbyStationsHandler)
 
 	huma.Register(
-		v2Grp,
+		grp,
 		huma.Operation{
 			OperationID: "get-aprs-station",
 			Method:      http.MethodPost,
@@ -216,7 +213,7 @@ func registerAPRSHandlers(api huma.API) {
 		}, handler.GetNearbyStationsHandler)
 
 	huma.Register(
-		v2Grp,
+		grp,
 		huma.Operation{
 			OperationID: "get-aprs-station-history",
 			Method:      http.MethodPost,
@@ -227,7 +224,7 @@ func registerAPRSHandlers(api huma.API) {
 		}, handler.GetStationHistoryHandler)
 
 	huma.Register(
-		v2Grp,
+		grp,
 		huma.Operation{
 			OperationID: "clean-up-aprs-data",
 			Method:      http.MethodPost,
@@ -236,4 +233,39 @@ func registerAPRSHandlers(api huma.API) {
 			Description: "Clean up old APRS data. You can specify the time range.",
 			Tags:        []string{"APRS"},
 		}, handler.CleanupAPRSDataHandler)
+}
+
+func registerVersionHandlers(api huma.API, grp *huma.Group) {
+	huma.Register(
+		grp,
+		huma.Operation{
+			OperationID: "create-new-version",
+			Method:      http.MethodPost,
+			Path:        "/versioning",
+			Summary:     "Create New Version",
+			Description: "Create a new latest version. Used to keep track of system updates.",
+			Tags:        []string{"Versioning"},
+		}, handler.CreateNewVersionHandler)
+
+	huma.Register(
+		grp,
+		huma.Operation{
+			OperationID: "get-latest-version",
+			Method:      http.MethodGet,
+			Path:        "/versioning/latest",
+			Summary:     "Get Latest Version",
+			Description: "Retrive the latest version number of the carputer system.",
+			Tags:        []string{"Versioning"},
+		}, handler.GetLatestVersionHandler)
+
+	huma.Register(
+		grp,
+		huma.Operation{
+			OperationID: "get-version-history",
+			Method:      http.MethodGet,
+			Path:        "/versioning/history",
+			Summary:     "Get Version History",
+			Description: "Get a list of version history of the system.",
+			Tags:        []string{"Versioning"},
+		}, handler.GetVersionHistoryHandler)
 }
