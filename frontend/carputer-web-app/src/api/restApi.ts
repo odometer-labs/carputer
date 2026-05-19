@@ -14,6 +14,9 @@ import type {
   GPSData,
   SysHealthData,
   APRSStation,
+  ImportTrackResponse,
+  LineString,
+  UpdateTrackVal
 } from "./types";
 import { ENDPOINTS } from "../utils/constants";
 
@@ -64,14 +67,14 @@ export async function getTrack(trackId: number): Promise<Track> {
 // updates a specified track by id.
 export async function updateTrack(
   trackId: number,
-  track: Partial<Track>,
+  trackVal: UpdateTrackVal,
 ): Promise<UpdateTrackResponse> {
   const res = await fetch(`${ENDPOINTS.getTrack}/${trackId}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(track),
+    body: JSON.stringify(trackVal),
   });
 
   if (!res.ok) throw new Error("Failed to update a track");
@@ -94,10 +97,9 @@ export async function deleteTrack(
 
 // this usese the track id and a track point(latitude, longitude, speed, and heading)
 export async function addTrackPoint(
-  trackId: number,
-  point: TrackPoint,
+  point: TrackPoint
 ): Promise<AddTrackPointResponse> {
-  const res = await fetch(`${ENDPOINTS.addTrackPoint}/${trackId}`, {
+  const res = await fetch(`${ENDPOINTS.addTrackPoint}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -106,6 +108,24 @@ export async function addTrackPoint(
   });
 
   if (!res.ok) throw new Error("Failed to add track point");
+
+  return res.json();
+}
+
+// imports a full geojson track into backend
+export async function importTrack(geojson: LineString) : Promise<ImportTrackResponse> {
+  const res = await fetch(`${ENDPOINTS.addTrack}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(geojson),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Failed to import track: ${errorText}`);
+  }
 
   return res.json();
 }

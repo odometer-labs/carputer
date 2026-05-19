@@ -1,6 +1,12 @@
 import { writable, type Writable } from "svelte/store";
-import { startTrack, endTrack, listTracks, checkNewRoad } from "../api/restApi";
-import type { Track } from "../api/types";
+import { 
+  listTracks, 
+  checkNewRoad,
+  addTrackPoint,
+  importTrack,
+  updateTrack
+} from "../api/restApi";
+import type { Track, TrackPoint, LineString, UpdateTrackVal } from "../api/types"
 import { reportNonVitalError } from "./errorStore";
 
 export interface Tracks {
@@ -36,12 +42,13 @@ export class TrackStore {
   //A function that calls the rest api startTrack and changes values from this class
   async start() {
     try {
-      const res = await startTrack();
+      //TODO: uncomment this once we have the API add track point working
+      //const res = await startTrack();
 
       this.store.update((state) => ({
         ...state,
         isTracking: true,
-        trackId: res.create_track,
+        trackId: null, //TODO: change it to (trackId: res.create_track) once add track point works
       }));
     } catch (error) {
       reportNonVitalError(error, "trackStore.start", true);
@@ -52,7 +59,8 @@ export class TrackStore {
   // to false and trackId to null
   async end() {
     try {
-      await endTrack();
+      //TODO: uncomment this once we have the API add track point working
+      //await endTrack();
 
       this.store.update((state) => ({
         ...state,
@@ -61,6 +69,30 @@ export class TrackStore {
       }));
     } catch (error) {
       reportNonVitalError(error, "trackStore.end", true);
+    }
+  }
+
+  // adds a track point to the currently active track
+  async addPoint(point: TrackPoint) {
+    try {
+      let currentTrackId: number | null = null;
+
+      //get the current trackID from the store
+      this.store.update(state => {
+        currentTrackId = state.trackId;
+        return state;
+      });
+
+      //check if there is currently an active track
+      if (currentTrackId == null) {
+        throw new Error("No active tracks currently")
+      }
+
+      // send the point to backend
+      await addTrackPoint(point);
+
+    } catch (error) {
+      console.error(error)
     }
   }
 
@@ -88,12 +120,26 @@ export class TrackStore {
     }));
   }
 
-  //this might be deleted later, for now it helps showcase tracks on the map
-  setTrack(tracks: Track[]) {
-    this.store.update((state) => ({
-      ...state,
-      tracks,
-    }));
+  //exports a whole track to backend.
+  async addTrack(line: LineString) : Promise<number | null> {
+    try {
+      const res = await importTrack(line);
+
+      return res.track_id;
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
+  }
+
+  //this is used to update the track in the database
+  async updateTrack(id: number, trackVal: UpdateTrackVal) {
+    try {
+      await updateTrack(id, trackVal);
+
+    } catch (error) {
+      console.error(error);
+    }
   }
 
   //checks if the current road has been driven on in the past
