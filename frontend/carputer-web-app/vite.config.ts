@@ -9,6 +9,8 @@ export default defineConfig({
       "/wifi": {
         target: "http://localhost:8888",
         changeOrigin: true,
+      },
+      
       // Proxy REST API calls to the backend (strips the /api prefix)
       "/api": {
         target: "http://localhost:8000",
