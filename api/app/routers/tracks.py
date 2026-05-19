@@ -1,8 +1,5 @@
-from datetime import datetime, timezone
 from fastapi import APIRouter, Response, status
-from psycopg import Connection
 from ..logging.handlers import logger
-from ..dependencies import get_connection
 from app.models.track import Track
 from app.models.track_point import TrackPoint
 from app.clients.track_client import track_client

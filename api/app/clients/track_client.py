@@ -1,6 +1,6 @@
 from psycopg import Connection, Cursor
 from datetime import datetime, timezone
-from ..dependencies import get_connection
+from ..dependencies import dbConnectionPool
 from ..models.track import Track
 from ..models.track_point import TrackPoint
 from ..beaconing import SmartBeacon, BeaconConfig
@@ -19,7 +19,7 @@ class TrackClient:
         return {"latitude": self.latitude, "longitude": self.longitude}
 
     def list_track(self):
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute("""SELECT * from gps.view_all_tracks();""")
                 conn.commit()
@@ -35,7 +35,7 @@ class TrackClient:
         track_id: int = None,
         within_meters: int = 500,
     ):
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     "SELECT gps.get_tracks_mvt(%s, %s, %s, %s, %s, %s);",
@@ -58,14 +58,14 @@ class TrackClient:
                 return tile_data if tile_data is not None else b""
 
     def get_track(self, track_id: int):
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute("""SELECT * FROM gps.retrieve_track(%s);""", (track_id,))
                 result = cursor.fetchall()
                 return result
 
     def update_track(self, track_id: int, track: Track):
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """CALL gps.update_track(%s, %s, %s, %s)""",
@@ -75,7 +75,7 @@ class TrackClient:
                 return {"result": "success"}
 
     def delete_track(self, track_id: int):
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute("""CALL gps.delete_track(%s)""", (track_id,))
                 conn.commit()
@@ -85,7 +85,7 @@ class TrackClient:
         # Reset smart beacon state for new track
         self._smart_beacon.reset()
         
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
 
                 final_name = name.strip() if name and name.strip() else None
@@ -98,14 +98,14 @@ class TrackClient:
                 return track_id
 
     def end_track(self):
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute("""CALL gps.end_track();""")
                 conn.commit()
                 return {"result": "success"}
 
     def add_track_point(self, track_point: TrackPoint):
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """CALL gps.add_track_point(%s, %s, %s, %s, %s)""",
@@ -121,7 +121,7 @@ class TrackClient:
                 return {"result": "success"}
 
     def import_track_point(self, track_id: int, track_point: TrackPoint):
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """CALL gps.add_track_point(%s, %s, %s, %s, %s, %s)""",
@@ -138,7 +138,7 @@ class TrackClient:
                 return {"result": "success"}
 
     def get_latest_track_point(self):
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute("""SELECT * FROM gps.get_latest_track_point()""")
                 conn.commit()
@@ -146,7 +146,7 @@ class TrackClient:
                 return result
 
     def check_new_road(self):
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute("SELECT gps.is_new_road();")
                 conn.commit()
@@ -158,7 +158,7 @@ class TrackClient:
         if isinstance(geojson_data, dict):
             geojson_data = json.dumps(geojson_data)
 
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     "SELECT gps.import_track(%s) as track_id;", (geojson_data,)
@@ -167,7 +167,7 @@ class TrackClient:
                 return {"track_id": result["track_id"], "status": "imported"}
     
     def get_track_lines_near_location(self, p_within_meters: float):
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute("""SELECT * FROM gps.get_track_lines_near_location(%s);""", (p_within_meters,))
                 result = cursor.fetchall()
@@ -175,7 +175,7 @@ class TrackClient:
 
     def is_tracking_active(self) -> bool:
         """Check if there is an active track (end_time IS NULL)."""
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     "SELECT EXISTS(SELECT 1 FROM gps.tracks WHERE end_time IS NULL);"
