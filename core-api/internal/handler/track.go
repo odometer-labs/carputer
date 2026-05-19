@@ -17,7 +17,6 @@ func GetPositionHandler(ctx context.Context, request *v2.GetPositionRequest) (*v
 	if err != nil {
 		return nil, err
 	}
-
 	return resp, err
 }
 

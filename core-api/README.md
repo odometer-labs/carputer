@@ -59,6 +59,17 @@ The top 5 fastest frameworks (fiber, chi, aah, gin, and kami) are all written in
 | `POST` | `/v2/aprs/station/history` | Get an APRS station's history |
 | `POST` | `/v2/aprs/station/cleanup` | Clean up old APRS data by time range |
 
+---
+
+### Versioning 
+| Method | Path | Summary |
+|--------|------|---------|
+| `POST` | `/versioning` | Create New Version |
+| `GET`  | `/versioning/latest` | Get Latest Version |
+| `GET`  | `/versioning/history` | Get Version History |
+
+---
+
 
 ## Requirements 
 - Go version 1.26+
