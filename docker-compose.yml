@@ -190,6 +190,8 @@ services:
   wifi-manager:
     build: ./infrastructure/wifi-manager/
     restart: always
+    networks:
+      - carputer
     ports:
       - '9001:9001'
     volumes:
