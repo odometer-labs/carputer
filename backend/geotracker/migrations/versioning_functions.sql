@@ -47,6 +47,6 @@ $$
 BEGIN 
     RETURN QUERY
     SELECT v.id, v.version_number, v.git_hash, v.release_date 
-    FROM gps.version;
+    FROM gps.version as v;
 END;
 $$;
