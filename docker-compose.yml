@@ -7,8 +7,10 @@
 #
 # Services:
 #   - Frontend:  http://localhost:3000  (Svelte app)
-#   - API:       http://localhost:8000  (FastAPI)
-#   - API Docs:  http://localhost:8000/docs
+#   - Core API:       http://localhost:8888  (Go + Huma)
+#   - Core API Docs:  http://localhost:8888/docs
+#   - Legacy API:       http://localhost:8000  (Python + FastAPI)
+#   - Legacy API Docs:  http://localhost:8000/docs
 #   - Adminer:   http://localhost:8080  (DB admin)
 #
 # For more information, see backend/README.md
@@ -16,7 +18,36 @@
 
 services:
   # ---------------------------------------------------------------------------
-  # API Service (FastAPI)
+  # Core API Service (Go + Huma)
+  # ---------------------------------------------------------------------------
+  core-api:
+    build:
+      context: ./core-api
+      dockerfile: deployments/docker/Dockerfile
+    ports:
+      - '8888:8888'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      DB_HOST: db
+      DB_PORT: 5432
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/v2/root"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: always
+    networks:
+      - carputer
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+
+  # ---------------------------------------------------------------------------
+  # Legacy API Service (Python + FastAPI)
   # ---------------------------------------------------------------------------
   api:
     build: ./api
@@ -30,17 +61,18 @@ services:
       DB_PORT: 5432
     restart: always
     healthcheck:
-      test: curl --fail http://localhost:8000/health || exit 1
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     networks:
       - carputer
     depends_on:
       db:
         condition: service_healthy
         restart: true
-  
+
   # ---------------------------------------------------------------------------
   # GPSD Service (GPSD Python Microservice)
   # ---------------------------------------------------------------------------
@@ -71,6 +103,8 @@ services:
       - carputer
     depends_on:
       - api
+      - wifi-manager
+      - core-api
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
       interval: 30s
@@ -135,24 +169,39 @@ services:
 
 
   # ---------------------------------------------------------------------------
+  # System Health Service (Go)
+  # ---------------------------------------------------------------------------
+  sys-health:
+    build: ./sys-health
+    restart: always
+    ports:
+      - "8090:8090"
+    networks:
+      - carputer
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8090/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
   # Wifi Management Service
   # ---------------------------------------------------------------------------
   wifi-manager:
     build: ./infrastructure/wifi-manager/
     restart: always
     ports:
-        - "${WIFI_MANAGER_PORT}:80"
-    environment:
-        - WIFI_MANAGER_PORT=${WIFI_MANAGER_PORT:-8888}
-        - WIFI_INTERFACE=${WIFI_INTERFACE:-wlan0}
+      - '9001:9001'
     volumes:
         - "/var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket"
+    networks:
+      - carputer
     healthcheck:
-        test: ["CMD", "curl", "-f", "http://localhost:80/wifi/version"]
-        interval: 60s
-        timeout: 5s
+        test: ["CMD", "curl", "-f", "http://localhost:9001/wifi/version"]
+        interval: 360s
+        timeout: 10s
         retries: 3
-        start_period: 30s
+        start_period: 60s
 
 volumes:
   postgres_data:
