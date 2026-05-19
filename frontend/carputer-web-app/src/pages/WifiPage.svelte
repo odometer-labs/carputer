@@ -7,9 +7,6 @@
   import wifi1 from "../assets/icons/wifi-signal1-bold.svg";
   import wifi2 from "../assets/icons/wifi-signal2-bold.svg";
   import wifi3 from "../assets/icons/wifi-signal3-bold.svg";
-  import lock_icon from "../assets/icons/lock-bold.svg";
-  import eye_bold from "../assets/icons/eye-bold.svg";
-  import eye_closed from "../assets/icons/eye-closed-bold.svg";
 
   const wifiIcons = [wifi0, wifi1, wifi2, wifi3];
 
@@ -96,9 +93,6 @@
       return a.ssid.localeCompare(b.ssid);
     });
   $: selectedAccessPoint = visibleOtherNetworks.find((ap) => ap.ssid === selectedSsid) ?? null;
-  $: selectedNetworkRequiresPassword = selectedAccessPoint
-    ? isAccessPointSecured(selectedAccessPoint)
-    : false;
 
   onMount(async () => {
     hasMounted = true;
@@ -288,24 +282,10 @@
     }
   }
 
-  function isAccessPointSecured(accessPoint) {
-    const security = String(accessPoint?.security ?? "").trim().toLowerCase();
-    if (!security) {
-      return false;
-    }
-    return !["none", "open", "--"].includes(security);
-  }
 
-  function formatSecurity(accessPoint) {
-    const security = String(accessPoint?.security ?? "").trim();
-    if (!security || security.toLowerCase() === "open" || security.toLowerCase() === "none") {
-      return "Open network";
-    }
-    return `Secured (${security})`;
-  }
 
   function selectNetwork(accessPoint) {
-    if (busySsid || !isAccessPointSecured(accessPoint)) {
+    if (busySsid) {
       return;
     }
 
@@ -339,8 +319,7 @@
       if (existing?.uuid) {
         await activateWifiConnection(existing.uuid);
       } else {
-        const requiresPassword = isAccessPointSecured(accessPoint);
-        if (requiresPassword && !selectedPassword.trim()) {
+        if (!selectedPassword.trim()) {
           errorMessage = `Password required for ${accessPoint.ssid}.`;
           return;
         }
@@ -349,7 +328,7 @@
           hotspot: false,
           connection_id: accessPoint.ssid,
           ssid: accessPoint.ssid,
-          ...(requiresPassword ? { password: selectedPassword.trim() } : {}),
+          password: selectedPassword.trim(),
         });
       }
 
@@ -451,18 +430,14 @@
       {#each visibleOtherNetworks as accessPoint}
         <div class="network-card {selectedSsid === accessPoint.ssid ? 'selected' : ''}">
           <button
-            class="network-row {!isAccessPointSecured(accessPoint) ? 'open-network' : ''}"
+            class="network-row"
             type="button"
             onclick={() => selectNetwork(accessPoint)}
-            disabled={!$wifiStore.isWifiOn || !!busySsid || !isAccessPointSecured(accessPoint)}
+            disabled={!$wifiStore.isWifiOn || !!busySsid}
             aria-expanded={selectedSsid === accessPoint.ssid}
           >
             <span class="network-ssid">{accessPoint.ssid}</span>
             <span class="network-signal">
-              {#if isAccessPointSecured(accessPoint)}
-                <!-- <i class="iconoir-lock network-lock-icon" aria-hidden="true"></i> -->
-                 <img src={lock_icon} alt="Locked" style="width:22px; height:22px;" />
-              {/if}
               {#if busySsid === accessPoint.ssid}
                 Connecting...
               {:else}
@@ -473,26 +448,22 @@
 
           {#if selectedSsid === accessPoint.ssid}
             <div class="network-details">
-              <p class="network-security">{formatSecurity(accessPoint)}</p>
-
-              {#if selectedNetworkRequiresPassword}
-                <div class="password-input-wrap">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    bind:value={selectedPassword}
-                    placeholder="Enter Wi-Fi password"
-                    disabled={!!busySsid}
-                  />
-                  <button
-                    class="password-toggle-btn"
-                    type="button"
-                    onclick={() => (showPassword = !showPassword)}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    <img src={showPassword ? eye_closed : eye_bold} alt={showPassword ? 'Hide' : 'Show'} style="width:22px; height:22px;" />
-                  </button>
-                </div>
-              {/if}
+              <div class="password-input-wrap">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  bind:value={selectedPassword}
+                  placeholder="Enter Wi-Fi password"
+                  disabled={!!busySsid}
+                />
+                <button
+                  class="password-toggle-btn"
+                  type="button"
+                  onclick={() => (showPassword = !showPassword)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  <i class={showPassword ? 'iconoir-eye-closed' : 'iconoir-eye'} aria-hidden="true"></i>
+                </button>
+              </div>
 
               <button
                 class="connect-btn"
@@ -551,6 +522,7 @@
     align-items: center;
     color: #111;
     text-align: left;
+    outline: none;
   }
 
   .network-card {
@@ -567,19 +539,14 @@
   .network-details {
     padding: 0 14px 12px;
     display: grid;
-    gap: 8px;
-  }
-
-  .network-security {
-    margin: 0;
-    color: #1d1d1d;
-    font-size: 0.85rem;
+    gap: 15px;
   }
 
   .password-input-wrap {
     position: relative;
     font-size: 0.85rem;
     color: #222;
+    top: 8px;
   }
 
   .password-input-wrap input {
@@ -636,11 +603,6 @@
 
   .network-row:disabled {
     opacity: 0.6;
-  }
-
-  .open-network {
-    opacity: 0.45;
-    cursor: not-allowed;
   }
 
   .active-network {

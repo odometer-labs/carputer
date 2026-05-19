@@ -61,11 +61,9 @@ class WifiAccessPoint(BaseModel):
 
     :param ssid: broadcast name of wifi network
     :param signal_strength: quality of signal (0-100)
-    :param security: summary of network security used by the frontend to distinguish open vs secured networks
     """
     ssid: str
     signal_strength: int
-    security: str
 
 
 class StaticNetworkSettings(BaseModel):
@@ -247,31 +245,6 @@ def _get_access_point_paths(device: str) -> list[str]:
     return NetworkDeviceWireless(device).get_all_access_points()
 
 
-def _get_access_point_security(ap: AccessPoint) -> str:
-    """Gets the security type of an access point.
-
-    Args:
-        ap: AccessPoint object to check security for
-
-    Returns:
-        A string representing the security type of the access point
-
-    The frontend only needs to distinguish open networks from ones that require
-    credentials. Prefer the explicit WPA/RSN flags when available, and fall back
-    to a generic secured label when NetworkManager marks the AP as protected.
-    """
-    wpa_flags = getattr(ap, "wpa_flags", 0) or 0
-    rsn_flags = getattr(ap, "rsn_flags", 0) or 0
-    if wpa_flags or rsn_flags:
-        return "wpa-psk"
-
-    flags = getattr(ap, "flags", 0) or 0
-    if flags:
-        return "secured"
-
-    return "none"
-
-
 def get_access_points(interface: str) -> list[WifiAccessPoint]:
     """Scan for and then list the current visible access points, does not show hidden networks..
 
@@ -292,9 +265,7 @@ def get_access_points(interface: str) -> list[WifiAccessPoint]:
 
         aps.append(
             WifiAccessPoint(
-                ssid=ap.ssid.decode(),
-                signal_strength=ap.strength,
-                security=_get_access_point_security(ap),
+                ssid=ap.ssid.decode(), signal_strength=ap.strength
             )
         )
     return aps
