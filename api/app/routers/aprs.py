@@ -4,7 +4,7 @@ APRS API Router
 Endpoints for APRS data ingestion and retrieval.
 """
 
-from typing import List, Optional
+from typing import List
 from fastapi import APIRouter, HTTPException, Query
 from ..logging.handlers import logger
 from ..models.aprs import (

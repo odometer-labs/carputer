@@ -6,7 +6,7 @@ Handles all APRS-related database operations.
 
 import logging
 from typing import List, Optional, Dict, Any
-from ..dependencies import get_connection
+from ..dependencies import dbConnectionPool
 from ..models.aprs import (
     APRSPacketIn,
     APRSStation,
@@ -30,7 +30,7 @@ class APRSClient:
         Returns:
             Dict with callsign and status
         """
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """
@@ -73,7 +73,7 @@ class APRSClient:
             parsed_ok: Whether parsing succeeded
             parse_error: Error message if parsing failed
         """
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     "CALL gps.log_aprs_raw_packet(%s, %s, %s);",
@@ -94,7 +94,7 @@ class APRSClient:
         Returns:
             List of nearby APRS stations
         """
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     "SELECT * FROM gps.get_aprs_stations_near(%s);",
@@ -132,7 +132,7 @@ class APRSClient:
         Returns:
             List of historical positions
         """
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     "SELECT * FROM gps.get_aprs_station_history(%s, %s);",
@@ -160,7 +160,7 @@ class APRSClient:
         Returns:
             APRS statistics
         """
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute("SELECT * FROM gps.get_aprs_stats();")
                 row = cursor.fetchone()
@@ -192,7 +192,7 @@ class APRSClient:
             history_days: Delete history older than this
             raw_days: Delete raw packets older than this
         """
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     "CALL gps.cleanup_aprs_data(%s, %s);",
