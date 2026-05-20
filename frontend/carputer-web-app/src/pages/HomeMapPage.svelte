@@ -25,10 +25,11 @@
   import { trackStore } from '../stores/trackStore'
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
   import SystemIndicators from "../assets/components/SystemIndicators.svelte";
+  import NameTrackPopUp from '../assets/components/NameTrackPopUp.svelte';
+  import APRSPopUp from '../assets/components/APRSPopUp.svelte';
   import type { Track, LineString as ApiLineString } from '../api/types';
 
   let mapElement: HTMLDivElement | undefined;
-  let aprsPopupElement: HTMLDivElement | null = null;
   let map: Map | undefined;
   let locationStatus: string = 'Getting location...';
 
@@ -223,31 +224,11 @@
 
   // run once when the Svelte component is mounted
   onMount(() => {
-    const onDocumentPointerDown = (event: PointerEvent): void => {
-      if (!aprsPopupData) {
-        return;
-      }
-
-      const target = event.target;
-      if (!(target instanceof Node)) {
-        return;
-      }
-
-      if (aprsPopupElement?.contains(target)) {
-        return;
-      }
-
-      aprsPopupData = null;
-    };
-
-    document.addEventListener('pointerdown', onDocumentPointerDown);
-
     try {
       loadMap();             // create map instance and hook events
       startGPSTracking();    // begin receiving backend GPS data
     } catch (error: unknown) {
       reportVitalError(error, 'HomeMapPage.onMount');
-
     }
 
     // Load APRS stations from backend and refresh periodically.
@@ -289,8 +270,6 @@
         clearInterval(aprsRefreshInterval);
         aprsRefreshInterval = null;
       }
-
-      document.removeEventListener('pointerdown', onDocumentPointerDown);
     };
   });
 
@@ -861,25 +840,15 @@
 
   
   // for handling the naming of a track with the popup
-  async function confirmTrackName(): Promise<void> {
+  // Called by NameTrackPopUp confirm event
+  async function confirmTrackNameFromPopup(name: string): Promise<void> {
     if (!pendingFinalize) return;
-
-    //if no name is given then defualt
-    if (!trackName || trackName.trim() === "") {
-      trackName =  `Track ${new Date().toLocaleString()}`;
-    }
-
-  
-    // send track to backend
+    trackName = name;
     await finalizeTrack(trackName);
-
-    //update trackstore to end
     await trackStore.end();
-    currentTrackSource?.clear(); // remove the current user track (red line)
+    currentTrackSource?.clear();
     currentTrackFeature = undefined;
-
-    await trackStore.loadTracks(); //this way when the new track was made it will
-                                  // be added to the track list from backend.
+    await trackStore.loadTracks();
     showTrackNamePopup = false;
     pendingFinalize = false;
   }
@@ -1109,44 +1078,19 @@
     <div bind:this={mapElement} class="map" style="width: 100%; height: 100%;"></div>
   </div>
 
-  <!-- APRS station popup: shown when the user clicks a single APRS point -->
-  {#if aprsPopupData !== null}
-    <div class="aprs-popup" bind:this={aprsPopupElement}>
-      <div class="aprs-popup-header">
-        <span class="aprs-popup-callsign">{aprsPopupData.callsign}</span>
-        <!-- svelte-ignore a11y_consider_explicit_label -->
-        <button class="aprs-popup-close" on:click={() => aprsPopupData = null}>
-          <i class="iconoir-xmark" style="font-size: 16px;"></i>
-        </button>
-      </div>
-      {#if aprsPopupData.comment}
-        <p class="aprs-popup-comment">{aprsPopupData.comment}</p>
-      {:else}
-        <p class="aprs-popup-comment aprs-popup-no-comment">No message</p>
-      {/if}
-    </div>
-  {/if}
+  <APRSPopUp
+    show={aprsPopupData !== null}
+    aprsData={aprsPopupData}
+    on:close={() => aprsPopupData = null}
+  />
 
-  <!-- end track popup / naming track: shown when users wishes to end tracking -->
-  {#if showTrackNamePopup}
-    <div class="track-popup-overlay">
-      <div class="track-popup">
-        <h3>Name Your Track</h3>
-
-        <input
-          type="text"
-          bind:value={trackName}
-          placeholder="Enter track name..."
-          maxlength="50"
-        />
-
-        <div class="track-popup-buttons">
-          <button on:click={confirmTrackName}>Save</button>
-          <button on:click={cancelTrackName}>Cancel</button>
-        </div>
-      </div>
-    </div>
-  {/if}
+  <NameTrackPopUp
+    show={showTrackNamePopup}
+    pendingFinalize={pendingFinalize}
+    initialTrackName={trackName}
+    on:confirm={e => confirmTrackNameFromPopup(e.detail.trackName)}
+    on:cancel={cancelTrackName}
+  />
 </main>
 
 
@@ -1318,122 +1262,6 @@
 
   :global(.ol-zoom) {
     font-size: 1.1em;
-  }
-
-  .aprs-popup {
-    position: absolute;
-    bottom: 100px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1001;
-    background-color: rgba(255, 255, 255, 0.96);
-    border: 1px solid #bbb;
-    border-radius: 8px;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
-    padding: 10px 14px;
-    min-width: 180px;
-    max-width: 280px;
-    pointer-events: all;
-  }
-
-  .aprs-popup-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 6px;
-  }
-
-  .aprs-popup-callsign {
-    font-weight: bold;
-    font-size: 15px;
-    color: #222;
-  }
-
-  .aprs-popup-close {
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 2px 4px;
-    color: #555;
-    display: flex;
-    align-items: center;
-    outline: none;
-  }
-
-  .aprs-popup-close:hover {
-    color: #000;
-  }
-
-  .aprs-popup-comment {
-    margin: 0;
-    font-size: 13px;
-    color: #444;
-    word-break: break-word;
-  }
-
-  .aprs-popup-no-comment {
-    color: #999;
-    font-style: italic;
-  }
-
-
-  .track-popup-overlay {
-    position: absolute;
-    inset: 0;
-    background: rgba(188, 188, 188, 0.45);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 2000;
-  }
-
-  .track-popup {
-    background-color: rgb(188, 188, 188);
-    padding: 20px;
-    border-radius: 12px;
-    width: 280px;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.3);
-    text-align: center;
-  }
-
-  .track-popup h3 {
-    margin-top: 0;
-    margin-bottom: 12px;
-    color: black;
-  }
-
-  .track-popup input {
-    width: 100%;
-    padding: 10px;
-    margin-bottom: 14px;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    font-size: 14px;
-    box-sizing: border-box;
-  }
-
-  .track-popup-buttons {
-    display: flex;
-    justify-content: space-between;
-    gap: 10px;
-  }
-
-  .track-popup-buttons button {
-    flex: content;
-    padding: 10px;
-    border-radius: 8px;
-    font-size: 1.3rem;
-    -webkit-text-fill-color: black;
-    line-height: 1;
-    background-color: rgb(130, 130, 130);
-    border: 1px solid #ccc; 
-    cursor: pointer;
-    align-items: center;
-    justify-content: center;
-    outline: none;
-  }
-  .track-popup-buttons button:active {
-    background-color: rgb(100, 100, 100);
   }
 
 </style>
