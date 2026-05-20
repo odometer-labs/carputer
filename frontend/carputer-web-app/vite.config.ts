@@ -7,11 +7,17 @@ export default defineConfig({
   server: {
     proxy: {
       "/wifi": {
+        target: "http://localhost:9001",
+        changeOrigin: true,
+      },
+
+      // Proxy v2 API calls to core-api (Go service)
+      "/v2": {
         target: "http://localhost:8888",
         changeOrigin: true,
       },
-      
-      // Proxy REST API calls to the backend (strips the /api prefix)
+
+      // Proxy v1 API calls to legacy Python backend (strips the /api prefix)
       "/api": {
         target: "http://localhost:8000",
         changeOrigin: true,
