@@ -964,9 +964,6 @@
 
     aprsSource?.clear();
 
-    // TODO: remove this test point before production
-    addAprsPoint(45.5231, -122.6765, 'W7TEST-9', 'Test station - Portland, OR');
-
     try {
       let stations: APRSStation[] = await getAprsStations();
 
