@@ -962,6 +962,11 @@
       return;
     }
 
+    aprsSource?.clear();
+
+    // TODO: remove this test point before production
+    addAprsPoint(45.5231, -122.6765, 'W7TEST-9', 'Test station - Portland, OR');
+
     try {
       let stations: APRSStation[] = await getAprsStations();
 
@@ -970,7 +975,6 @@
         stations = await getAprsStations(500000);
       }
 
-      aprsSource?.clear();
       stations.forEach((station) => {
         addAprsPoint(station.latitude, station.longitude, station.callsign, station.last_comment ?? null);
       });
