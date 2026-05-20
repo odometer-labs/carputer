@@ -22,9 +22,9 @@
   import type { GPSData, SysHealthData } from '../api/types';
   import { reportNonVitalError } from '../stores/errorStore';
   import 'ol/ol.css';
+  import { trackStore } from '../stores/trackStore';
 
   // TODO: These values should be fetched from the backend, currently they are just placeholders for display.
-  let num_tracks: number = 0;
   let patch_level: string = "0.1.2";
   let storage_amount_dowloaded: number = 2;
   let storage_amount_left: number = 1;
@@ -202,14 +202,6 @@
   // re-render grid whenever select mode changes
   $: if (map && gridSource) updateGrid();
 
-  async function loadDashboardInfo(): Promise<void> {
-    try {
-      const tracks = await listTracks();
-      num_tracks = Array.isArray(tracks) ? tracks.length : 0;
-    } catch (error: unknown) {
-      reportNonVitalError(error, 'SystemDataPage.listTracks');
-    }
-  }
 
   function startGPSTracking(): void {
     getCurrentPosition()
@@ -294,7 +286,6 @@
     map.getView().on('change:resolution', scheduleGridUpdate);
     map.on('moveend', scheduleGridUpdate);
 
-    loadDashboardInfo();
     startGPSTracking();
 
     stopSysHealthSubscription = subscribeToSysHealth(
@@ -479,7 +470,7 @@
       <div class="info-box">
         <p class="info-row">
           <span class="info-label">Number of GPS Tracks:</span>
-          <span class="info-value">{num_tracks}</span>
+          <span class="info-value">{$trackStore.tracks.length}</span>
         </p>
       </div>
       
