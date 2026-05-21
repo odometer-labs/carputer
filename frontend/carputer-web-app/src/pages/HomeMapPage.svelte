@@ -965,14 +965,14 @@
     aprsSource?.clear();
 
     try {
-      let stations: APRSStation[] = await getAprsStations();
+      let stations: APRSStation[] | null = await getAprsStations();
 
       // If nothing is nearby, widen the search radius to show available APRS traffic.
-      if (stations.length === 0) {
+      if (!stations || stations.length === 0) {
         stations = await getAprsStations(500000);
       }
 
-      stations.forEach((station) => {
+      stations?.forEach((station) => {
         addAprsPoint(station.latitude, station.longitude, station.callsign, station.last_comment ?? null);
       });
     } catch (error: unknown) {
