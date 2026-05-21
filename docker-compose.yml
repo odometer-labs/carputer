@@ -205,6 +205,9 @@ services:
         retries: 3
         start_period: 60s
 
+include:
+  - ./map-vector-tiles/docker-compose.yml
+
 volumes:
   postgres_data:
 

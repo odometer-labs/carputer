@@ -284,7 +284,9 @@
       target: mapElement,
       layers: [
         new TileLayer({
-          source: new OSM() // OpenStreetMap tiles
+          source: new OSM({
+            url: "http://localhost:8070/tile/{z}/{x}/{y}.png"
+          }) // OpenStreetMap tiles
         })
       ],
       view: new View({
