@@ -2,7 +2,7 @@ version: '3'
 
 services:
   map:
-    image: overv/openstreetmap-tile-server
+    build: .
     volumes:
       - osm-data:/data/database/
     ports:
