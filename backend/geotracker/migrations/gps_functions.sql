@@ -136,15 +136,21 @@ VALUES (
     );
 END;
 $$;
--- Marks the current active track as finished
+-- Marks the current active track as finished and creates the track line
+-- or deletes the track if no points
 CREATE OR REPLACE PROCEDURE gps.end_track() LANGUAGE plpgsql AS $$
 DECLARE end_track_id BIGINT;
-BEGIN -- Find the currently active track
+BEGIN --  Find the currently active track
 SELECT track_id INTO end_track_id
 FROM gps.tracks
-WHERE end_time IS NULL;
--- If no active track is found, do nothing
-IF end_track_id IS NOT NULL THEN
+WHERE end_time IS NULL
+LIMIT 1;
+-- If an active track is found, proceed
+IF end_track_id IS NOT NULL THEN IF EXISTS (
+    SELECT 1 -- Only generate a line if the track actually has recorded points
+    FROM gps.track_points
+    WHERE track_id = end_track_id
+) THEN
 INSERT INTO gps.track_lines (track_id, geom, geom_wm)
 SELECT end_track_id,
     ST_MakeLine(
@@ -163,6 +169,10 @@ WHERE track_id = end_track_id;
 UPDATE gps.tracks
 SET end_time = NOW()
 WHERE track_id = end_track_id;
+ELSE
+DELETE FROM gps.tracks
+WHERE track_id = end_track_id;
+END IF;
 END IF;
 END;
 $$;

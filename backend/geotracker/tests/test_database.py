@@ -14,7 +14,7 @@ def test_db_connection(db_conn):
         assert result["connected"] == 1
 
 
-def test_create_and_end_track(db_conn):
+def test_create_and_end_track(db_conn, sample_track_points):
     """
     Test track creation and end and auto generated name.
     """
@@ -25,7 +25,12 @@ def test_create_and_end_track(db_conn):
 
         cur.execute("SELECT count(*) from gps.tracks as id;")
         assert cur.fetchone()["count"] == 1
+        point = sample_track_points[0]
 
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+            (track_id, point["timestamp"], point["lat"], point["lon"], 0.0, 0.0),
+        )
         cur.execute("CALL gps.end_track();")
 
         cur.execute("SELECT end_time FROM gps.tracks WHERE track_id = %s;", (track_id,))
@@ -45,7 +50,27 @@ def test_create_and_end_track(db_conn):
         assert len(generated_name) == 22
 
 
-def test_track_name(db_conn):
+def test_create_and_end_track_no_points(db_conn):
+    with db_conn.cursor() as cur:
+        cur.execute("SELECT gps.create_track() as id;")
+        track_id = cur.fetchone()["id"]
+        assert track_id is not None
+
+        cur.execute("SELECT count(*) from gps.tracks as id;")
+        assert cur.fetchone()["count"] == 1
+
+        cur.execute("CALL gps.end_track();")
+
+        cur.execute("SELECT COUNT(*) FROM gps.tracks WHERE track_id = %s;", (track_id,))
+        result = cur.fetchone()
+        assert result["count"] == 0
+
+        cur.execute("SELECT COUNT(*) FROM gps.tracks as id;")
+        result = cur.fetchone()
+        assert result["count"] == 0
+
+
+def test_track_name(db_conn, sample_track_points):
     """
     Test track creation with name parameter.
     """
@@ -57,6 +82,13 @@ def test_track_name(db_conn):
 
         cur.execute("SELECT count(*) from gps.tracks as id;")
         assert cur.fetchone()["count"] == 1
+
+        point = sample_track_points[0]
+
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+            (track_id, point["timestamp"], point["lat"], point["lon"], 0.0, 0.0),
+        )
 
         cur.execute("CALL gps.end_track();")
 
@@ -191,6 +223,16 @@ def test_track_line_creation(db_conn, sample_track_points):
 
         result = cur.fetchone()
 
+        assert result["total"] == 0
+
+        cur.execute("CALL gps.end_track();")
+        cur.execute(
+            "SELECT count(*) as total FROM gps.track_lines WHERE track_id = %s;",
+            (track_id,),
+        )
+
+        result = cur.fetchone()
+
         assert result["total"] == 1
 
 
@@ -210,22 +252,11 @@ def test_line_creation_one_point(db_conn, sample_track_points):
             "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
             (track_id, p["timestamp"], p["lat"], p["lon"], 10.0, 0.0),
         )
-
-        # Line should not exist
+        cur.execute("CALL gps.end_track();")
         cur.execute(
             "SELECT count(*) FROM gps.track_lines WHERE track_id = %s;", (track_id,)
         )
-        assert cur.fetchone()["count"] == 0
 
-        cur.execute(
-            "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
-            (track_id, p2["timestamp"], p2["lat"], p2["lon"], 10.0, 0.0),
-        )
-
-        # With two points, line should be created
-        cur.execute(
-            "SELECT count(*) FROM gps.track_lines WHERE track_id = %s;", (track_id,)
-        )
         assert cur.fetchone()["count"] == 1
 
 
@@ -385,6 +416,8 @@ def test_delete_track_cascades(db_conn, sample_track_points):
             (track_id, p2["timestamp"], p2["lat"], p2["lon"], 10.0, 0.0),
         )
 
+        cur.execute("CALL gps.end_track();")  # creates track line
+
         cur.execute(
             "SELECT count(*) FROM gps.track_points WHERE track_id = %s;", (track_id,)
         )
@@ -418,20 +451,21 @@ def test_delete_track_cascades_multiple_lines(db_conn, sample_track_points):
         # Create track and add points (which triggers line creation)
         cur.execute("SELECT gps.create_track() as id;")
         track_id = cur.fetchone()["id"]
-
-        for p in sample_track_points:
-            cur.execute(
-                "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
-                (track_id, p["timestamp"], p["lat"], p["lon"], 10.0, 0.0),
-            )
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+            (track_id, "2024-01-01 10:00:00+00", 0, 0, 10.0, 0.0),
+        )
 
         cur.execute(
             "SELECT count(*) FROM gps.track_points WHERE track_id = %s;", (track_id,)
         )
-        assert cur.fetchone()["count"] == 4  # 4 TRACK POINTS
+        assert cur.fetchone()["count"] == 1  # 1 TRACK POINT
+
+        cur.execute("CALL gps.end_track();")
         cur.execute(
             "SELECT count(*) FROM gps.track_lines WHERE track_id = %s;", (track_id,)
         )
+
         assert cur.fetchone()["count"] == 1  # 1 TRACK LINE
 
         # Act: End track
@@ -451,6 +485,8 @@ def test_delete_track_cascades_multiple_lines(db_conn, sample_track_points):
             "SELECT count(*) FROM gps.track_points WHERE track_id = %s;", (delete_id,)
         )
         assert cur.fetchone()["count"] == 4  # 4 TRACK POINTS
+        cur.execute("CALL gps.end_track();")
+
         cur.execute(
             "SELECT count(*) FROM gps.track_lines WHERE track_id = %s;", (delete_id,)
         )
@@ -479,7 +515,7 @@ def test_delete_track_cascades_multiple_lines(db_conn, sample_track_points):
         cur.execute(
             "SELECT count(*) FROM gps.track_points WHERE track_id = %s;", (track_id,)
         )
-        assert cur.fetchone()["count"] == 4
+        assert cur.fetchone()["count"] == 1
         cur.execute(
             "SELECT count(*) FROM gps.track_lines WHERE track_id = %s;", (track_id,)
         )
@@ -1048,7 +1084,7 @@ def test_geometry_structure_after_validation(db_conn, sample_track_points):
                 "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
                 (track_id, p["timestamp"], p["lat"], p["lon"], 10.0, 0.0),
             )
-
+        cur.execute("CALL gps.end_track();")
         cur.execute("CALL gps.validate_geometry(%s)", (track_id,))
 
         cur.execute(
@@ -1300,6 +1336,9 @@ def test_(db_conn):
             """,
             all_points,
         )
+
+        cur.execute("CALL gps.end_gpx_track(%s);", (id,))
+
         cur.execute("SELECT COUNT(*) from gps.track_points as count;")
         result = cur.fetchone()
         assert result["count"] == 4
@@ -1311,3 +1350,53 @@ def test_(db_conn):
         cur.execute("SELECT * from gps.track_points;")
         result = cur.fetchall()
         assert result[0]["time_stamp"] is None
+
+
+def test_(db_conn):
+    """
+    Verify spatial filtering: find nearby tracks but ignore the current one as
+    a mapbox vector tile.
+    """
+    with db_conn.cursor() as cur:
+
+        # Create "Old Track A" (Nearby)
+        # Location: roughly (0,0)
+
+        cur.execute("SELECT gps.create_track() as id;")
+        id = cur.fetchone()["id"]
+        all_points = [
+            (id, 0, 0, 1),
+            (id, 0, 0, 2),
+            (id, 0, 0, 3),
+            (id, 0, 0, 4),
+        ]
+        cur.executemany(
+            """
+            INSERT INTO gps.track_points (track_id, geom, speed_mps) 
+            VALUES (%s, ST_SetSRID(ST_MakePoint(%s, %s), 4326), %s)
+            """,
+            all_points,
+        )
+
+        cur.execute("CALL gps.end_gpx_track(%s);", (id,))
+
+        cur.execute("SELECT COUNT(*) from gps.track_points as count;")
+        result = cur.fetchone()
+        assert result["count"] == 4
+
+        cur.execute("SELECT COUNT(*) from gps.track_lines as count;")
+        result = cur.fetchone()
+        assert result["count"] == 1
+
+        cur.execute("SELECT * from gps.track_points;")
+        result = cur.fetchall()
+        assert result[0]["time_stamp"] is None
+        assert result[0]["speed_mps"] == 1
+        assert result[1]["speed_mps"] == 2
+        assert result[2]["speed_mps"] == 3
+        assert result[3]["speed_mps"] == 4
+
+        cur.execute("SELECT * from gps.track_points ORDER by point_id ASC LIMIT 1;")
+        result = cur.fetchall()
+        assert result[0]["time_stamp"] is None
+        assert result[0]["speed_mps"] == 1
