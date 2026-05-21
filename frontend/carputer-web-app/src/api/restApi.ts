@@ -418,7 +418,7 @@ function getPositionWebSocketFallbackUrl(primaryUrl: string): string | null {
 // fetches APRS stations near the current GPS position.
 export async function getAprsStations(
   radiusM: number = 50000,
-): Promise<APRSStation[]> {
+): Promise<APRSStation[] | null> {
   const primaryBase = getCoreApiHttpBaseUrl();
   const primaryUrl = new URL(ENDPOINTS.getAprsStations, primaryBase);
 
@@ -434,7 +434,7 @@ export async function getAprsStations(
       throw new Error(`Primary request failed: ${primaryRes.status}`);
     }
     const data = await primaryRes.json();
-    return data.aprs_stations ?? [];
+    return data.aprs_stations ?? null;
   } catch {
     const fallbackBase = getApiHttpFallbackBaseUrl(primaryBase);
     if (!fallbackBase) {
@@ -447,6 +447,6 @@ export async function getAprsStations(
       throw new Error("Failed to fetch APRS stations");
     }
     const data = await fallbackRes.json();
-    return data.aprs_stations ?? [];
+    return data.aprs_stations ?? null;
   }
 }
