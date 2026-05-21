@@ -181,7 +181,6 @@ class TrackClient:
                 all_points = [
                     (
                         track_id,
-                        point.time or datetime.now(timezone.utc),
                         point.longitude,
                         point.latitude,
                     )
@@ -192,7 +191,7 @@ class TrackClient:
                 if all_points:
                     cursor.executemany(
                         """
-                        INSERT INTO gps.track_points (track_id, time_stamp, geom) 
+                        INSERT INTO gps.track_points (track_id, geom) 
                         VALUES (%s, %s, ST_SetSRID(ST_MakePoint(%s, %s), 4326))
                         """,
                         all_points,
