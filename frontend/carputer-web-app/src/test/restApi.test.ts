@@ -21,24 +21,23 @@ describe("restApi", () => {
     global.fetch = vi.fn(() =>
       Promise.resolve({
         ok: true,
-        json: async () => ({ create_track: 123 }),
+        json: async () => ({ id: 123 }),
       } as Response),
     ) as typeof fetch;
 
     const res = await startTrack();
-    expect(res.create_track).toBe(123);
+    expect(res.id).toBe(123);
   });
 
   it("endTrack returns correct data", async () => {
     global.fetch = vi.fn(() =>
       Promise.resolve({
         ok: true,
-        json: async () => ({ result: "success" }),
+        json: async () => ({}),
       } as Response),
     ) as typeof fetch;
 
-    const res = await endTrack();
-    expect(res.result).toBe("success");
+    await endTrack(); // v2 returns empty body, just confirm it resolves
   });
 
   it("startTrack throws on bad response", async () => {
@@ -53,10 +52,12 @@ describe("restApi", () => {
     global.fetch = vi.fn(() =>
       Promise.resolve({
         ok: true,
-        json: async () => [
-          { track_id: 1, geom: {}, start_time: "", end_time: "" },
-          { track_id: 2, geom: {}, start_time: "", end_time: "" },
-        ],
+        json: async () => ({
+          tracks: [
+            { track_id: 1, geom: {}, start_time: "", end_time: "" },
+            { track_id: 2, geom: {}, start_time: "", end_time: "" },
+          ],
+        }),
       } as Response),
     ) as typeof fetch;
 
@@ -88,48 +89,42 @@ describe("restApi", () => {
     global.fetch = vi.fn(() =>
       Promise.resolve({
         ok: true,
-        json: async () => ({ result: "success" }),
+        json: async () => ({}),
       } as Response),
     ) as typeof fetch;
 
-    const res = await updateTrack(1, {
+    await updateTrack(1, {
       start_time: "2002",
       end_time: "2026-01-01",
-      track_name: "non"
+      track_name: "non",
     });
-
-    expect(res.result).toBe("success");
   });
 
   it("deleteTrack returns success response", async () => {
     global.fetch = vi.fn(() =>
       Promise.resolve({
         ok: true,
-        json: async () => ({ result: "success" }),
+        json: async () => ({}),
       } as Response),
     ) as typeof fetch;
 
-    const res = await deleteTrack(1);
-
-    expect(res.result).toBe("success");
+    await deleteTrack(1);
   });
 
   it("addTrackPoint sends point correctly", async () => {
     global.fetch = vi.fn(() =>
       Promise.resolve({
         ok: true,
-        json: async () => ({ result: "success" }),
+        json: async () => ({}),
       } as Response),
     ) as typeof fetch;
 
-    const res = await addTrackPoint({
+    await addTrackPoint({
       latitude: 1,
       longitude: 2,
       speed: 30,
       heading: 90,
     });
-
-    expect(res.result).toBe("success");
   });
 
   it("getLatestTrackPoint returns latest point", async () => {

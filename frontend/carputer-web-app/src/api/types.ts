@@ -3,32 +3,23 @@
 */
 
 export interface StartTrackResponse {
-  create_track: number;
+  id: number;
 }
 
-export interface EndTrackResponse {
-  result: string;
-}
+export type EndTrackResponse = Record<string, never>;
 
-export interface UpdateTrackResponse {
-  result: string;
-}
+export type UpdateTrackResponse = Record<string, never>;
 
-export interface DeleteTrackResponse {
-  result: string;
-}
+export type DeleteTrackResponse = Record<string, never>;
 
-export interface AddTrackPointResponse {
-  result: string;
-}
+export type AddTrackPointResponse = Record<string, never>;
 
 export interface CheckNewRoadResponse {
   is_new_road: boolean;
 }
 
 export interface ImportTrackResponse {
-  track_id: number;
-  status: string;
+  id: number;
 }
 
 export interface LineString {
@@ -39,6 +30,7 @@ export interface LineString {
 export interface Track {
   track_id: number;
   geom: LineString;
+  geom_wm: LineString | null;
   start_time: string; //ISO format
   end_time: string | null; //ISO format, also it can be null incase it is the current track.
   track_name: string | null;
