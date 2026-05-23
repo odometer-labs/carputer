@@ -76,8 +76,6 @@ The top 5 fastest frameworks (fiber, chi, aah, gin, and kami) are all written in
 | `POST` | `/travel/history` | Create Travel History |
 | `GET`  | `/travel/history` | List Travel History |
 
----
-
 
 ## Requirements 
 - Go version 1.26+
