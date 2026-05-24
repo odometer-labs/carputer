@@ -1,12 +1,17 @@
 import { writable, type Writable } from "svelte/store";
-import { 
-  listTracks, 
+import {
+  listTracks,
   checkNewRoad,
   addTrackPoint,
   importTrack,
-  updateTrack
+  updateTrack,
 } from "../api/restApi";
-import type { Track, TrackPoint, LineString, UpdateTrackVal } from "../api/types"
+import type {
+  Track,
+  TrackPoint,
+  LineString,
+  UpdateTrackVal,
+} from "../api/types";
 import { reportNonVitalError } from "./errorStore";
 
 export interface Tracks {
@@ -48,7 +53,7 @@ export class TrackStore {
       this.store.update((state) => ({
         ...state,
         isTracking: true,
-        trackId: null, //TODO: change it to (trackId: res.create_track) once add track point works
+        trackId: null, //TODO: change it to (trackId: res.id) once add track point works
       }));
     } catch (error) {
       reportNonVitalError(error, "trackStore.start", true);
@@ -78,19 +83,18 @@ export class TrackStore {
       let currentTrackId: number | null = null;
 
       //get the current trackID from the store
-      this.store.update(state => {
+      this.store.update((state) => {
         currentTrackId = state.trackId;
         return state;
       });
 
       //check if there is currently an active track
       if (currentTrackId == null) {
-        throw new Error("No active tracks currently")
+        throw new Error("No active tracks currently");
       }
 
       // send the point to backend
       await addTrackPoint(point);
-
     } catch (error) {
       reportNonVitalError(error, "trackStore.addPoint");
     }
@@ -121,11 +125,11 @@ export class TrackStore {
   }
 
   //exports a whole track to backend.
-  async addTrack(line: LineString) : Promise<number | null> {
+  async addTrack(line: LineString): Promise<number | null> {
     try {
       const res = await importTrack(line);
 
-      return res.track_id;
+      return res.id;
     } catch (error) {
       reportNonVitalError(error, "trackStore.addTrack");
       return null;
@@ -136,7 +140,6 @@ export class TrackStore {
   async updateTrack(id: number, trackVal: UpdateTrackVal) {
     try {
       await updateTrack(id, trackVal);
-
     } catch (error) {
       reportNonVitalError(error, "trackStore.updateTrack");
     }

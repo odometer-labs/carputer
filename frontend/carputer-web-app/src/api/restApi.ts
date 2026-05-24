@@ -16,7 +16,7 @@ import type {
   APRSStation,
   ImportTrackResponse,
   LineString,
-  UpdateTrackVal
+  UpdateTrackVal,
 } from "./types";
 import { ENDPOINTS } from "../utils/constants";
 
@@ -50,7 +50,8 @@ export async function listTracks(): Promise<Track[]> {
 
   if (!res.ok) throw new Error("Failed to fetch all tracks");
 
-  return res.json();
+  const data = await res.json();
+  return data.tracks ?? [];
 }
 
 // fetches a specific track, could be used if the user is looking for a specific track
@@ -97,7 +98,7 @@ export async function deleteTrack(
 
 // this usese the track id and a track point(latitude, longitude, speed, and heading)
 export async function addTrackPoint(
-  point: TrackPoint
+  point: TrackPoint,
 ): Promise<AddTrackPointResponse> {
   const res = await fetch(`${ENDPOINTS.addTrackPoint}`, {
     method: "POST",
@@ -113,13 +114,15 @@ export async function addTrackPoint(
 }
 
 // imports a full geojson track into backend
-export async function importTrack(geojson: LineString) : Promise<ImportTrackResponse> {
+export async function importTrack(
+  geojson: LineString,
+): Promise<ImportTrackResponse> {
   const res = await fetch(`${ENDPOINTS.addTrack}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(geojson),
+    body: JSON.stringify({ geojson_data: JSON.stringify(geojson) }),
   });
 
   if (!res.ok) {
@@ -155,7 +158,23 @@ export async function getCurrentPosition(): Promise<GPSData> {
   return fetchJsonWithFallback<GPSData>(
     ENDPOINTS.getCurrentPosition,
     "Failed to fetch current GPS position",
+    undefined,
+    getCoreApiHttpBaseUrl,
   );
+}
+
+function getCoreApiHttpBaseUrl(): string {
+  const env = import.meta.env as Record<string, string | undefined>;
+  if (env.VITE_CORE_API_HTTP_URL) {
+    return env.VITE_CORE_API_HTTP_URL;
+  }
+
+  // In Docker (:3000) and Vite dev (:5173), target the core-api directly.
+  if (window.location.port === "3000" || window.location.port === "5173") {
+    return `${window.location.protocol}//${window.location.hostname}:8888`;
+  }
+
+  return window.location.origin;
 }
 
 function getApiHttpBaseUrl(): string {
@@ -185,8 +204,9 @@ async function fetchJsonWithFallback<T>(
   endpoint: string,
   errorMessage: string,
   searchParams?: Record<string, string>,
+  getBaseUrl: () => string = getApiHttpBaseUrl,
 ): Promise<T> {
-  const primaryBase = getApiHttpBaseUrl();
+  const primaryBase = getBaseUrl();
   const primaryUrl = new URL(endpoint, primaryBase);
   if (searchParams) {
     Object.entries(searchParams).forEach(([key, value]) => {
@@ -332,7 +352,8 @@ export function subscribeToSysHealth(
       const data = JSON.parse(event.data) as SysHealthData;
       onMessage(data);
     } catch (error: unknown) {
-      if (onError) onError(`Failed to parse sys-health payload: ${String(error)}`);
+      if (onError)
+        onError(`Failed to parse sys-health payload: ${String(error)}`);
     }
   };
 
@@ -397,10 +418,35 @@ function getPositionWebSocketFallbackUrl(primaryUrl: string): string | null {
 // fetches APRS stations near the current GPS position.
 export async function getAprsStations(
   radiusM: number = 50000,
-): Promise<APRSStation[]> {
-  return fetchJsonWithFallback<APRSStation[]>(
-    ENDPOINTS.getAprsStations,
-    "Failed to fetch APRS stations",
-    { radius_m: String(radiusM) },
-  );
+): Promise<APRSStation[] | null> {
+  const primaryBase = getCoreApiHttpBaseUrl();
+  const primaryUrl = new URL(ENDPOINTS.getAprsStations, primaryBase);
+
+  const fetchOptions: RequestInit = {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ meters: radiusM }),
+  };
+
+  try {
+    const primaryRes = await fetch(primaryUrl.toString(), fetchOptions);
+    if (!primaryRes.ok) {
+      throw new Error(`Primary request failed: ${primaryRes.status}`);
+    }
+    const data = await primaryRes.json();
+    return data.aprs_stations ?? null;
+  } catch {
+    const fallbackBase = getApiHttpFallbackBaseUrl(primaryBase);
+    if (!fallbackBase) {
+      throw new Error("Failed to fetch APRS stations");
+    }
+
+    const fallbackUrl = new URL(ENDPOINTS.getAprsStations, fallbackBase);
+    const fallbackRes = await fetch(fallbackUrl.toString(), fetchOptions);
+    if (!fallbackRes.ok) {
+      throw new Error("Failed to fetch APRS stations");
+    }
+    const data = await fallbackRes.json();
+    return data.aprs_stations ?? null;
+  }
 }

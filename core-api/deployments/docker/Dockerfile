@@ -16,4 +16,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /core-api ./cmd/app/main.go
 
 USER appuser
 
+ENV PORT=8888
+EXPOSE 8888
+
 CMD ["/core-api"]

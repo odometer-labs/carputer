@@ -181,7 +181,7 @@ class TrackClient:
                     "SELECT EXISTS(SELECT 1 FROM gps.tracks WHERE end_time IS NULL);"
                 )
                 result = cursor.fetchone()
-                return result[0] if result else False
+                return result if result else False
 
     def process_gps_update(
         self,
