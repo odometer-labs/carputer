@@ -36,12 +36,13 @@ func RegisterHumaHandlers(api huma.API) {
 			Tags:        []string{"Position"},
 		}, handler.GetPositionHandler)
 
-	registerTracksHandlers(api, v2Grp)
-	registerAPRSHandlers(api, v2Grp)
-	registerVersionHandlers(api, v2Grp)
+	registerTracksHandlers(v2Grp)
+	registerAPRSHandlers(v2Grp)
+	registerVersionHandlers(v2Grp)
+	registerTravelHistoryHandlers(v2Grp)
 }
 
-func registerTracksHandlers(api huma.API, grp *huma.Group) {
+func registerTracksHandlers(grp *huma.Group) {
 	huma.Register(
 		grp,
 		huma.Operation{
@@ -167,7 +168,7 @@ func registerTracksHandlers(api huma.API, grp *huma.Group) {
 		}, handler.CheckNewRoadHandler)
 }
 
-func registerAPRSHandlers(api huma.API, grp *huma.Group) {
+func registerAPRSHandlers(grp *huma.Group) {
 	huma.Register(
 		grp,
 		huma.Operation{
@@ -235,7 +236,7 @@ func registerAPRSHandlers(api huma.API, grp *huma.Group) {
 		}, handler.CleanupAPRSDataHandler)
 }
 
-func registerVersionHandlers(api huma.API, grp *huma.Group) {
+func registerVersionHandlers(grp *huma.Group) {
 	huma.Register(
 		grp,
 		huma.Operation{
@@ -268,4 +269,28 @@ func registerVersionHandlers(api huma.API, grp *huma.Group) {
 			Description: "Get a list of version history of the system.",
 			Tags:        []string{"Versioning"},
 		}, handler.GetVersionHistoryHandler)
+}
+
+func registerTravelHistoryHandlers(grp *huma.Group) {
+	huma.Register(
+		grp,
+		huma.Operation{
+			OperationID: "create-travel-history",
+			Method:      http.MethodPost,
+			Path:        "/travel/history",
+			Summary:     "Create Travel History",
+			Description: "Record a travel to be displayed later on the map of all the roads you went to.",
+			Tags:        []string{"Travel History"},
+		}, handler.CreateTravelHistoryHandler)
+
+	huma.Register(
+		grp,
+		huma.Operation{
+			OperationID: "list-travel-history",
+			Method:      http.MethodGet,
+			Path:        "/travel/history",
+			Summary:     "List Travel History",
+			Description: "Get a list of travel history.",
+			Tags:        []string{"Travel History"},
+		}, handler.ListTravelHistoryHandler)
 }

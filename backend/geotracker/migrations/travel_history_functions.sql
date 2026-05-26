@@ -1,4 +1,4 @@
-CREATE OR REPLACE PROCEDURE gps.add_travel_history(
+CREATE OR REPLACE PROCEDURE gps.create_travel_history(
     p_min_x DOUBLE PRECISION,
     p_max_x DOUBLE PRECISION,
     p_min_y DOUBLE PRECISION,
