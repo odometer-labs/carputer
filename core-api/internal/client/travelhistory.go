@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	v2 "github.com/odometer-labs/carputer/core-api/api/rest/v2"
 )
@@ -33,12 +32,10 @@ func (t TravelHistory) CreateTravelHistory(ctx context.Context, request *v2.Crea
 
 func (t TravelHistory) ListTravelHistory(ctx context.Context, request *v2.ListTravelHistoryRequest) (*v2.ListTravelHistoryResponse, error) {
 	rows, err := t.Pool.Query(ctx, "select * from gps.list_travel_history();")
-	if err == pgx.ErrNoRows {
-		return nil, huma.Error404NotFound("No rows for list_travel_history()", err)
-	}
 	if err != nil {
 		return nil, huma.Error500InternalServerError("Unable to query list_travel_history()", err)
 	}
+	defer rows.Close()
 
 	resp := v2.ListTravelHistoryResponse{}
 	for rows.Next() {
@@ -57,6 +54,10 @@ func (t TravelHistory) ListTravelHistory(ctx context.Context, request *v2.ListTr
 		}
 
 		resp.Body.TravelHistory = append(resp.Body.TravelHistory, travelHistory)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, huma.Error500InternalServerError("Error reading travel history rows", err)
 	}
 
 	return &resp, nil

@@ -1,7 +1,7 @@
 package v2
 
 type TravelHistoryResponse struct {
-	ID uint64 `json:"id"`
+	ID int64 `json:"id"`
 	TravelHistory
 }
 

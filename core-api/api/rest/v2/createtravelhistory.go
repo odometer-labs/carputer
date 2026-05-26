@@ -1,7 +1,7 @@
 package v2
 
 type CreateTravelHistoryRequest struct {
-	Body TravelHistory
+	Body CreateTravelHistoryBody
 }
 
 type CreateTravelHistoryResponse struct {
