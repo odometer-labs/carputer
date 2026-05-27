@@ -19,3 +19,7 @@ func CreateRegionHandler(ctx context.Context, request *v2.CreateRegionRequest) (
 func ListRegionHandler(ctx context.Context, request *v2.ListRegionsRequest) (*v2.ListRegionsResponse, error) {
 	return regionClient.ListRegions(ctx, request)
 }
+
+func DeleteRegionHandler(ctx context.Context, request *v2.DeleteRegionRequest) (*v2.DeleteRegionResponse, error) {
+	return regionClient.DeleteRegion(ctx, request)
+}

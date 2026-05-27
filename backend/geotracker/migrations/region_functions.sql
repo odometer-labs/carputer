@@ -31,3 +31,13 @@ BEGIN
     ORDER BY r.id DESC;
 END;
 $$;
+
+CREATE OR REPLACE PROCEDURE gps.delete_region(
+    p_id BIGINT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    DELETE FROM gps.region WHERE id = p_id;
+END;
+$$;

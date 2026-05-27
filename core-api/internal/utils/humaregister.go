@@ -318,4 +318,15 @@ func registerRegionHandlers(grp *huma.Group) {
 			Description: "List all regions the user has created. Retrives the list in descending order, with the latest created region on top.",
 			Tags:        []string{"Region"},
 		}, handler.ListRegionHandler)
+
+	huma.Register(
+		grp,
+		huma.Operation{
+			OperationID: "delete-regions",
+			Method:      http.MethodDelete,
+			Path:        "/region",
+			Summary:     "Delete Region",
+			Description: "Delete a region, specified by the id.",
+			Tags:        []string{"Region"},
+		}, handler.DeleteRegionHandler)
 }

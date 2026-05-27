@@ -39,11 +39,10 @@ func (r Region) ListRegions(ctx context.Context, request *v2.ListRegionsRequest)
 
 	resp := v2.ListRegionsResponse{}
 	for rows.Next() {
-		var id uint64
-		region := v2.Region{}
+		region := v2.RegionDataModel{}
 
 		err := rows.Scan(
-			&id,
+			&region.Id,
 			&region.MinX,
 			&region.MaxX,
 			&region.MinY,
@@ -57,5 +56,19 @@ func (r Region) ListRegions(ctx context.Context, request *v2.ListRegionsRequest)
 		resp.Body.Regions = append(resp.Body.Regions, region)
 	}
 
+	return &resp, nil
+}
+
+func (r Region) DeleteRegion(ctx context.Context, request *v2.DeleteRegionRequest) (*v2.DeleteRegionResponse, error) {
+	_, err := r.Pool.Exec(
+		ctx,
+		"call gps.delete_region($1);",
+		request.Body.Id,
+	)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("unable to call gps.delete_region()", err)
+	}
+
+	resp := v2.DeleteRegionResponse{}
 	return &resp, nil
 }
