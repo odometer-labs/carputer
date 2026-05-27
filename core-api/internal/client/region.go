@@ -39,9 +39,11 @@ func (r Region) ListRegions(ctx context.Context, request *v2.ListRegionsRequest)
 
 	resp := v2.ListRegionsResponse{}
 	for rows.Next() {
+		var id uint64
 		region := v2.Region{}
 
 		err := rows.Scan(
+			&id,
 			&region.MinX,
 			&region.MaxX,
 			&region.MinY,
