@@ -526,6 +526,8 @@
   <!-- this contains both the information of the system and import/export button-->
   <div class="seperate-vert">
 
+    <div class="system-info-scroll">
+
     <!-- this is the information of the system -->
     <div class="seperate-hori">
       <div class="info-box">
@@ -662,6 +664,8 @@
       </div>
     {/if}
 
+    </div>
+
     <!-- divider -->
     <div class="divider"></div>
 
@@ -791,9 +795,22 @@
     background-color: var(--secondary-color);
     width: 100%;
     flex: 1;
+    min-height: 0;
     border-width: 2px;
     border-color: rgb(255, 255, 255);
     border-style: solid;
+    overflow: hidden;
+  }
+
+  .system-info-scroll {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 2px;
   }
 
   .seperate-hori {
