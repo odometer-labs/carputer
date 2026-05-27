@@ -291,7 +291,7 @@ func registerTravelHistoryHandlers(grp *huma.Group) {
 			Method:      http.MethodGet,
 			Path:        "/travel/history",
 			Summary:     "List Travel History",
-			Description: "Get a list of travel history.",
+			Description: "Get a list of travel history. The list is retrieved in descending order, with the latest travel on top.",
 			Tags:        []string{"Travel History"},
 		}, handler.ListTravelHistoryHandler)
 }
@@ -315,7 +315,7 @@ func registerRegionHandlers(grp *huma.Group) {
 			Method:      http.MethodGet,
 			Path:        "/region",
 			Summary:     "List Regions",
-			Description: "List all regions the user has created.",
+			Description: "List all regions the user has created. Retrives the list in descending order, with the latest created region on top.",
 			Tags:        []string{"Region"},
 		}, handler.ListRegionHandler)
 }
