@@ -38,7 +38,6 @@ npm run dev
 ## App Routes
 
 - `/` - Home page
-- `/Logs` - Logs page
 - `/Tracks` - Tracks page
 - `/ManageData` - Manage data page
 
@@ -52,5 +51,3 @@ npm run dev
 
 - Routing is handled in `src/App.svelte`.
 - Navigation helpers are in `src/utils/navigation.ts`.
-- The Logs page currently displays hardcoded sample log data.
-- It does not currently fetch a device log file such as `/device-logs/carputer-system.log`, so no Raspberry Pi web-server log-file exposure is required for the current implementation.
