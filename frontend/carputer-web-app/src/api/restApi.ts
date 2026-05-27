@@ -17,6 +17,7 @@ import type {
   ImportTrackResponse,
   LineString,
   UpdateTrackVal,
+  LatestVersionResponse,
 } from "./types";
 import { ENDPOINTS } from "../utils/constants";
 
@@ -449,4 +450,17 @@ export async function getAprsStations(
     const data = await fallbackRes.json();
     return data.aprs_stations ?? null;
   }
+}
+
+
+//gets the current version/patch level of the application
+export async function getLatestVersion(): Promise<LatestVersionResponse> {
+  const version = await fetchJsonWithFallback<LatestVersionResponse>(
+    ENDPOINTS.getLatestVersion,
+    "Failed to fetch latest version",
+    undefined,
+    getCoreApiHttpBaseUrl,
+  );
+
+  return version;
 }
