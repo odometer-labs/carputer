@@ -19,7 +19,6 @@ import type {
   Region,
   RegionDataModel,
   UpdateTrackVal,
-  LatestVersionResponse,
 } from "./types";
 import { ENDPOINTS } from "../utils/constants";
 
