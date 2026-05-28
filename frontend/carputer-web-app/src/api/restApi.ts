@@ -19,6 +19,7 @@ import type {
   Region,
   RegionDataModel,
   UpdateTrackVal,
+  LatestVersionResponse,
 } from "./types";
 import { ENDPOINTS } from "../utils/constants";
 
@@ -541,4 +542,15 @@ export async function deleteRegion(id: number): Promise<void> {
       throw new Error("Failed to delete region");
     }
   }
+
+//gets the current version/patch level of the application
+export async function getLatestVersion(): Promise<LatestVersionResponse> {
+  const version = await fetchJsonWithFallback<LatestVersionResponse>(
+    ENDPOINTS.getLatestVersion,
+    "Failed to fetch latest version",
+    undefined,
+    getCoreApiHttpBaseUrl,
+  );
+
+  return version;
 }
