@@ -126,6 +126,7 @@ services:
     depends_on:
       - api
       - core-api
+      - sys-health
       - wifi-manager
     healthcheck:
       test:
