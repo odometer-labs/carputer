@@ -169,8 +169,9 @@ function getCoreApiHttpBaseUrl(): string {
     return env.VITE_CORE_API_HTTP_URL;
   }
 
-  // In Docker (:3000) and Vite dev (:5173), target the core-api directly.
-  if (window.location.port === "3000" || window.location.port === "5173") {
+  // In Vite dev (:5173), target the core-api directly on port 8888.
+  // In Docker (:3000), route through nginx (/v2/ proxy).
+  if (window.location.port === "5173") {
     return `${window.location.protocol}//${window.location.hostname}:8888`;
   }
 
@@ -183,8 +184,9 @@ function getApiHttpBaseUrl(): string {
     return env.VITE_API_HTTP_URL;
   }
 
-  // In Docker frontend (:3000) and Vite dev (:5173), target the API directly.
-  if (window.location.port === "3000" || window.location.port === "5173") {
+  // In Vite dev (:5173), target the legacy API directly on port 8000.
+  // In Docker (:3000), route through nginx (/api/ proxy).
+  if (window.location.port === "5173") {
     return `${window.location.protocol}//${window.location.hostname}:8000`;
   }
 
@@ -379,6 +381,8 @@ function getSysHealthWebSocketUrl(): string {
 
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
+  // In Vite dev (:5173), connect directly to sys-health on port 8090.
+  // In Docker, route through nginx (/ws/sys-health proxy).
   if (window.location.port === "5173") {
     return `${protocol}//${window.location.hostname}:8090${ENDPOINTS.sysHealthStream}`;
   }
