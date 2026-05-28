@@ -250,7 +250,9 @@ function getPositionWebSocketUrl(): string {
 
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
-  if (window.location.port === "5173" || window.location.port === "3000") {
+  // In dev mode (Vite on :5173), connect directly to the API server on port 8000.
+  // In production (port 3001), use the same host and port (proxied through nginx).
+  if (window.location.port === "5173") {
     return `${protocol}//${window.location.hostname}:8000${ENDPOINTS.getPositionStream}`;
   }
 
