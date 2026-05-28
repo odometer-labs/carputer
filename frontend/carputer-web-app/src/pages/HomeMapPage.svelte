@@ -19,6 +19,7 @@
   import { push, location } from 'svelte-spa-router';
   import { Cluster } from 'ol/source';
   import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
+  import { wifiStore } from '../stores/wifiStore';
   import { settingsPreferences, type TrackRange } from '../services/settings_preferences';
   import aprsIconUrl from '../assets/icons/aprs-bold.svg';
   import userArrowIconUrl from '../assets/icons/maps-arrow-blue-white.svg';
@@ -32,6 +33,8 @@
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
   let locationStatus: string = 'Getting location...';
+  let baseTileLayer: TileLayer | undefined;
+  let usingOnlineTiles: boolean = false;
 
   // roadhistory and current track line
   let oldTrackLayer: VectorLayer | undefined;
@@ -97,6 +100,7 @@
   const GPS_JITTER_DISTANCE_METERS = 4;
   const GPS_STATIONARY_SPEED_MPS = 0.8;
   const ROAD_HISTORY_MIN_DISTANCE_METERS = 8;
+  const LOCAL_TILE_URL = '/tile/{z}/{x}/{y}.png';
 
   // this is the list of tracks that is shown on the page, filtered
   const filteredTracks = derived(
@@ -222,6 +226,16 @@
     aprsPopupData = null;
   }
 
+  // Use online tiles only when Wi-Fi is both powered and connected.
+  // Otherwise prefer local tiles for offline operation.
+  $: if (baseTileLayer) {
+    const shouldUseOnlineTiles = $wifiStore.isWifiOn && $wifiStore.isConnected;
+    if (shouldUseOnlineTiles !== usingOnlineTiles) {
+      usingOnlineTiles = shouldUseOnlineTiles;
+      baseTileLayer.setSource(createBaseTileSource(usingOnlineTiles));
+    }
+  }
+
   // run once when the Svelte component is mounted
   onMount(() => {
     try {
@@ -280,14 +294,15 @@
    * isProgrammaticMove / isProgrammaticRotationChange flags.
    */
   function loadMap(): void {
+    usingOnlineTiles = $wifiStore.isWifiOn && $wifiStore.isConnected;
+    baseTileLayer = new TileLayer({
+      source: createBaseTileSource(usingOnlineTiles),
+    });
+
     map = new Map({
       target: mapElement,
       layers: [
-        new TileLayer({
-          source: new OSM({
-            url: "/tile/{z}/{x}/{y}.png"
-          }) // OpenStreetMap tiles (proxied through nginx /tile/)
-        })
+        baseTileLayer
       ],
       view: new View({
         center: fromLonLat([-122.6765, 45.5231]), // Default center: Portland, OR (fallback when GPS is unavailable)
@@ -465,6 +480,16 @@
       if (!hitAprs) {
         aprsPopupData = null;
       }
+    });
+  }
+
+  function createBaseTileSource(useOnlineTiles: boolean): OSM {
+    if (useOnlineTiles) {
+      return new OSM();
+    }
+
+    return new OSM({
+      url: LOCAL_TILE_URL,
     });
   }
 
