@@ -15,7 +15,7 @@ def test_create_new_version(db_conn):
         git_hash = "abc123"
         release_date = datetime.now()
 
-        cur.execute("call gps.create_new_version(%s, %s, %s);", new_version, git_hash, release_date)
+        cur.execute("call gps.create_new_version(%s, %s, %s);", (new_version, git_hash, release_date))
         result = cur.fetchone()
 
         assert result["version_number"] == new_version
