@@ -577,9 +577,8 @@
     getCurrentPosition()
       .then((position) => handleGPSPosition(position))
       .catch((error: unknown) => {
-        const message = `Initial GPS fetch failed: ${String(error)}`;
-        locationStatus = message;
-        console.warn('GPS unavailable — map defaulting to Portland, OR');
+        // Keep startup resilient: websocket updates can still provide the first valid fix.
+        locationStatus = 'Waiting for GPS fix...';
         reportNonVitalError(error, 'HomeMapPage.getCurrentPosition');
       });
 
@@ -598,8 +597,14 @@
   function handleGPSPosition(position: GPSData): void {
     const lon: number = Number(position.longitude);
     const lat: number = Number(position.latitude);
+    const speedMps = Number(position.speed);
 
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return;
+    }
+
+    // gpsd and some upstreams emit 0/0 placeholders before a real fix is available.
+    if (lat === 0 && lon === 0) {
       return;
     }
 
@@ -608,7 +613,6 @@
     }
 
     const coords = fromLonLat([lon, lat]) as [number, number];
-    const speedMps = Number(position.speed);
 
     let filteredCoords: [number, number] = coords;
     if (latestUserCoords) {
@@ -626,12 +630,6 @@
     if (!map) {
       return;
     }
-
-    // use the coord from the user to add it to the current users track line
-    applyTrackLine(filteredCoords, lon, lat);
-
-    // checks if the current road is a new road or not.
-    checkRoadHistory(filteredCoords);
 
     if (!userMarker) {
       // first fix: create marker feature and add to map
@@ -694,6 +692,14 @@
     applyHeadingRotation();
 
     locationStatus = `Location: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+
+    // Non-critical side effects should never block primary GPS rendering.
+    try {
+      applyTrackLine(filteredCoords, lon, lat);
+      checkRoadHistory(filteredCoords);
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'HomeMapPage.handleGPSPosition.sideEffects');
+    }
   }
 
   /**
