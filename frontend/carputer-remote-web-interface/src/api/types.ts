@@ -60,5 +60,17 @@ export interface LatestVersionResponse {
       git_hash?: string | null;
       release_date?: string | null;
     };
+    Version?: {
+      VersionNumber?: string;
+      GitHash?: string | null;
+      ReleaseDate?: string | null;
+    };
+  };
+  version?: {
+    version_number?: string;
+    VersionNumber?: string;
+  };
+  Version?: {
+    VersionNumber?: string;
   };
 }

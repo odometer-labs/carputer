@@ -85,6 +85,15 @@ describe("homeHealth", () => {
     };
 
     expect(getLatestVersionNumber(payload)).toBe("0.4.7");
+    expect(
+      getLatestVersionNumber({
+        body: {
+          Version: {
+            VersionNumber: "0.4.8",
+          },
+        },
+      }),
+    ).toBe("0.4.8");
     expect(getLatestVersionNumber({})).toBeNull();
   });
 });

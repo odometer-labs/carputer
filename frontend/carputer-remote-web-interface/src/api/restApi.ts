@@ -288,6 +288,13 @@ function parseGpsData(payload: unknown): GPSData | null {
     return null;
   }
 
+  const isLikelyNoFixPlaceholder =
+    latitude === 0 && longitude === 0 && speed === 0 && heading === 0;
+
+  if (isLikelyNoFixPlaceholder) {
+    return null;
+  }
+
   return { latitude, longitude, speed, heading };
 }
 

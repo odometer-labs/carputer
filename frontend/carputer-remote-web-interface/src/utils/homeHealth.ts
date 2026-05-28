@@ -58,9 +58,18 @@ export function deriveSystemHealthStatus(
 export function getLatestVersionNumber(
   payload: LatestVersionResponse,
 ): string | null {
-  const versionNumber = payload.body?.version?.version_number;
-  if (typeof versionNumber === "string" && versionNumber.trim().length > 0) {
-    return versionNumber;
+  const candidates = [
+    payload.body?.version?.version_number,
+    payload.body?.Version?.VersionNumber,
+    payload.version?.version_number,
+    payload.version?.VersionNumber,
+    payload.Version?.VersionNumber,
+  ];
+
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
   }
 
   return null;

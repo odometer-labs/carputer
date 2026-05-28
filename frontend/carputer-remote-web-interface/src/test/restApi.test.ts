@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getLatestVersion, listTracks } from "../api/restApi";
+import {
+  getLatestVersion,
+  listTracks,
+  subscribeToPositionStream,
+} from "../api/restApi";
 
 describe("restApi", () => {
   afterEach(() => {
@@ -54,5 +58,76 @@ describe("restApi", () => {
       "http://localhost:8888/v2/versioning/latest",
       { method: "GET" },
     );
+  });
+
+  it("ignores all-zero GPS placeholder websocket messages", () => {
+    class MockWebSocket {
+      static OPEN = 1;
+      static CONNECTING = 0;
+
+      readyState = MockWebSocket.OPEN;
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onerror: (() => void) | null = null;
+      onclose: (() => void) | null = null;
+
+      constructor(_url: string) {}
+
+      close() {
+        this.readyState = 3;
+      }
+    }
+
+    Object.defineProperty(globalThis, "window", {
+      value: {
+        location: {
+          protocol: "http:",
+          hostname: "localhost",
+          host: "localhost:5173",
+          origin: "http://localhost:5173",
+          port: "5173",
+        },
+      },
+      configurable: true,
+    });
+
+    const wsInstance = new MockWebSocket(
+      "ws://localhost",
+    ) as unknown as WebSocket;
+    const wsCtor = vi
+      .fn()
+      .mockImplementation(() => wsInstance) as unknown as typeof WebSocket;
+    vi.stubGlobal("WebSocket", wsCtor);
+
+    const onMessage = vi.fn();
+    const stop = subscribeToPositionStream(onMessage);
+
+    wsInstance.onmessage?.({
+      data: JSON.stringify({
+        latitude: 0,
+        longitude: 0,
+        speed: 0,
+        heading: 0,
+      }),
+    } as MessageEvent);
+
+    expect(onMessage).not.toHaveBeenCalled();
+
+    wsInstance.onmessage?.({
+      data: JSON.stringify({
+        latitude: 47.6097,
+        longitude: -122.3331,
+        speed: 3.5,
+        heading: 90,
+      }),
+    } as MessageEvent);
+
+    expect(onMessage).toHaveBeenCalledWith({
+      latitude: 47.6097,
+      longitude: -122.3331,
+      speed: 3.5,
+      heading: 90,
+    });
+
+    stop();
   });
 });
