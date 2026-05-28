@@ -542,6 +542,7 @@ export async function deleteRegion(id: number): Promise<void> {
       throw new Error("Failed to delete region");
     }
   }
+}
 
 //gets the current version/patch level of the application
 export async function getLatestVersion(): Promise<LatestVersionResponse> {
