@@ -18,36 +18,17 @@
   import { Style, Fill, Stroke, Text, Circle } from 'ol/style.js';
   import { fromLonLat } from 'ol/proj.js';
   import { createXYZ } from 'ol/tilegrid.js';
-  import { 
-    createRegion, 
-    deleteRegion,
-    listRegions,
-    listTracks,
-    getCurrentPosition, 
-    getLatestVersion, 
-    subscribeToPositionStream, 
-    subscribeToSysHealth 
-  } from '../api/restApi';
+  import { createRegion, deleteRegion, getCurrentPosition, listRegions, listTracks, subscribeToPositionStream, subscribeToSysHealth } from '../api/restApi';
   import type { GPSData, RegionDataModel, SysHealthData } from '../api/types';
   import { reportNonVitalError } from '../stores/errorStore';
   import { wifiStore } from '../stores/wifiStore';
   import 'ol/ol.css';
-  import { trackStore } from '../stores/trackStore';
-  import { wifiStore } from '../stores/wifiStore';
 
   // TODO: These values should be fetched from the backend, currently they are just placeholders for display.
-  let storage_amount_dowloaded: string = "Unknown";
-
-  //to hold the speed value from GPSData
-  let speed_mph: number = 0;
-
-  // to hold the patch level
-  let versionNumber = "Loading...";
-  let gitHash = "Loading...";
-  let releaseDate = "Loading...";
-
-  //incase the version didn't get loaded then it would let the user know.
-  let versionLoadFailed = false;
+  let num_tracks: number = 0;
+  let patch_level: string = "0.1.2";
+  let storage_amount_dowloaded: number = 2;
+  let storage_amount_left: number = 1;
 
   let sysHealth: SysHealthData | null = null;
   let stopSysHealthSubscription: (() => void) | null = null;
@@ -170,11 +151,6 @@
   // key: "z/x/y", value: region id in backend
   let downloadedRegionIdsByTileKey = new Map<string, number>();
 
-  //get the storage amount left
-  $: storageRemaining = sysHealth
-    ? formatBytes(sysHealth.disk.total_bytes - sysHealth.disk.used_bytes)
-    : "Loading...";
-
   type DownloadedTile = {
     id: number;
     z: number;
@@ -249,9 +225,6 @@
 
     const coords = fromLonLat([lon, lat]) as [number, number];
     updateUserMarker(coords);
-
-    //update the speed_mph to show on the dashboard
-    speed_mph = position.speed;
   }
 
   function updateGrid(): void {
@@ -330,6 +303,14 @@
   $: hasPendingTileSyncChanges = selectionDiffersFromDownloaded();
   $: canDownloadTiles = $wifiStore.isWifiOn && $wifiStore.isConnected;
 
+  async function loadDashboardInfo(): Promise<void> {
+    try {
+      const tracks = await listTracks();
+      num_tracks = Array.isArray(tracks) ? tracks.length : 0;
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'SystemDataPage.listTracks');
+    }
+  }
 
   function regionNameFromTileKey(tileKey: string): string {
     return `${TILE_REGION_PREFIX}${tileKey}`;
@@ -439,9 +420,6 @@
   }
 
   onMount(() => {
-    //load patchlevel info
-    loadPatchLevelInfo();
-
     gridSource = new VectorSource();
     selectionSource = new VectorSource();
 
@@ -507,6 +485,7 @@
     map.getView().on('change:resolution', scheduleGridUpdate);
     map.on('moveend', scheduleGridUpdate);
 
+    loadDashboardInfo();
     startGPSTracking();
 
     stopSysHealthSubscription = subscribeToSysHealth(
@@ -812,41 +791,6 @@
       isSyncingTileSelection = false;
     }
   }
-
-  //gets the version of the app
-  async function loadPatchLevelInfo(): Promise<void> {
-    try {
-      const response = await getLatestVersion();
-
-      const version = response.Version;
-
-      if (version) {
-        versionNumber = version.version_number ?? "Unknown";
-
-        gitHash = version.git_hash
-          ? version.git_hash.substring(0, 8)
-          : "Unknown";
-
-        releaseDate = formatReleaseDate(version.release_date);
-      }
-    } catch (error) {
-      versionLoadFailed = true;
-      reportNonVitalError(error, 'SystemDataPage.loadPatchLevelInfo');
-    }
-  }
-
-  //to format the date for releaseDate
-  function formatReleaseDate(dateString: string | null | undefined): string {
-    if (!dateString) return "Unknown";
-
-    const date = new Date(dateString);
-
-    if (isNaN(date.getTime())) {
-      return dateString;
-    }
-
-    return date.toLocaleDateString();
-  }
 </script>
 
 
@@ -871,82 +815,32 @@
   <!-- this contains both the information of the system and import/export button-->
   <div class="seperate-vert">
 
-    <div class="system-info-scroll">
-
     <!-- this is the information of the system -->
     <div class="seperate-hori">
       <div class="info-box">
         <p class="info-row">
           <span class="info-label">Number of GPS Tracks:</span>
-          <span class="info-value">{$trackStore.tracks.length}</span>
+          <span class="info-value">{num_tracks}</span>
         </p>
       </div>
       
-      <div class="info-box">
-        <p class="info-row">
-          <span class="info-label">Current Speed(mph):</span>
-          <span class="info-value">{speed_mph.toFixed(1)} mph</span>
-        </p>
-      </div>
-      
-      {#if versionLoadFailed}
-        <div class="info-box">
-          <span class="info-value">Version information unavailable</span>
-        </div>
-      {/if}
-
       <div class="info-box">
         <p class="info-row">
           <span class="info-label">Current Patch Level:</span>
-          <span class="info-value">{versionNumber}</span>
+          <span class="info-value">{patch_level}</span>
         </p>
       </div>
-
-      <div class="info-box">
-        <p class="info-row">
-          <span class="info-label">Git Hash:</span>
-          <span class="info-value">{gitHash}</span>
-        </p>
-      </div>
-
-      <div class="info-box">
-        <p class="info-row">
-          <span class="info-label">Release Date:</span>
-          <span class="info-value">{releaseDate}</span>
-        </p>
-      </div>
-
-      <div class="info-box">
-        <p class="info-row">
-          <span class="info-label">Signal Strength:</span>
-          {#if $wifiStore.isConnected}
-            <span class="info-value">{$wifiStore.signalStrength}%</span>
-          {:else}
-            <span class="info-value">Disconnected</span>
-          {/if}
-        </p>
-      </div>
-
-      <div class="info-box">
-        <p class="info-row">
-          <span class="info-label">WiFi Network:</span>
-          <span class="info-value">
-            {$wifiStore.ssid ?? 'Not Connected'}
-          </span>
-        </p>
-      </div>
-
       <div class="info-box">
         <p class="info-row">
           <span class="info-label">Maps Downloaded:</span>
-          <span class="info-value">{storage_amount_dowloaded}</span>
+          <span class="info-value">{storage_amount_dowloaded}GB</span>
         </p>
       </div>
 
       <div class="info-box">
         <p class="info-row">
           <span class="info-label">Storage Left:</span>
-          <span class="info-value">{storageRemaining}</span>
+          <span class="info-value">{storage_amount_left}GB</span>
         </p>
       </div>
     </div>
@@ -1008,8 +902,6 @@
         </div>
       </div>
     {/if}
-
-    </div>
 
     <!-- divider -->
     <div class="divider"></div>
@@ -1152,22 +1044,9 @@
     background-color: var(--secondary-color);
     width: 100%;
     flex: 1;
-    min-height: 0;
     border-width: 2px;
     border-color: rgb(255, 255, 255);
     border-style: solid;
-    overflow: hidden;
-  }
-
-  .system-info-scroll {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding-right: 2px;
   }
 
   .seperate-hori {

@@ -96,7 +96,7 @@ export class TrackStore {
       // send the point to backend
       await addTrackPoint(point);
     } catch (error) {
-      reportNonVitalError(error, "trackStore.addPoint");
+      console.error(error);
     }
   }
 
@@ -131,7 +131,7 @@ export class TrackStore {
 
       return res.id;
     } catch (error) {
-      reportNonVitalError(error, "trackStore.addTrack");
+      console.error(error);
       return null;
     }
   }
@@ -141,7 +141,7 @@ export class TrackStore {
     try {
       await updateTrack(id, trackVal);
     } catch (error) {
-      reportNonVitalError(error, "trackStore.updateTrack");
+      console.error(error);
     }
   }
 
