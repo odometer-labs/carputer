@@ -15,11 +15,12 @@
   import { Style, Circle, Fill, Stroke, RegularShape, Icon, Text } from 'ol/style.js';
   import 'ol/ol.css';
   import { getCurrentPosition, subscribeToPositionStream, getAprsStations } from '../api/restApi';
+  import { getCurrentWifiConnection, getWifiAccessPoints } from '../api/wifiApi';
   import type { GPSData, APRSStation } from '../api/types';
   import { push, location } from 'svelte-spa-router';
   import { Cluster } from 'ol/source';
   import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
-  import { wifiStore } from '../stores/wifiStore';
+  import { setWifiConnected, setWifiDisconnected, setWifiPower, wifiStore } from '../stores/wifiStore';
   import { settingsPreferences, type TrackRange } from '../services/settings_preferences';
   import aprsIconUrl from '../assets/icons/aprs-bold.svg';
   import userArrowIconUrl from '../assets/icons/maps-arrow-blue-white.svg';
@@ -35,6 +36,7 @@
   let locationStatus: string = 'Getting location...';
   let baseTileLayer: TileLayer | undefined;
   let usingOnlineTiles: boolean = false;
+  let hasResolvedWifiStatus: boolean = false;
 
   // roadhistory and current track line
   let oldTrackLayer: VectorLayer | undefined;
@@ -229,7 +231,7 @@
   // Use online tiles only when Wi-Fi is both powered and connected.
   // Otherwise prefer local tiles for offline operation.
   $: if (baseTileLayer) {
-    const shouldUseOnlineTiles = $wifiStore.isWifiOn && $wifiStore.isConnected;
+    const shouldUseOnlineTiles = !hasResolvedWifiStatus || ($wifiStore.isWifiOn && $wifiStore.isConnected);
     if (shouldUseOnlineTiles !== usingOnlineTiles) {
       usingOnlineTiles = shouldUseOnlineTiles;
       baseTileLayer.setSource(createBaseTileSource(usingOnlineTiles));
@@ -239,6 +241,7 @@
   // run once when the Svelte component is mounted
   onMount(() => {
     try {
+      void initializeWifiStateForMap();
       loadMap();             // create map instance and hook events
       startGPSTracking();    // begin receiving backend GPS data
     } catch (error: unknown) {
@@ -294,7 +297,7 @@
    * isProgrammaticMove / isProgrammaticRotationChange flags.
    */
   function loadMap(): void {
-    usingOnlineTiles = $wifiStore.isWifiOn && $wifiStore.isConnected;
+    usingOnlineTiles = !hasResolvedWifiStatus || ($wifiStore.isWifiOn && $wifiStore.isConnected);
     baseTileLayer = new TileLayer({
       source: createBaseTileSource(usingOnlineTiles),
     });
@@ -491,6 +494,30 @@
     return new OSM({
       url: LOCAL_TILE_URL,
     });
+  }
+
+  async function initializeWifiStateForMap(): Promise<void> {
+    try {
+      const [currentConnection, accessPoints] = await Promise.all([
+        getCurrentWifiConnection(),
+        getWifiAccessPoints(),
+      ]);
+
+      if (!currentConnection) {
+        setWifiDisconnected();
+        return;
+      }
+
+      setWifiPower(true);
+      const matchingAccessPoint = accessPoints.find(
+        (accessPoint) => accessPoint.ssid === currentConnection.ssid,
+      );
+      setWifiConnected(currentConnection.ssid, matchingAccessPoint?.signal_strength ?? 0);
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'HomeMapPage.initializeWifiStateForMap');
+    } finally {
+      hasResolvedWifiStatus = true;
+    }
   }
 
 

@@ -251,10 +251,20 @@ export function subscribeToPositionStream(
 ): () => void {
   const primaryUrl = getPositionWebSocketUrl();
   const fallbackUrl = getPositionWebSocketFallbackUrl(primaryUrl);
+  const GPS_WS_CONNECT_TIMEOUT_MS = 6000;
 
   let socket: WebSocket | null = null;
   let hasAttemptedFallback = false;
   let isClosedByCaller = false;
+  let hasOpenedSocket = false;
+  let connectTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const clearConnectTimeout = (): void => {
+    if (connectTimeoutId !== null) {
+      clearTimeout(connectTimeoutId);
+      connectTimeoutId = null;
+    }
+  };
 
   const tryFallback = (): boolean => {
     if (hasAttemptedFallback || !fallbackUrl || isClosedByCaller) {
@@ -267,6 +277,11 @@ export function subscribeToPositionStream(
   };
 
   const bindHandlers = (ws: WebSocket): void => {
+    ws.onopen = () => {
+      hasOpenedSocket = true;
+      clearConnectTimeout();
+    };
+
     ws.onmessage = (event: MessageEvent) => {
       try {
         const raw = JSON.parse(event.data);
@@ -292,6 +307,11 @@ export function subscribeToPositionStream(
     };
 
     ws.onerror = () => {
+      // Avoid surfacing premature startup errors until connect timeout has elapsed.
+      if (!hasOpenedSocket) {
+        return;
+      }
+
       if (tryFallback()) {
         return;
       }
@@ -302,7 +322,14 @@ export function subscribeToPositionStream(
     };
 
     ws.onclose = () => {
+      clearConnectTimeout();
+
       if (isClosedByCaller) {
+        return;
+      }
+
+      // If never opened, let the timeout path decide whether to error/fallback.
+      if (!hasOpenedSocket) {
         return;
       }
 
@@ -324,14 +351,39 @@ export function subscribeToPositionStream(
     ) {
       socket.close();
     }
+
+    clearConnectTimeout();
+    hasOpenedSocket = false;
     socket = new WebSocket(url);
     bindHandlers(socket);
+
+    const activeSocket = socket;
+    connectTimeoutId = setTimeout(() => {
+      if (isClosedByCaller || socket !== activeSocket || hasOpenedSocket) {
+        return;
+      }
+
+      try {
+        activeSocket.close();
+      } catch {
+        // No action needed; we'll still attempt fallback/report below.
+      }
+
+      if (tryFallback()) {
+        return;
+      }
+
+      if (onError) {
+        onError("GPS websocket connection timed out");
+      }
+    }, GPS_WS_CONNECT_TIMEOUT_MS);
   };
 
   connect(primaryUrl);
 
   return () => {
     isClosedByCaller = true;
+    clearConnectTimeout();
 
     if (
       socket &&
