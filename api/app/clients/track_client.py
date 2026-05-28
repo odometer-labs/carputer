@@ -161,6 +161,7 @@ class TrackClient:
                     "SELECT gps.import_track(%s) as track_id;", (geojson_data,)
                 )
                 result = cursor.fetchone()
+                conn.commit()
                 return {"track_id": result["track_id"], "status": "imported"}
 
     def import_gpx(self, name: str, gpx_data: bytes):
@@ -172,34 +173,118 @@ class TrackClient:
 
         with get_connection() as conn:
             with conn.cursor() as cursor:
-                cursor.execute("""SELECT gps.import_gpx(%s) as id;""", (name,))
 
-                # should fetch id
-                result = cursor.fetchone()
-                track_id = result["id"]
+                if not gpx.tracks:
+                    return {
+                        "status": "error",
+                        "message": "The uploaded GPX file contains zero tracks.",
+                    }
+                for index, track in enumerate(gpx.tracks):
+                    # 1. Check if the track has an internal name (e.g., <trk><name>Day 1</name></trk>)
+                    track_name = ""
+                    if track.name:
+                        track_name = track.name
+                    # 2. If it has no internal name and it's a multi-track file, add a counter to the filename
+                    elif len(gpx.tracks) > 1:
+                        track_name = f"{name} (Track {index + 1})"
+                    # 3. If it's a single track with no internal name, just use the filename
+                    else:
+                        track_name = name
 
-                all_points = [
-                    (
-                        track_id,
-                        point.longitude,
-                        point.latitude,
+                    cursor.execute(
+                        """SELECT gps.import_gpx(%s) as id;""", (track_name,)
                     )
-                    for track in gpx.tracks
-                    for segment in track.segments
-                    for point in segment.points
-                ]
-                if all_points:
-                    cursor.executemany(
+
+                    # should fetch id
+                    result = cursor.fetchone()
+                    track_id = result["id"]
+
+                    all_points = [
+                        (
+                            track_id,
+                            point.longitude,
+                            point.latitude,
+                        )
+                        for segment in track.segments
+                        for point in segment.points
+                    ]
+                    if all_points:
+                        cursor.executemany(
+                            """
+                            INSERT INTO gps.track_points (track_id, geom) 
+                            VALUES (%s, ST_SetSRID(ST_MakePoint(%s, %s), 4326))
+                            """,
+                            all_points,
+                        )
+                    else:
+                        cursor.execute("""CALL gps.delete_track(%s);""", (track_id,))
+                conn.commit()
+                return {"result": "success"}
+
+    def export_gpx(self, export_ids: list[int]) -> str | None:
+        if not export_ids:
+            return None
+
+        gpx = gpxpy.gpx.GPX()
+        gpx.creator = "TrackClient"
+
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                for track_id in export_ids:
+                    # 1. Fetch the track details (assuming a structure like your update_track method uses)
+                    cursor.execute(
                         """
-                        INSERT INTO gps.track_points (track_id, geom) 
-                        VALUES (%s, %s, ST_SetSRID(ST_MakePoint(%s, %s), 4326))
-                        """,
-                        all_points,
+                            SELECT track_name, start_time 
+                            FROM gps.tracks 
+                            WHERE id = %s;
+                            """,
+                        (track_id,),
                     )
-                    conn.commit()
-                    return {"result": "success"}
-                else:
-                    return {"result": "empty GPX file"}
+                    track_row = cursor.fetchone()
+
+                    if not track_row:
+                        continue  # Skip if track ID doesn't exist
+
+                    # Adapt index based on whether cursor returns a tuple or dict-like object
+                    track_name = (
+                        track_row[0]
+                        if isinstance(track_row, tuple)
+                        else track_row.get("track_name")
+                    )
+
+                    gpx_track = gpxpy.gpx.GPXTrack(
+                        name=track_name or f"Track {track_id}"
+                    )
+                    gpx.tracks.append(gpx_track)
+
+                    gpx_segment = gpxpy.gpx.GPXTrackSegment()
+                    gpx_track.segments.append(gpx_segment)
+
+                    cursor.execute(
+                        """
+                            SELECT gps.export_gpx_points(%s);
+                        """,
+                        (track_id,),
+                    )
+                    point_rows = cursor.fetchall()
+
+                    for row in point_rows:
+                        if isinstance(row, tuple):
+                            lat, lon, speed = row[0], row[1], row[2]
+                        else:
+                            lat = row.get("lat")
+                            lon = row.get("lon")
+                            speed = row.get("speed")
+
+                        gpx_point = gpxpy.gpx.GPXTrackPoint(
+                            latitude=lat, longitude=lon, speed=speed
+                        )
+                        gpx_segment.points.append(gpx_point)
+
+                conn.commit()
+
+        # Returns the raw XML string representation of the GPX data
+        return gpx.to_xml()
 
 
 # singleton object

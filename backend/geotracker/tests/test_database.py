@@ -2,6 +2,9 @@ import pytest
 import json
 from datetime import datetime
 import mapbox_vector_tile
+import gpxpy
+import gpxpy.gpx
+from api.app.clients.track_client import TrackClient
 
 
 def test_db_connection(db_conn):
@@ -12,6 +15,16 @@ def test_db_connection(db_conn):
         cur.execute("SELECT 1 as connected;")
         result = cur.fetchone()
         assert result["connected"] == 1
+
+
+@pytest.fixture(autouse=True)
+def clean_db(db_conn):
+    with db_conn.cursor() as cur:
+        cur.execute("TRUNCATE gps.track_points CASCADE;")
+        cur.execute("TRUNCATE gps.track_lines CASCADE;")
+        cur.execute("TRUNCATE gps.tracks CASCADE;")
+
+    db_conn.commit()
 
 
 def test_create_and_end_track(db_conn, sample_track_points):
@@ -1311,11 +1324,8 @@ def test_get_tracks_mvt_road_mode(db_conn):
     assert 4003 not in found_ids  # far track excluded
 
 
-def test_(db_conn):
-    """
-    Verify spatial filtering: find nearby tracks but ignore the current one as
-    a mapbox vector tile.
-    """
+def test_import_no_timestamp(db_conn):
+    """ """
     with db_conn.cursor() as cur:
 
         # Create "Old Track A" (Nearby)
@@ -1352,7 +1362,7 @@ def test_(db_conn):
         assert result[0]["time_stamp"] is None
 
 
-def test_(db_conn):
+def test_import_ordering(db_conn):
     """
     Verify spatial filtering: find nearby tracks but ignore the current one as
     a mapbox vector tile.
@@ -1380,15 +1390,15 @@ def test_(db_conn):
 
         cur.execute("CALL gps.end_gpx_track(%s);", (id,))
 
-        cur.execute("SELECT COUNT(*) from gps.track_points as count;")
+        cur.execute("SELECT COUNT(*) from gps.track_points;")
         result = cur.fetchone()
         assert result["count"] == 4
 
-        cur.execute("SELECT COUNT(*) from gps.track_lines as count;")
+        cur.execute("SELECT COUNT(*) from gps.track_lines;")
         result = cur.fetchone()
         assert result["count"] == 1
 
-        cur.execute("SELECT * from gps.track_points;")
+        cur.execute("SELECT * from gps.track_points ORDER BY point_id ASC;")
         result = cur.fetchall()
         assert result[0]["time_stamp"] is None
         assert result[0]["speed_mps"] == 1
@@ -1400,3 +1410,91 @@ def test_(db_conn):
         result = cur.fetchall()
         assert result[0]["time_stamp"] is None
         assert result[0]["speed_mps"] == 1
+
+
+def test_import_gpx_success_single_track(db_conn):
+    """Verify that importing a standard single track GPX file correctly populates tables."""
+    client = TrackClient()
+
+    # 1. Construct a valid single-track GPX document in-memory
+    gpx = gpxpy.gpx.GPX()
+    track = gpxpy.gpx.GPXTrack(name="Morning Commute")
+    segment = gpxpy.gpx.GPXTrackSegment()
+    segment.points.append(
+        gpxpy.gpx.GPXTrackPoint(latitude=45.5, longitude=-122.6, speed=5.5)
+    )
+    segment.points.append(
+        gpxpy.gpx.GPXTrackPoint(latitude=45.6, longitude=-122.7, speed=6.2)
+    )
+    track.segments.append(segment)
+    gpx.tracks.append(track)
+    gpx_payload = gpx.to_xml().encode("utf-8")
+
+    # 2. Execute import
+    response = client.import_gpx(name="fallback_name.gpx", gpx_data=gpx_payload)
+
+    # 3. Assertions
+    assert response == {"result": "success"}
+
+    with db_conn.cursor() as cur:
+        # Verify track metadata and name extraction hierarchy
+        cur.execute("SELECT track_name FROM gps.tracks;")
+        track_row = cur.fetchone()
+        assert (
+            track_row["track_name"] == "Morning Commute"
+        )  # Used internal name over file fallback
+
+        # Verify coordinates and speed columns mapped correctly
+        cur.execute(
+            "SELECT ST_Y(geom::geometry) as lat, ST_X(geom::geometry) as lon FROM gps.track_points ORDER BY point_id ASC;"
+        )
+        points = cur.fetchall()
+        assert len(points) == 2
+        assert points[0]["lat"] == pytest.approx(45.5)
+        assert points[0]["lon"] == pytest.approx(-122.6)
+
+
+def test_import_gpx_multi_track_fallback_names(db_conn):
+    """Verify system adds numeric counters when multi-track files lack internal names."""
+    client = TrackClient()
+
+    gpx = gpxpy.gpx.GPX()
+    # Track 1 has an explicit name
+    track1 = gpxpy.gpx.GPXTrack(name="Day 1")
+    seg1 = gpxpy.gpx.GPXTrackSegment()
+    seg1.points.append(gpxpy.gpx.GPXTrackPoint(latitude=0, longitude=0))
+    track1.segments.append(seg1)
+
+    # Track 2 has NO explicit name (should get a generated name)
+    track2 = gpxpy.gpx.GPXTrack(name=None)
+    seg2 = gpxpy.gpx.GPXTrackSegment()
+    seg2.points.append(gpxpy.gpx.GPXTrackPoint(latitude=1, longitude=1))
+    track2.segments.append(seg2)
+
+    gpx.tracks.extend([track1, track2])
+    gpx_payload = gpx.to_xml().encode("utf-8")
+
+    client.import_gpx(name="Trip", gpx_data=gpx_payload)
+
+    with db_conn.cursor() as cur:
+        cur.execute("SELECT track_name FROM gps.tracks ORDER BY track_id ASC;")
+        names = [row["track_name"] for row in cur.fetchall()]
+        assert names[0] == "Day 1"
+        assert names[1] == "Trip (Track 2)"
+
+
+def test_import_gpx_empty_or_corrupt():
+    """Verify that empty configurations or malformed XML files gracefully fail."""
+    client = TrackClient()
+
+    # Case A: Corrupt XML syntax string
+    response_corrupt = client.import_gpx(name="bad.gpx", gpx_data=b"<gpx>unclosed_tags")
+    assert response_corrupt["status"] == "error"
+
+    # Case B: Syntactically valid but functionally empty track schema
+    gpx_empty = gpxpy.gpx.GPX()
+    response_empty = client.import_gpx(
+        name="empty.gpx", gpx_data=gpx_empty.to_xml().encode("utf-8")
+    )
+    assert response_empty["status"] == "error"
+    assert "zero tracks" in response_empty["message"]

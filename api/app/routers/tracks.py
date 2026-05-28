@@ -136,10 +136,14 @@ async def import_track(geojson_data: Dict[str, Any]):
     return track_client.import_track(geojson_str)
 
 
-@router.post("tracks/import/gpx")
+@router.post("/tracks/import/gpx")
 async def import_gpx(file: UploadFile = File(...)):
     """
     Imports track points from a GPX File to create a track.
     """
     content = await file.read()
-    return track_client.import_gpx(content)
+    name = file.file_name
+    return track_client.import_gpx(name, content)
+
+
+@router.get
