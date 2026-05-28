@@ -285,8 +285,8 @@
       layers: [
         new TileLayer({
           source: new OSM({
-            url: "http://localhost:8070/tile/{z}/{x}/{y}.png"
-          }) // OpenStreetMap tiles
+            url: "/tile/{z}/{x}/{y}.png"
+          }) // OpenStreetMap tiles (proxied through nginx /tile/)
         })
       ],
       view: new View({
