@@ -15,10 +15,12 @@
   import { Style, Circle, Fill, Stroke, RegularShape, Icon, Text } from 'ol/style.js';
   import 'ol/ol.css';
   import { getCurrentPosition, subscribeToPositionStream, getAprsStations } from '../api/restApi';
+  import { getCurrentWifiConnection, getWifiAccessPoints } from '../api/wifiApi';
   import type { GPSData, APRSStation } from '../api/types';
   import { push, location } from 'svelte-spa-router';
   import { Cluster } from 'ol/source';
   import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
+  import { setWifiConnected, setWifiDisconnected, setWifiPower, wifiStore } from '../stores/wifiStore';
   import { settingsPreferences, type TrackRange } from '../services/settings_preferences';
   import aprsIconUrl from '../assets/icons/aprs-bold.svg';
   import userArrowIconUrl from '../assets/icons/maps-arrow-blue-white.svg';
@@ -32,6 +34,9 @@
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
   let locationStatus: string = 'Getting location...';
+  let baseTileLayer: TileLayer | undefined;
+  let usingOnlineTiles: boolean = false;
+  let hasResolvedWifiStatus: boolean = false;
 
   // roadhistory and current track line
   let oldTrackLayer: VectorLayer | undefined;
@@ -97,6 +102,7 @@
   const GPS_JITTER_DISTANCE_METERS = 4;
   const GPS_STATIONARY_SPEED_MPS = 0.8;
   const ROAD_HISTORY_MIN_DISTANCE_METERS = 8;
+  const LOCAL_TILE_URL = '/tile/{z}/{x}/{y}.png';
 
   // this is the list of tracks that is shown on the page, filtered
   const filteredTracks = derived(
@@ -222,9 +228,20 @@
     aprsPopupData = null;
   }
 
+  // Use online tiles only when Wi-Fi is both powered and connected.
+  // Otherwise prefer local tiles for offline operation.
+  $: if (baseTileLayer) {
+    const shouldUseOnlineTiles = !hasResolvedWifiStatus || ($wifiStore.isWifiOn && $wifiStore.isConnected);
+    if (shouldUseOnlineTiles !== usingOnlineTiles) {
+      usingOnlineTiles = shouldUseOnlineTiles;
+      baseTileLayer.setSource(createBaseTileSource(usingOnlineTiles));
+    }
+  }
+
   // run once when the Svelte component is mounted
   onMount(() => {
     try {
+      void initializeWifiStateForMap();
       loadMap();             // create map instance and hook events
       startGPSTracking();    // begin receiving backend GPS data
     } catch (error: unknown) {
@@ -280,14 +297,15 @@
    * isProgrammaticMove / isProgrammaticRotationChange flags.
    */
   function loadMap(): void {
+    usingOnlineTiles = !hasResolvedWifiStatus || ($wifiStore.isWifiOn && $wifiStore.isConnected);
+    baseTileLayer = new TileLayer({
+      source: createBaseTileSource(usingOnlineTiles),
+    });
+
     map = new Map({
       target: mapElement,
       layers: [
-        new TileLayer({
-          source: new OSM({
-            url: "http://localhost:8070/tile/{z}/{x}/{y}.png"
-          }) // OpenStreetMap tiles
-        })
+        baseTileLayer
       ],
       view: new View({
         center: fromLonLat([-122.6765, 45.5231]), // Default center: Portland, OR (fallback when GPS is unavailable)
@@ -468,6 +486,40 @@
     });
   }
 
+  function createBaseTileSource(useOnlineTiles: boolean): OSM {
+    if (useOnlineTiles) {
+      return new OSM();
+    }
+
+    return new OSM({
+      url: LOCAL_TILE_URL,
+    });
+  }
+
+  async function initializeWifiStateForMap(): Promise<void> {
+    try {
+      const [currentConnection, accessPoints] = await Promise.all([
+        getCurrentWifiConnection(),
+        getWifiAccessPoints(),
+      ]);
+
+      if (!currentConnection) {
+        setWifiDisconnected();
+        return;
+      }
+
+      setWifiPower(true);
+      const matchingAccessPoint = accessPoints.find(
+        (accessPoint) => accessPoint.ssid === currentConnection.ssid,
+      );
+      setWifiConnected(currentConnection.ssid, matchingAccessPoint?.signal_strength ?? 0);
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'HomeMapPage.initializeWifiStateForMap');
+    } finally {
+      hasResolvedWifiStatus = true;
+    }
+  }
+
 
   /**
    * Move the map view to the user's latest coordinates.
@@ -577,9 +629,8 @@
     getCurrentPosition()
       .then((position) => handleGPSPosition(position))
       .catch((error: unknown) => {
-        const message = `Initial GPS fetch failed: ${String(error)}`;
-        locationStatus = message;
-        console.warn('GPS unavailable — map defaulting to Portland, OR');
+        // Keep startup resilient: websocket updates can still provide the first valid fix.
+        locationStatus = 'Waiting for GPS fix...';
         reportNonVitalError(error, 'HomeMapPage.getCurrentPosition');
       });
 
@@ -598,8 +649,14 @@
   function handleGPSPosition(position: GPSData): void {
     const lon: number = Number(position.longitude);
     const lat: number = Number(position.latitude);
+    const speedMps = Number(position.speed);
 
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return;
+    }
+
+    // gpsd and some upstreams emit 0/0 placeholders before a real fix is available.
+    if (lat === 0 && lon === 0) {
       return;
     }
 
@@ -608,7 +665,6 @@
     }
 
     const coords = fromLonLat([lon, lat]) as [number, number];
-    const speedMps = Number(position.speed);
 
     let filteredCoords: [number, number] = coords;
     if (latestUserCoords) {
@@ -626,12 +682,6 @@
     if (!map) {
       return;
     }
-
-    // use the coord from the user to add it to the current users track line
-    applyTrackLine(filteredCoords, lon, lat);
-
-    // checks if the current road is a new road or not.
-    checkRoadHistory(filteredCoords);
 
     if (!userMarker) {
       // first fix: create marker feature and add to map
@@ -694,6 +744,14 @@
     applyHeadingRotation();
 
     locationStatus = `Location: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+
+    // Non-critical side effects should never block primary GPS rendering.
+    try {
+      applyTrackLine(filteredCoords, lon, lat);
+      checkRoadHistory(filteredCoords);
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'HomeMapPage.handleGPSPosition.sideEffects');
+    }
   }
 
   /**

@@ -2,14 +2,20 @@
 
 ## Carputer GPS Tracking System
 
+### Remote Web Interface Note
+
+The Home dashboard in `frontend/carputer-remote-web-interface` now consumes live backend telemetry (tracks count, patch level, sys-health stream, and GPS stream) instead of hardcoded placeholder values.
+
 ### Getting Started
 
 Clone the repository using SSH (recommended):
+
 ```bash
 git clone git@github.com:odometer-labs/carputer.git
 ```
 
 Or via HTTPS:
+
 ```bash
 git clone https://github.com/odometer-labs/carputer.git
 ```
@@ -44,12 +50,14 @@ Use the following format for all branches:
 ### Starting Work
 
 Update your local main branch:
+
 ```bash
 git checkout main
 git pull
 ```
 
 Create a new branch following the naming convention:
+
 ```bash
 git checkout -b dev/fe/offline-map-cache
 ```
@@ -57,6 +65,7 @@ git checkout -b dev/fe/offline-map-cache
 ### Committing Changes
 
 Commit regularly and push at the end of your session:
+
 ```bash
 git push origin dev/fe/offline-map-cache
 ```
@@ -77,6 +86,7 @@ Resolve any conflicts as needed.
 **Alternative: Rebase for cleaner history**
 
 If you're working independently or want a linear history:
+
 ```bash
 git rebase origin/main
 ```

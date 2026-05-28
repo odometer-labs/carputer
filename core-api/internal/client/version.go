@@ -38,9 +38,11 @@ func (v Version) GetLatestVersion(ctx context.Context, request *v2.GetLatestVers
 		&resp.Body.Version.GitHash,
 		&resp.Body.Version.ReleaseDate,
 	)
+
 	if err == pgx.ErrNoRows {
 		return nil, huma.Error404NotFound("get latest version retrieved no rows", err)
 	}
+
 	if err != nil {
 		return nil, huma.Error500InternalServerError("unable to query get_latest_version();", err)
 	}

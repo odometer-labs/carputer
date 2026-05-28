@@ -16,4 +16,5 @@ export const ENDPOINTS = {
   sysHealthStream: "/ws/sys-health",
   getAprsStations: `${API_V2_BASE}/aprs/stations`,
   addTrack: `${API_V2_BASE}/tracks/import-track`,
+  getLatestVersion: `${API_V2_BASE}/versioning/latest`,
 };

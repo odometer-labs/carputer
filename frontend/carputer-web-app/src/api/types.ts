@@ -112,3 +112,13 @@ export interface APRSStation {
   distance_m: number | null;
   packet_count: number;
 }
+
+export interface LatestVersionResponse {
+  id?: number;
+
+  Version?: {
+    version_number?: string;
+    git_hash?: string | null;
+    release_date?: string | null;
+  };
+}

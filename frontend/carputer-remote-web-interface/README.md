@@ -41,6 +41,26 @@ npm run dev
 - `/Tracks` - Tracks page
 - `/ManageData` - Manage data page
 
+## Live Backend Data
+
+The Home dashboard now uses live backend data (no hardcoded placeholder metrics):
+
+- `GET /api/v1/tracks` - total GPS track count
+- `GET /v2/versioning/latest` - current patch level
+- `WS /ws/sys-health` - CPU, memory, disk, uptime, and network throughput
+- `WS /ws/get-position` - current GPS fix (lat/lon, speed, heading)
+
+If a backend source is temporarily unavailable, the UI displays `Unavailable` for that field instead of fake values.
+
+## Local Development Proxy
+
+`vite.config.ts` includes dev proxies so local frontend development can hit backend services without CORS setup:
+
+- `/api` -> `http://localhost:8000` (legacy API)
+- `/v2` -> `http://localhost:8888` (core API)
+- `/ws` -> `http://localhost:8000` (legacy WebSocket streams)
+- `/ws/sys-health` -> `http://localhost:8090` (sys-health WebSocket stream)
+
 ## Project Structure
 
 - `src/pages` - top-level page components
