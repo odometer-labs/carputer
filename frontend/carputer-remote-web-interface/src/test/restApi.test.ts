@@ -64,13 +64,16 @@ describe("restApi", () => {
     class MockWebSocket {
       static OPEN = 1;
       static CONNECTING = 0;
+      static lastInstance: MockWebSocket | null = null;
 
       readyState = MockWebSocket.OPEN;
       onmessage: ((event: MessageEvent) => void) | null = null;
       onerror: (() => void) | null = null;
       onclose: (() => void) | null = null;
 
-      constructor(_url: string) {}
+      constructor(_url: string) {
+        MockWebSocket.lastInstance = this;
+      }
 
       close() {
         this.readyState = 3;
@@ -90,16 +93,11 @@ describe("restApi", () => {
       configurable: true,
     });
 
-    const wsInstance = new MockWebSocket(
-      "ws://localhost",
-    ) as unknown as WebSocket;
-    const wsCtor = vi
-      .fn()
-      .mockImplementation(() => wsInstance) as unknown as typeof WebSocket;
-    vi.stubGlobal("WebSocket", wsCtor);
+    vi.stubGlobal("WebSocket", MockWebSocket as unknown as typeof WebSocket);
 
     const onMessage = vi.fn();
     const stop = subscribeToPositionStream(onMessage);
+    const wsInstance = MockWebSocket.lastInstance as unknown as WebSocket;
 
     wsInstance.onmessage?.({
       data: JSON.stringify({
