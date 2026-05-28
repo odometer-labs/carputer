@@ -170,8 +170,9 @@ function getCoreApiHttpBaseUrl(): string {
     return env.VITE_CORE_API_HTTP_URL;
   }
 
-  // In Docker (:3000) and Vite dev (:5173), target the core-api directly.
-  if (window.location.port === "3000" || window.location.port === "5173") {
+  // In Vite dev (:5173), target the core-api directly on port 8888.
+  // In Docker (:3000), route through nginx (/v2/ proxy).
+  if (window.location.port === "5173") {
     return `${window.location.protocol}//${window.location.hostname}:8888`;
   }
 
@@ -184,8 +185,9 @@ function getApiHttpBaseUrl(): string {
     return env.VITE_API_HTTP_URL;
   }
 
-  // In Docker frontend (:3000) and Vite dev (:5173), target the API directly.
-  if (window.location.port === "3000" || window.location.port === "5173") {
+  // In Vite dev (:5173), target the legacy API directly on port 8000.
+  // In Docker (:3000), route through nginx (/api/ proxy).
+  if (window.location.port === "5173") {
     return `${window.location.protocol}//${window.location.hostname}:8000`;
   }
 
@@ -250,10 +252,20 @@ export function subscribeToPositionStream(
 ): () => void {
   const primaryUrl = getPositionWebSocketUrl();
   const fallbackUrl = getPositionWebSocketFallbackUrl(primaryUrl);
+  const GPS_WS_CONNECT_TIMEOUT_MS = 6000;
 
   let socket: WebSocket | null = null;
   let hasAttemptedFallback = false;
   let isClosedByCaller = false;
+  let hasOpenedSocket = false;
+  let connectTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const clearConnectTimeout = (): void => {
+    if (connectTimeoutId !== null) {
+      clearTimeout(connectTimeoutId);
+      connectTimeoutId = null;
+    }
+  };
 
   const tryFallback = (): boolean => {
     if (hasAttemptedFallback || !fallbackUrl || isClosedByCaller) {
@@ -266,6 +278,11 @@ export function subscribeToPositionStream(
   };
 
   const bindHandlers = (ws: WebSocket): void => {
+    ws.onopen = () => {
+      hasOpenedSocket = true;
+      clearConnectTimeout();
+    };
+
     ws.onmessage = (event: MessageEvent) => {
       try {
         const raw = JSON.parse(event.data);
@@ -291,6 +308,11 @@ export function subscribeToPositionStream(
     };
 
     ws.onerror = () => {
+      // Avoid surfacing premature startup errors until connect timeout has elapsed.
+      if (!hasOpenedSocket) {
+        return;
+      }
+
       if (tryFallback()) {
         return;
       }
@@ -301,7 +323,14 @@ export function subscribeToPositionStream(
     };
 
     ws.onclose = () => {
+      clearConnectTimeout();
+
       if (isClosedByCaller) {
+        return;
+      }
+
+      // If never opened, let the timeout path decide whether to error/fallback.
+      if (!hasOpenedSocket) {
         return;
       }
 
@@ -323,14 +352,39 @@ export function subscribeToPositionStream(
     ) {
       socket.close();
     }
+
+    clearConnectTimeout();
+    hasOpenedSocket = false;
     socket = new WebSocket(url);
     bindHandlers(socket);
+
+    const activeSocket = socket;
+    connectTimeoutId = setTimeout(() => {
+      if (isClosedByCaller || socket !== activeSocket || hasOpenedSocket) {
+        return;
+      }
+
+      try {
+        activeSocket.close();
+      } catch {
+        // No action needed; we'll still attempt fallback/report below.
+      }
+
+      if (tryFallback()) {
+        return;
+      }
+
+      if (onError) {
+        onError("GPS websocket connection timed out");
+      }
+    }, GPS_WS_CONNECT_TIMEOUT_MS);
   };
 
   connect(primaryUrl);
 
   return () => {
     isClosedByCaller = true;
+    clearConnectTimeout();
 
     if (
       socket &&
@@ -380,6 +434,8 @@ function getSysHealthWebSocketUrl(): string {
 
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
+  // In Vite dev (:5173), connect directly to sys-health on port 8090.
+  // In Docker, route through nginx (/ws/sys-health proxy).
   if (window.location.port === "5173") {
     return `${protocol}//${window.location.hostname}:8090${ENDPOINTS.sysHealthStream}`;
   }
@@ -395,10 +451,9 @@ function getPositionWebSocketUrl(): string {
 
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
-  // In dev mode (Vite on :5173) or Docker frontend (nginx on :3000), connect
-  // directly to the API server on port 8000 — the API port is always exposed
-  // to the host in docker-compose, so this bypasses any nginx WebSocket proxy issues.
-  if (window.location.port === "5173" || window.location.port === "3000") {
+  // In dev mode (Vite on :5173), connect directly to the API server on port 8000.
+  // In production (port 3000), use the same host and port (proxied through nginx).
+  if (window.location.port === "5173") {
     return `${protocol}//${window.location.hostname}:8000${ENDPOINTS.getPositionStream}`;
   }
 
