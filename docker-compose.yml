@@ -7,6 +7,7 @@
 #
 # Services:
 #   - Frontend:  http://localhost:3000  (Svelte app)
+#   - Remote Web Interface:  http://localhost:3001  (Svelte app)
 #   - Core API:       http://localhost:8888  (Go + Huma)
 #   - Core API Docs:  http://localhost:8888/docs
 #   - Legacy API:       http://localhost:8000  (Python + FastAPI)
@@ -25,7 +26,7 @@ services:
       context: ./core-api
       dockerfile: deployments/docker/Dockerfile
     ports:
-      - '8888:8888'
+      - "8888:8888"
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -52,7 +53,7 @@ services:
   api:
     build: ./api
     ports:
-      - '8000:8000'
+      - "8000:8000"
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -97,7 +98,7 @@ services:
   frontend:
     build: ./frontend/carputer-web-app
     ports:
-      - '3000:80'
+      - "3000:80"
     restart: always
     networks:
       - carputer
@@ -106,7 +107,30 @@ services:
       - wifi-manager
       - core-api
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
+      test:
+        ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Remote Web Interface (Svelte + Vite, served by nginx)
+  # ---------------------------------------------------------------------------
+  remote-web-interface:
+    build: ./frontend/carputer-remote-web-interface
+    ports:
+      - "3001:80"
+    restart: always
+    networks:
+      - carputer
+    depends_on:
+      - api
+      - core-api
+      - sys-health
+      - wifi-manager
+    healthcheck:
+      test:
+        ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -171,7 +195,6 @@ services:
     networks:
       - carputer
 
-
   # ---------------------------------------------------------------------------
   # System Health Service (Go)
   # ---------------------------------------------------------------------------
@@ -183,7 +206,15 @@ services:
     networks:
       - carputer
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8090/health"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1:8090/health",
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -195,15 +226,17 @@ services:
     build: ./infrastructure/wifi-manager/
     restart: always
     ports:
-      - '9001:9001'
+      - "9001:9001"
     volumes:
-        - "/var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket"
+      - "/var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket"
+    networks:
+      - carputer
     healthcheck:
-        test: ["CMD", "curl", "-f", "http://localhost:9001/wifi/version"]
-        interval: 360s
-        timeout: 10s
-        retries: 3
-        start_period: 60s
+      test: ["CMD", "curl", "-f", "http://localhost:9001/wifi/version"]
+      interval: 360s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
 include:
   - ./map-vector-tiles/docker-compose.yml
