@@ -64,12 +64,32 @@ services:
       - carputer
     depends_on:
       - api
+      - wifi-manager
     healthcheck:
       test:
         ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
       interval: 30s
       timeout: 3s
       retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Wifi Management Service
+  # ---------------------------------------------------------------------------
+  wifi-manager:
+    build: ./infrastructure/wifi-manager/
+    restart: always
+    ports:
+      - "9001:9001"
+    volumes:
+      - "/var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket"
+    networks:
+      - carputer
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9001/wifi/version"]
+      interval: 360s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   # ---------------------------------------------------------------------------
   # PostgreSQL + PostGIS Database

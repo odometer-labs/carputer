@@ -229,6 +229,8 @@ services:
       - "9001:9001"
     volumes:
       - "/var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket"
+    networks:
+      - carputer
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9001/wifi/version"]
       interval: 360s
