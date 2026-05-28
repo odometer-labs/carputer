@@ -19,7 +19,7 @@ services:
   api:
     image: ghcr.io/odometer-labs/carputer-api:${VERSION:-latest}
     ports:
-      - '8000:8000'
+      - "8000:8000"
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -58,14 +58,15 @@ services:
   frontend:
     image: ghcr.io/odometer-labs/carputer-frontend:${VERSION:-latest}
     ports:
-      - '3000:80'
+      - "3000:80"
     restart: always
     networks:
       - carputer
     depends_on:
       - api
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
+      test:
+        ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -91,6 +92,8 @@ services:
     volumes:
       - ./backend/geotracker/migrations/gps_functions.sql:/docker-entrypoint-initdb.d/01_gps_functions.sql
       - ./backend/geotracker/migrations/aprs_tables.sql:/docker-entrypoint-initdb.d/02_aprs_tables.sql
+      - ./backend/geotracker/migrations/versioning_functions.sql:/docker-entrypoint-initdb.d/03_versioning_functions.sql
+      - ./backend/geotracker/migrations/versioning_tables.sql:/docker-entrypoint-initdb.d/04_versioning_tables.sql
       - postgres_data:/var/lib/postgresql/data
     networks:
       - carputer

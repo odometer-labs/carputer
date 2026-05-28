@@ -31,18 +31,34 @@ func (v Version) CreateNewVersion(ctx context.Context, request *v2.CreateNewVers
 
 func (v Version) GetLatestVersion(ctx context.Context, request *v2.GetLatestVersionRequest) (*v2.GetLatestVersionResponse, error) {
 	resp := v2.GetLatestVersionResponse{}
+	resp.Body.Version.VersionNumber = "1.0.0"
 
-	err := v.Pool.QueryRow(ctx, "select * from gps.get_latest_version()").Scan(
+	var versionTableExists bool
+	err := v.Pool.QueryRow(ctx, "select to_regclass('gps.version') is not null;").Scan(&versionTableExists)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("unable to check version table existence", err)
+	}
+
+	if !versionTableExists {
+		return &resp, nil
+	}
+
+	err = v.Pool.QueryRow(ctx, `
+		select id, version_number, git_hash, release_date
+		from gps.version
+		order by id desc
+		limit 1;
+	`).Scan(
 		&resp.Body.ID,
 		&resp.Body.Version.VersionNumber,
 		&resp.Body.Version.GitHash,
 		&resp.Body.Version.ReleaseDate,
 	)
 	if err == pgx.ErrNoRows {
-		return nil, huma.Error404NotFound("get latest version retrieved no rows", err)
+		return &resp, nil
 	}
 	if err != nil {
-		return nil, huma.Error500InternalServerError("unable to query get_latest_version();", err)
+		return nil, huma.Error500InternalServerError("unable to query latest version row", err)
 	}
 
 	return &resp, nil
