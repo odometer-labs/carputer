@@ -1,7 +1,6 @@
 <script lang="ts">
   import { router } from 'svelte-spa-router';
   import HomePage from './pages/HomePage.svelte';
-  import LogsPage from './pages/LogsPage.svelte';
   import ManageDataPage from './pages/ManageDataPage.svelte';
   import TracksPage from './pages/TracksPage.svelte';
 </script>
@@ -13,12 +12,6 @@
   {#if router.location === '/' || router.location === ''}
     <div style="height: 100%; width: 100%;">
       <HomePage />
-    </div>
-  {/if}
-
-  {#if router.location === '/Logs'}
-    <div style="height: 100%; width: 100%;">
-      <LogsPage />
     </div>
   {/if}
 

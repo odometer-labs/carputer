@@ -116,10 +116,6 @@
     }
   });
 
-  function goToLogs() : void {
-    push("/Logs");
-  }
-
   function goToManageData() : void {
     push("/ManageData");
   }
@@ -155,9 +151,8 @@
     <article class="panel">
       <h3>Quick Actions</h3>
       <div class="action-list">
-        <button class="action-btn" type="button" on:click={goToLogs}>View Logs</button>
-        <button class="action-btn" type="button" on:click={goToTracks}>View Tracks</button>
-        <button class="action-btn" type="button" on:click={goToManageData}>Manage Data</button>
+        <button class="action-btn" type="button" onclick={goToTracks}>View Tracks</button>
+        <button class="action-btn" type="button" onclick={goToManageData}>Manage Data</button>
       </div>
     </article>
   </section>
