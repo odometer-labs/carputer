@@ -73,10 +73,11 @@ jobs:
           for f in \
             backend/geotracker/migrations/gps_functions.sql \
             backend/geotracker/migrations/aprs_tables.sql \
+            backend/geotracker/migrations/aprs_functions.sql \
             backend/geotracker/migrations/versioning_functions.sql \
             backend/geotracker/migrations/versioning_tables.sql \
-            backend/geotracker/migrations/travel_history_functions.sql \
             backend/geotracker/migrations/travel_history_tables.sql; do
+            backend/geotracker/migrations/travel_history_functions.sql \
             psql -h localhost -U testuser -d carputer -f "$f"
           done
 
