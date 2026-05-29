@@ -136,7 +136,7 @@ describe("restApi", () => {
           track_id: 1,
           time_stamp: "",
           geom: {},
-          speed_mph: 30,
+          speed_mps: 30,
           heading_deg: 0,
         }),
       } as Response),

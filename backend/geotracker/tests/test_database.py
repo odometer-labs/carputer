@@ -562,6 +562,27 @@ def test_view_all_tracks(db_conn, sample_track_points):
             assert "geom" in row
             assert isinstance(row["geom"], dict)
             assert row["geom"]["type"] == "LineString"
+            assert "track_name" in row
+
+
+def test_view_all_tracks_preserves_name(db_conn, sample_track_points):
+    """Verify view_all_tracks returns the user-supplied track name, not a generated fallback."""
+    with db_conn.cursor() as cur:
+        cur.execute("SELECT gps.create_track(%s) as id;", ("Bad Boy Joy Walk",))
+        tid = cur.fetchone()["id"]
+
+        for pt in sample_track_points:
+            cur.execute(
+                "CALL gps.add_track_point(%s, %s, %s, %s, %s, %s);",
+                (tid, pt["timestamp"], pt["lat"], pt["lon"], 0, 0),
+            )
+        cur.execute("CALL gps.end_track();")
+
+        cur.execute("SELECT * FROM gps.view_all_tracks() WHERE track_id = %s;", (tid,))
+        row = cur.fetchone()
+
+        assert row is not None
+        assert row["track_name"] == "Bad Boy Joy Walk"
 
 
 def test_prevent_multiple_active_tracks(db_conn):

@@ -287,6 +287,38 @@ func (t Track) AddTrackPoint(ctx context.Context, request *v2.AddTrackPointReque
 
 // CheckNewRoad queries gps.is_new_road() to determine whether the current position
 // falls on a road not previously tracked. Returns a 404 if no rows are returned, or
+// GetLatestTrackPoint returns the most recent GPS track point by calling
+// gps.get_latest_track_point(). Returns a 404 if no points exist, or a 500 on
+// any query or scan failure.
+func (t Track) GetLatestTrackPoint(ctx context.Context) (*v2.GetLatestTrackPointResponse, error) {
+	rows, err := t.Pool.Query(ctx, `
+		SELECT point_id, track_id, time_stamp, ST_AsGeoJSON(geom::geometry), speed_mps, heading_deg
+		FROM gps.get_latest_track_point()
+	`)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Unable to get latest track point", err)
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return nil, huma.Error404NotFound("No track points found", nil)
+	}
+
+	resp := &v2.GetLatestTrackPointResponse{}
+	err = rows.Scan(
+		&resp.Body.PointID,
+		&resp.Body.TrackID,
+		&resp.Body.TimeStamp,
+		&resp.Body.Geom,
+		&resp.Body.SpeedMPS,
+		&resp.Body.HeadingDeg,
+	)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Unable to scan latest track point", err)
+	}
+	return resp, nil
+}
+
 // a 500 on any other database error.
 func (t Track) CheckNewRoad(ctx context.Context, request *v2.CheckNewRoadRequest) (*v2.CheckNewRoadResponse, error) {
 	var isNewRoad bool
