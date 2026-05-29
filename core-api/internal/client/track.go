@@ -134,12 +134,25 @@ func (t Track) UpdateTrack(
 	request *v2.UpdateTrackRequest,
 ) (*v2.UpdateTrackResponse, error) {
 
+	// Send nil (NULL) for zero times so the stored procedure's COALESCE preserves
+	// the existing DB value rather than overwriting with Go's zero epoch.
+	var startTime *time.Time
+	if !request.Body.StartTime.IsZero() {
+		st := request.Body.StartTime
+		startTime = &st
+	}
+	var endTime *time.Time
+	if !request.Body.EndTime.IsZero() {
+		et := request.Body.EndTime
+		endTime = &et
+	}
+
 	_, err := t.Pool.Exec(
 		ctx,
 		"call gps.update_track($1, $2, $3, $4);",
 		request.TrackID,
-		request.Body.StartTime,
-		request.Body.EndTime,
+		startTime,
+		endTime,
 		request.Body.TrackName)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("Unable to update track", err)

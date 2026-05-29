@@ -306,9 +306,9 @@ CREATE OR REPLACE PROCEDURE gps.update_track(
         p_track_name VARCHAR(50)
     ) LANGUAGE plpgsql AS $$ BEGIN
 UPDATE gps.tracks
-SET start_time = p_start_time,
-    end_time = p_end_time,
-    track_name = p_track_name
+SET start_time = COALESCE(p_start_time, start_time),
+    end_time = COALESCE(p_end_time, end_time),
+    track_name = COALESCE(p_track_name, track_name)
 WHERE track_id = update_track_id;
 END;
 $$;

@@ -11,9 +11,6 @@ import (
 	"github.com/joho/godotenv"
 )
 
-const DatabaseUrl = "db:5432"
-const DatabaseName = "carputer"
-
 var connectionPool *pgxpool.Pool
 
 func Initialize() {
@@ -33,25 +30,31 @@ func createConnectionPool() *pgxpool.Pool {
 		panic(err)
 	}
 
-	var connectionUrl string = fmt.Sprintf("postgres://%s@%s/%s", databaseCreds, DatabaseUrl, DatabaseName)
+	host := envOr("DB_HOST", "db")
+	port := envOr("DB_PORT", "5432")
+	dbname := envOr("POSTGRES_DB", "carputer")
+
+	connectionUrl := fmt.Sprintf("postgres://%s@%s:%s/%s", databaseCreds, host, port, dbname)
 
 	pool, err := pgxpool.New(context.Background(), connectionUrl)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create connection pool: %v", err))
+	}
 	return pool
 }
 
 func getDatabaseUsernamePassword() (string, error) {
-	var username string = os.Getenv("POSTGRES_USER")
-	var password string = os.Getenv("POSTGRES_PASSWORD")
+	username := os.Getenv("POSTGRES_USER")
+	password := os.Getenv("POSTGRES_PASSWORD")
 
-	if len([]rune(username)) != 0 && len([]rune(password)) != 0 {
+	if username != "" && password != "" {
 		return fmt.Sprintf("%s:%s", username, password), nil
 	}
 
-	if len([]rune(username)) == 0 {
+	if username == "" {
 		slog.Warn("Unable to find POSTGRES_USER environment variable")
 	}
-
-	if len([]rune(password)) == 0 {
+	if password == "" {
 		slog.Warn("Unable to find POSTGRES_PASSWORD environment variable")
 	}
 
@@ -64,4 +67,11 @@ func getDatabaseUsernamePassword() (string, error) {
 	username = os.Getenv("POSTGRES_USER")
 	password = os.Getenv("POSTGRES_PASSWORD")
 	return fmt.Sprintf("%s:%s", username, password), nil
+}
+
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
