@@ -13,14 +13,15 @@
   import VectorSource from 'ol/source/Vector.js';
   import Feature from 'ol/Feature.js';
   import Point from 'ol/geom/Point.js';
-  import { fromExtent } from 'ol/geom/Polygon.js';
-  import { containsExtent } from 'ol/extent.js';
+  import Polygon, { fromExtent } from 'ol/geom/Polygon.js';
+  import { containsExtent, getIntersection } from 'ol/extent.js';
   import { Style, Fill, Stroke, Text, Circle } from 'ol/style.js';
   import { fromLonLat } from 'ol/proj.js';
   import { createXYZ } from 'ol/tilegrid.js';
-  import { getCurrentPosition, listTracks, subscribeToPositionStream } from '../api/restApi';
-  import type { GPSData } from '../api/types';
+  import { createRegion, deleteRegion, getCurrentPosition, listRegions, listTracks, subscribeToPositionStream, subscribeToSysHealth } from '../api/restApi';
+  import type { GPSData, RegionDataModel, SysHealthData } from '../api/types';
   import { reportNonVitalError } from '../stores/errorStore';
+  import { wifiStore } from '../stores/wifiStore';
   import 'ol/ol.css';
 
   // TODO: These values should be fetched from the backend, currently they are just placeholders for display.
@@ -28,6 +29,25 @@
   let patch_level: string = "0.1.2";
   let storage_amount_dowloaded: number = 2;
   let storage_amount_left: number = 1;
+
+  let sysHealth: SysHealthData | null = null;
+  let stopSysHealthSubscription: (() => void) | null = null;
+
+  function formatBytes(bytes: number): string {
+    if (bytes >= 1_073_741_824) return `${(bytes / 1_073_741_824).toFixed(1)}G`;
+    if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(0)}M`;
+    if (bytes >= 1_024) return `${(bytes / 1_024).toFixed(0)}K`;
+    return `${bytes}B`;
+  }
+
+  function formatUptime(seconds: number): string {
+    const d = Math.floor(seconds / 86400);
+    const h = Math.floor((seconds % 86400) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    if (d > 0) return `${d}d ${h}h`;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  }
 
   // update checking state
   type UpdateState = 'idle' | 'checking' | 'no-updates' | 'updates-available' | 'updating' | 'updated';
@@ -42,23 +62,111 @@
   let userLayer: VectorLayer | undefined;
   let userMarker: Feature<Point> | undefined;
   let userSource: VectorSource | undefined;
-  let hasCenteredOnGpsFix: boolean = false;
   let gridRenderRaf: number | null = null;
   let stopGPSSubscription: (() => void) | null = null;
   const GRID_ZOOM_OFFSET = 1;
   const tileGrid = createXYZ({ maxZoom: 22 });
 
+  const OREGON_SW = fromLonLat([-124.848974, 41.991794]) as [number, number];
+  const OREGON_NE = fromLonLat([-116.463504, 46.292035]) as [number, number];
+  const OREGON_CENTER = fromLonLat([-120.6565, 44.1428]) as [number, number];
+  const OREGON_EXTENT: [number, number, number, number] = [
+    OREGON_SW[0],
+    OREGON_SW[1],
+    OREGON_NE[0],
+    OREGON_NE[1],
+  ];
+
+  const OREGON_POLYGON = new Polygon([[
+    [-123.994551,45.944106],
+    [-124.01, 46.10], // Warrenton
+    [-124.00, 46.18], // Clatsop Spit
+    [-123.95, 46.25], // Mouth of Columbia
+    [-123.83, 46.22], // Astoria North
+    [-123.75, 46.23], // Tongue Point
+    [-123.545441,46.261769],
+    [-123.370179,46.146753],
+    [-123.211348,46.174138],
+    [-123.11824,46.185092],
+    [-122.904639,46.08103],
+    [-122.811531,45.960537],
+    [-122.762239,45.659305],
+    [-122.247407,45.549767],
+    [-121.809251,45.708598],
+    [-121.535404,45.725029],
+    [-121.217742,45.670259],
+    [-121.18488,45.604536],
+    [-120.637186,45.746937],
+    [-120.505739,45.697644],
+    [-120.209985,45.725029],
+    [-119.963522,45.823614],
+    [-119.525367,45.911245],
+    [-119.125551,45.933153],
+    [-118.988627,45.998876],
+    [-116.918344,45.993399],
+    [-116.78142,45.823614],
+    [-116.545912,45.752413],
+    [-116.463758,45.61549],
+    [-116.671881,45.319735],
+    [-116.732128,45.144473],
+    [-116.847143,45.02398],
+    [-116.830713,44.930872],
+    [-116.934774,44.782995],
+    [-117.038836,44.750133],
+    [-117.241483,44.394132],
+    [-117.170283,44.257209],
+    [-116.97859,44.240778],
+    [-116.896436,44.158624],
+    [-117.027882,43.830007],
+    [-117.027882,42.000709],
+    [-118.698349,41.989755],
+    [-120.001861,41.995232],
+    [-121.037003,41.995232],
+    [-122.378853,42.011663],
+    [-123.233256,42.006186],
+    [-124.213628,42.000709],
+    [-124.356029,42.115725],
+    [-124.432706,42.438865],
+    [-124.416275,42.663419],
+    [-124.553198,42.838681],
+    [-124.454613,43.002989],
+    [-124.383413,43.271359],
+    [-124.235536,43.55616],
+    [-124.169813,43.8081],
+    [-124.060274,44.657025],
+    [-124.076705,44.772041],
+    [-123.97812,45.144473],
+    [-123.939781,45.659305],
+    [-123.994551,45.944106]
+  ].map(coord => fromLonLat(coord))]);
+
   // tile selection state
   let isSelectMode: boolean = false;
   let hasSelection: boolean = false;
+  let hasPendingTileSyncChanges: boolean = false;
+  let isSyncingTileSelection: boolean = false;
+  let canDownloadTiles: boolean = false;
   // key: "z/x/y", value: [z, x, y] in OL internal coords
   let selectedTiles = new Map<string, [number, number, number]>();
+  // key: "z/x/y", value: region id in backend
+  let downloadedRegionIdsByTileKey = new Map<string, number>();
 
   type DownloadedTile = {
+    id: number;
     z: number;
     x: number;
     y: number;
   };
+
+  const TILE_REGION_PREFIX = 'tile/';
+
+  const userMarkerStyle = new Style({
+    image: new Circle({
+      radius: 10,
+      fill: new Fill({ color: '#3399CC' }),
+      stroke: new Stroke({ color: '#ffffff', width: 2 }),
+    }),
+  });
 
   const gridStyle = new Style({
     fill: new Fill({ color: 'rgba(255, 255, 255, 0.04)' }),
@@ -75,25 +183,14 @@
     }),
   });
 
-  function updateUserMarker(position: GPSData): void {
+  function updateUserMarker(coords: [number, number]): void {
     if (!map) return;
-
-    const lon = position.longitude;
-    const lat = position.latitude;
-    const coords = fromLonLat([lon, lat]);
-    const userStyle = new Style({
-      image: new Circle({
-        radius: 10,
-        fill: new Fill({ color: '#3399CC' }),
-        stroke: new Stroke({ color: '#ffffff', width: 2 }),
-      }),
-    });
 
     if (!userMarker) {
       userMarker = new Feature({
         geometry: new Point(coords),
       });
-      userMarker.setStyle(userStyle);
+      userMarker.setStyle(userMarkerStyle);
 
       userSource = new VectorSource({
         features: [userMarker],
@@ -113,18 +210,21 @@
       } else {
         userMarker.setGeometry(new Point(coords));
       }
-      userMarker.setStyle(userStyle);
       userSource?.changed();
     }
 
-    if (!hasCenteredOnGpsFix) {
-      map.getView().animate({
-        center: coords,
-        zoom: 12,
-        duration: 600,
-      });
-      hasCenteredOnGpsFix = true;
+  }
+
+  function handleGPSPosition(position: GPSData): void {
+    const lon = Number(position.longitude);
+    const lat = Number(position.latitude);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return;
     }
+
+    const coords = fromLonLat([lon, lat]) as [number, number];
+    updateUserMarker(coords);
   }
 
   function updateGrid(): void {
@@ -139,10 +239,28 @@
 
     const minTc = tileGrid.getTileCoordForCoordAndZ([extent[0] as number, extent[1] as number], z);
     const maxTc = tileGrid.getTileCoordForCoordAndZ([extent[2] as number, extent[3] as number], z);
-    const xMin = Math.min(minTc[1] as number, maxTc[1] as number);
-    const xMax = Math.max(minTc[1] as number, maxTc[1] as number);
-    const yMin = Math.min(minTc[2] as number, maxTc[2] as number);
-    const yMax = Math.max(minTc[2] as number, maxTc[2] as number);
+    const viewportXMin = Math.min(minTc[1] as number, maxTc[1] as number);
+    const viewportXMax = Math.max(minTc[1] as number, maxTc[1] as number);
+    const viewportYMin = Math.min(minTc[2] as number, maxTc[2] as number);
+    const viewportYMax = Math.max(minTc[2] as number, maxTc[2] as number);
+
+    const oregonMinTc = tileGrid.getTileCoordForCoordAndZ([OREGON_EXTENT[0], OREGON_EXTENT[1]], z);
+    const oregonMaxTc = tileGrid.getTileCoordForCoordAndZ([OREGON_EXTENT[2], OREGON_EXTENT[3]], z);
+
+    const oregonXMin = Math.min(oregonMinTc[1] as number, oregonMaxTc[1] as number);
+    const oregonXMax = Math.max(oregonMinTc[1] as number, oregonMaxTc[1] as number);
+    const oregonYMin = Math.min(oregonMinTc[2] as number, oregonMaxTc[2] as number);
+    const oregonYMax = Math.max(oregonMinTc[2] as number, oregonMaxTc[2] as number);
+
+    const xMin = Math.max(viewportXMin, oregonXMin);
+    const xMax = Math.min(viewportXMax, oregonXMax);
+    const yMin = Math.max(viewportYMin, oregonYMin);
+    const yMax = Math.min(viewportYMax, oregonYMax);
+
+    if (xMin > xMax || yMin > yMax) {
+      gridSource.clear();
+      return;
+    }
 
     // Guard against accidental huge extents at low map zoom levels.
     // If too many cells would be rendered, keep the existing grid visible instead of clearing it.
@@ -153,12 +271,22 @@
 
     for (let x = xMin; x <= xMax; x++) {
       for (let y = yMin; y <= yMax; y++) {
-        const tileExtent = tileGrid.getTileCoordExtent([z, x, y]);
+        const tileCoord: [number, number, number] = [z, x, y];
+        const tileExtent = tileGrid.getTileCoordExtent(tileCoord);
+        if (!OREGON_POLYGON.intersectsExtent(tileExtent)) {
+          continue;
+        }
+
         const feature = new Feature(fromExtent(tileExtent));
         feature.setId(`grid/${z}/${x}/${y}`);
         gridSource.addFeature(feature);
       }
     }
+  }
+
+  function isTileInsideOregon(tileCoord: [number, number, number]): boolean {
+    const tileExtent = tileGrid.getTileCoordExtent(tileCoord);
+    return OREGON_POLYGON.intersectsExtent(tileExtent);
   }
 
   function scheduleGridUpdate(): void {
@@ -172,29 +300,89 @@
 
   // re-render grid whenever select mode changes
   $: if (map && gridSource) updateGrid();
+  $: hasPendingTileSyncChanges = selectionDiffersFromDownloaded();
+  $: canDownloadTiles = $wifiStore.isWifiOn && $wifiStore.isConnected;
 
   async function loadDashboardInfo(): Promise<void> {
     try {
       const tracks = await listTracks();
       num_tracks = Array.isArray(tracks) ? tracks.length : 0;
     } catch (error: unknown) {
-      reportNonVitalError(error, 'DashboardPage.listTracks');
+      reportNonVitalError(error, 'SystemDataPage.listTracks');
+    }
+  }
+
+  function regionNameFromTileKey(tileKey: string): string {
+    return `${TILE_REGION_PREFIX}${tileKey}`;
+  }
+
+  function tileKeyFromRegionName(regionName: string): string | null {
+    if (typeof regionName !== 'string' || !regionName.startsWith(TILE_REGION_PREFIX)) {
+      return null;
+    }
+
+    const tileKey = regionName.slice(TILE_REGION_PREFIX.length);
+    const segments = tileKey.split('/');
+    if (segments.length !== 3) return null;
+
+    if (!segments.every((segment) => /^-?\d+$/.test(segment))) {
+      return null;
+    }
+
+    return tileKey;
+  }
+
+  function tileCoordFromKey(tileKey: string): [number, number, number] | null {
+    const segments = tileKey.split('/');
+    if (segments.length !== 3) return null;
+
+    const z = Number(segments[0]);
+    const x = Number(segments[1]);
+    const y = Number(segments[2]);
+
+    if (!Number.isFinite(z) || !Number.isFinite(x) || !Number.isFinite(y)) {
+      return null;
+    }
+
+    return [Math.floor(z), Math.floor(x), Math.floor(y)];
+  }
+
+  function selectionDiffersFromDownloaded(): boolean {
+    if (selectedTiles.size !== downloadedRegionIdsByTileKey.size) {
+      return true;
+    }
+
+    for (const key of selectedTiles.keys()) {
+      if (!downloadedRegionIdsByTileKey.has(key)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  async function loadDownloadedRegions(): Promise<void> {
+    try {
+      const regions = await listRegions();
+      applyDownloadedRegionSelections(regions);
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'SystemDataPage.listRegions');
     }
   }
 
   function startGPSTracking(): void {
     getCurrentPosition()
-      .then((position) => updateUserMarker(position))
+      .then((position) => handleGPSPosition(position))
       .catch((error: unknown) => {
-        reportNonVitalError(error, 'DashboardPage.getCurrentPosition');
+        reportNonVitalError(error, 'SystemDataPage.getCurrentPosition');
       });
 
     stopGPSSubscription = subscribeToPositionStream(
       (position: GPSData) => {
-        updateUserMarker(position);
+        handleGPSPosition(position);
       },
       (error: string) => {
-        reportNonVitalError(error, 'DashboardPage.subscribeToPositionStream');
+        reportNonVitalError(error, 'SystemDataPage.subscribeToPositionStream');
       }
     );
   }
@@ -214,7 +402,7 @@
         updateCheckState = 'no-updates';
       }
     } catch (error: unknown) {
-      reportNonVitalError(error, 'DashboardPage.handleCheckForUpdates');
+      reportNonVitalError(error, 'SystemDataPage.handleCheckForUpdates');
       updateCheckState = 'idle';
     }
   }
@@ -226,13 +414,9 @@
       await new Promise(resolve => setTimeout(resolve, 2500));
       updateCheckState = 'updated';
     } catch (error: unknown) {
-      reportNonVitalError(error, 'DashboardPage.handleUpdate');
+      reportNonVitalError(error, 'SystemDataPage.handleUpdate');
       updateCheckState = 'updates-available';
     }
-  }
-
-  function resetUpdateState(): void {
-    updateCheckState = 'idle';
   }
 
   onMount(() => {
@@ -245,6 +429,41 @@
       style: selectedTileStyle,
     });
 
+    const clipFunction = (event: any) => {
+      const ctx = event.context;
+      const pixelRatio = event.frameState.pixelRatio;
+      
+      ctx.save();
+      ctx.beginPath();
+      
+      const flatCoords = OREGON_POLYGON.getFlatCoordinates();
+      const stride = OREGON_POLYGON.getStride();
+      
+      for (let i = 0; i < flatCoords.length; i += stride) {
+        const coord = [flatCoords[i], flatCoords[i+1]] as [number, number];
+        const pixel = map?.getPixelFromCoordinate(coord) as [number, number] | undefined;
+        if (pixel) {
+          if (i === 0) {
+            ctx.moveTo(pixel[0] * pixelRatio, pixel[1] * pixelRatio);
+          } else {
+            ctx.lineTo(pixel[0] * pixelRatio, pixel[1] * pixelRatio);
+          }
+        }
+      }
+      
+      ctx.closePath();
+      ctx.clip();
+    };
+
+    const restoreFunction = (event: any) => {
+      event.context.restore();
+    };
+
+    gridLayer.on('prerender', clipFunction);
+    gridLayer.on('postrender', restoreFunction);
+    selectionLayer.on('prerender', clipFunction);
+    selectionLayer.on('postrender', restoreFunction);
+
     map = new OLMap({
       target: mapElement,
       layers: [
@@ -253,8 +472,9 @@
         selectionLayer,
       ],
       view: new View({
-        center: fromLonLat([0, 0]),
-        zoom: 3,
+        center: OREGON_CENTER,
+        zoom: 7,
+        extent: OREGON_EXTENT,
       }),
       controls: [],
     });
@@ -268,18 +488,21 @@
     loadDashboardInfo();
     startGPSTracking();
 
-    // TODO: Replace this with backend response data when tile-download status API is ready.
-    const downloadedTilesFromBackend: DownloadedTile[] = [];
-    applyDownloadedTileSelections(downloadedTilesFromBackend);
+    stopSysHealthSubscription = subscribeToSysHealth(
+      (data) => { sysHealth = data; },
+      (error: string) => { sysHealth = null; reportNonVitalError(error, 'SystemDataPage.sysHealth'); }
+    );
 
-    map.on('click', (event) => {
+    loadDownloadedRegions();
+
+    map.on('click', async (event: any) => {
       if (!isSelectMode || !map || !selectionSource || !gridLayer) return;
 
       const feature = map.forEachFeatureAtPixel(
         event.pixel,
-        (candidate) => candidate,
+        (candidate: any) => candidate,
         {
-          layerFilter: (layer) => layer === gridLayer,
+          layerFilter: (layer: any) => layer === gridLayer,
           hitTolerance: 3,
         }
       );
@@ -296,46 +519,29 @@
       const y = Number(parts[3]);
       if (!Number.isFinite(z) || !Number.isFinite(x) || !Number.isFinite(y)) return;
 
-      const key = `${z}/${x}/${y}`;
       const candidateTile: [number, number, number] = [z, x, y];
+      if (!isTileInsideOregon(candidateTile)) return;
 
-      if (selectedTiles.has(key)) {
-        selectedTiles.delete(key);
-        const existing = selectionSource.getFeatureById(key);
-        if (existing) selectionSource.removeFeature(existing);
-      } else {
-        const ancestorsToRemove: string[] = [];
-        const descendantsToRemove: string[] = [];
+      // When zoomed out, big tiles should be split into smaller tiles that are actually in Oregon.
+      const TARGET_SUBDIVISION_ZOOM = 10;
+      const tilesToToggle = (z < TARGET_SUBDIVISION_ZOOM)
+        ? getSubTiles(candidateTile, TARGET_SUBDIVISION_ZOOM).filter(t => isTileInsideOregon(t))
+        : [candidateTile];
 
-        for (const [selectedKey, selectedTile] of selectedTiles.entries()) {
-          if (selectedTile[0] < z && tileContains(selectedTile, candidateTile)) {
-            ancestorsToRemove.push(selectedKey);
+      // If any of the target tiles are already selected, we are in "deselect" mode for the whole set.
+      const isDeselect = tilesToToggle.some(t => selectedTiles.has(`${t[0]}/${t[1]}/${t[2]}`));
+
+      for (const t of tilesToToggle) {
+        const key = `${t[0]}/${t[1]}/${t[2]}`;
+        if (isDeselect) {
+          if (selectedTiles.has(key)) {
+            await toggleTile(t);
           }
-
-          if (selectedTile[0] > z && tileContains(candidateTile, selectedTile)) {
-            descendantsToRemove.push(selectedKey);
+        } else {
+          if (!selectedTiles.has(key)) {
+            await toggleTile(t);
           }
         }
-
-        // If selecting a child tile, remove any selected parent tiles that contain it.
-        for (const selectedKey of ancestorsToRemove) {
-          selectedTiles.delete(selectedKey);
-          const parentFeature = selectionSource.getFeatureById(selectedKey);
-          if (parentFeature) selectionSource.removeFeature(parentFeature);
-        }
-
-        // If selecting a parent tile, collapse selected children inside it.
-        for (const selectedKey of descendantsToRemove) {
-          selectedTiles.delete(selectedKey);
-          const childFeature = selectionSource.getFeatureById(selectedKey);
-          if (childFeature) selectionSource.removeFeature(childFeature);
-        }
-
-        selectedTiles.set(key, candidateTile);
-        const extent = tileGrid.getTileCoordExtent(candidateTile);
-        const feature = new Feature(fromExtent(extent));
-        feature.setId(key);
-        selectionSource.addFeature(feature);
       }
 
       hasSelection = selectedTiles.size > 0;
@@ -351,6 +557,8 @@
     }
     stopGPSSubscription?.();
     stopGPSSubscription = null;
+    stopSysHealthSubscription?.();
+    stopSysHealthSubscription = null;
     map?.setTarget(undefined);
   });
 
@@ -364,10 +572,98 @@
     // updateGrid() is called reactively via $: when isSelectMode changes
   }
 
-  function clearSelection(): void {
-    selectionSource?.clear();
-    selectedTiles = new Map();
-    hasSelection = false;
+  async function clearSelection(): Promise<void> {
+    const tilesToClear = [...selectedTiles.values()];
+    for (const tile of tilesToClear) {
+      await toggleTile(tile);
+    }
+
+    hasSelection = selectedTiles.size > 0;
+    selectedTiles = new Map(selectedTiles);
+  }
+
+  function getSubTiles(tile: [number, number, number], targetZ: number): [number, number, number][] {
+    const [z, x, y] = tile;
+    if (z >= targetZ) return [tile];
+
+    const dz = targetZ - z;
+    const factor = Math.pow(2, dz);
+    const result: [number, number, number][] = [];
+    const minX = x * factor;
+    const maxX = (x + 1) * factor - 1;
+    const minY = y * factor;
+    const maxY = (y + 1) * factor - 1;
+
+    // Safety check - don't return more than 4096 tiles from one click
+    if ((maxX - minX + 1) * (maxY - minY + 1) > 4096) {
+      return [tile];
+    }
+
+    for (let i = minX; i <= maxX; i++) {
+      for (let j = minY; j <= maxY; j++) {
+        result.push([targetZ, i, j]);
+      }
+    }
+    return result;
+  }
+
+  async function toggleTile(tile: [number, number, number]): Promise<void> {
+    if (!selectionSource) return;
+    const [z, x, y] = tile;
+    const key = `${z}/${x}/${y}`;
+
+    if (selectedTiles.has(key)) {
+      selectedTiles.delete(key);
+      const existing = selectionSource.getFeatureById(key);
+      if (existing) selectionSource.removeFeature(existing);
+
+      const downloadedRegionId = downloadedRegionIdsByTileKey.get(key);
+      if (downloadedRegionId !== undefined) {
+        try {
+          await deleteRegion(downloadedRegionId);
+          downloadedRegionIdsByTileKey.delete(key);
+          downloadedRegionIdsByTileKey = new Map(downloadedRegionIdsByTileKey);
+        } catch (error: unknown) {
+          reportNonVitalError(error, 'SystemDataPage.deleteRegionOnUnselect');
+
+          // Roll back local deselection when backend delete fails.
+          selectedTiles.set(key, tile);
+          const rollbackExtent = tileGrid.getTileCoordExtent(tile);
+          const rollbackFeature = new Feature(fromExtent(rollbackExtent));
+          rollbackFeature.setId(key);
+          selectionSource.addFeature(rollbackFeature);
+        }
+      }
+    } else {
+      const ancestorsToRemove: string[] = [];
+      const descendantsToRemove: string[] = [];
+
+      for (const [sKey, sTile] of selectedTiles.entries()) {
+        if (sTile[0] < z && tileContains(sTile, tile)) {
+          ancestorsToRemove.push(sKey);
+        }
+        if (sTile[0] > z && tileContains(tile, sTile)) {
+          descendantsToRemove.push(sKey);
+        }
+      }
+
+      for (const sKey of ancestorsToRemove) {
+        selectedTiles.delete(sKey);
+        const f = selectionSource.getFeatureById(sKey);
+        if (f) selectionSource.removeFeature(f);
+      }
+      for (const sKey of descendantsToRemove) {
+        selectedTiles.delete(sKey);
+        const f = selectionSource.getFeatureById(sKey);
+        if (f) selectionSource.removeFeature(f);
+      }
+
+      selectedTiles.set(key, tile);
+      const extent = tileGrid.getTileCoordExtent(tile);
+      const feature = new Feature(fromExtent(extent));
+      feature.setId(key);
+      selectionSource.addFeature(feature);
+    }
   }
 
   function tileContains(
@@ -384,9 +680,10 @@
 
     selectionSource.clear();
     selectedTiles = new Map();
+    downloadedRegionIdsByTileKey = new Map();
 
     for (const tile of downloadedTiles) {
-      if (!Number.isFinite(tile.z) || !Number.isFinite(tile.x) || !Number.isFinite(tile.y)) {
+      if (!Number.isFinite(tile.id) || !Number.isFinite(tile.z) || !Number.isFinite(tile.x) || !Number.isFinite(tile.y)) {
         continue;
       }
 
@@ -397,6 +694,7 @@
       const coord: [number, number, number] = [z, x, y];
 
       selectedTiles.set(key, coord);
+      downloadedRegionIdsByTileKey.set(key, Math.floor(tile.id));
 
       const extent = tileGrid.getTileCoordExtent(coord);
       const feature = new Feature(fromExtent(extent));
@@ -406,13 +704,92 @@
 
     hasSelection = selectedTiles.size > 0;
     selectedTiles = new Map(selectedTiles);
+    downloadedRegionIdsByTileKey = new Map(downloadedRegionIdsByTileKey);
+  }
+
+  function applyDownloadedRegionSelections(regions: RegionDataModel[]): void {
+    const downloadedTiles: DownloadedTile[] = [];
+
+    for (const region of regions) {
+      const tileKey = tileKeyFromRegionName(region.name);
+      if (!tileKey) continue;
+
+      const coord = tileCoordFromKey(tileKey);
+      if (!coord) continue;
+
+      downloadedTiles.push({
+        id: Number(region.id),
+        z: coord[0],
+        x: coord[1],
+        y: coord[2],
+      });
+    }
+
+    applyDownloadedTileSelections(downloadedTiles);
   }
 
   async function downloadTiles(): Promise<void> {
-    if (!hasSelection) return;
-    const tiles = [...selectedTiles.values()].map(([z, x, y]) => ({ z, x, y }));
-    // TODO: hook up to real backend endpoint
-    console.log('Download tiles request:', { tiles });
+    if (!canDownloadTiles) {
+      return;
+    }
+
+    if (isSyncingTileSelection || !hasPendingTileSyncChanges) return;
+
+    isSyncingTileSelection = true;
+
+    try {
+      const existingRegions = await listRegions();
+      const existingDownloadedByTileKey = new Map<string, number>();
+
+      for (const region of existingRegions) {
+        const tileKey = tileKeyFromRegionName(region.name);
+        if (!tileKey || !Number.isFinite(region.id)) continue;
+        existingDownloadedByTileKey.set(tileKey, Number(region.id));
+      }
+
+      const selectedTileKeys = new Set(selectedTiles.keys());
+
+      for (const [tileKey, regionId] of existingDownloadedByTileKey.entries()) {
+        if (!selectedTileKeys.has(tileKey)) {
+          await deleteRegion(regionId);
+        }
+      }
+
+      for (const [tileKey, tileCoord] of selectedTiles.entries()) {
+        if (existingDownloadedByTileKey.has(tileKey)) {
+          continue;
+        }
+
+        const tileExtent = tileGrid.getTileCoordExtent(tileCoord);
+        const intersection = getIntersection(OREGON_EXTENT, tileExtent);
+        const minX = intersection[0];
+        const minY = intersection[1];
+        const maxX = intersection[2];
+        const maxY = intersection[3];
+        if (
+          minX === undefined ||
+          minY === undefined ||
+          maxX === undefined ||
+          maxY === undefined
+        ) {
+          continue;
+        }
+
+        await createRegion({
+          min_x: minX,
+          max_x: maxX,
+          min_y: minY,
+          max_y: maxY,
+          name: regionNameFromTileKey(tileKey),
+        });
+      }
+
+      await loadDownloadedRegions();
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'SystemDataPage.downloadTiles');
+    } finally {
+      isSyncingTileSelection = false;
+    }
   }
 </script>
 
@@ -468,6 +845,64 @@
       </div>
     </div>
 
+    <!-- system health -->
+    {#if sysHealth}
+      <div class="divider"></div>
+      <div class="sys-health">
+        <p class="sys-health-title">System Health</p>
+
+        <div class="health-metric">
+          <div class="health-metric-header">
+            <span>CPU</span>
+            <span>{sysHealth.cpu.percent_total.toFixed(1)}% · load {sysHealth.cpu.load_avg_1.toFixed(2)}</span>
+          </div>
+          <div class="bar">
+            <div
+              class="bar-fill"
+              class:bar-warn={sysHealth.cpu.percent_total >= 70}
+              class:bar-danger={sysHealth.cpu.percent_total >= 90}
+              style="width:{Math.min(sysHealth.cpu.percent_total, 100)}%"
+            ></div>
+          </div>
+        </div>
+
+        <div class="health-metric">
+          <div class="health-metric-header">
+            <span>RAM</span>
+            <span>{formatBytes(sysHealth.memory.used_bytes)} / {formatBytes(sysHealth.memory.total_bytes)}</span>
+          </div>
+          <div class="bar">
+            <div
+              class="bar-fill"
+              class:bar-warn={sysHealth.memory.used_percent >= 70}
+              class:bar-danger={sysHealth.memory.used_percent >= 90}
+              style="width:{Math.min(sysHealth.memory.used_percent, 100)}%"
+            ></div>
+          </div>
+        </div>
+
+        <div class="health-metric">
+          <div class="health-metric-header">
+            <span>Disk</span>
+            <span>{formatBytes(sysHealth.disk.used_bytes)} / {formatBytes(sysHealth.disk.total_bytes)}</span>
+          </div>
+          <div class="bar">
+            <div
+              class="bar-fill"
+              class:bar-warn={sysHealth.disk.used_percent >= 70}
+              class:bar-danger={sysHealth.disk.used_percent >= 90}
+              style="width:{Math.min(sysHealth.disk.used_percent, 100)}%"
+            ></div>
+          </div>
+        </div>
+
+        <div class="health-row">
+          <span>Net ↓ {formatBytes(sysHealth.network.recv_rate_bytes)}/s · ↑ {formatBytes(sysHealth.network.send_rate_bytes)}/s</span>
+          <span>Up {formatUptime(sysHealth.uptime_seconds)}</span>
+        </div>
+      </div>
+    {/if}
+
     <!-- divider -->
     <div class="divider"></div>
 
@@ -511,6 +946,7 @@
       <button
         class="map-ctrl-btn"
         class:map-ctrl-btn--active={isSelectMode}
+        disabled={!canDownloadTiles}
         on:click={toggleSelectMode}
       >
         {isSelectMode ? 'Stop Selecting' : 'Select Tiles'}
@@ -518,7 +954,7 @@
 
       <button
         class="map-ctrl-btn"
-        disabled={!hasSelection}
+        disabled={!canDownloadTiles || !hasSelection}
         on:click={clearSelection}
       >
         Clear
@@ -528,16 +964,27 @@
 
       <button
         class="map-ctrl-btn map-ctrl-btn--download"
-        disabled={!hasSelection}
+        disabled={!canDownloadTiles || !hasPendingTileSyncChanges || isSyncingTileSelection}
         on:click={downloadTiles}
       >
         <img src={download_icon} alt="Download" class="icons" />
-        Download Map
+        {isSyncingTileSelection ? 'Saving...' : 'Download Map'}
       </button>
     </div>
 
-    <!-- map fills the remaining space -->
-    <div class="map-container" class:select-mode={isSelectMode} bind:this={mapElement}></div>
+    <!-- map/fallback fills the remaining space -->
+    <div class="map-stage">
+      <div
+        class="map-container"
+        class:select-mode={isSelectMode}
+        class:map-container--hidden={!canDownloadTiles}
+        bind:this={mapElement}
+      ></div>
+
+      {#if !canDownloadTiles}
+        <div class="map-fallback-message">Map downloads require an active Wi-Fi connection.</div>
+      {/if}
+    </div>
   </div>
 
  </div>
@@ -693,6 +1140,31 @@
     width: 100%;
   }
 
+  .map-stage {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+  }
+
+  .map-container--hidden {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .map-fallback-message {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 16px;
+    font-size: 1rem;
+    color: rgba(0, 0, 0, 0.8);
+    background: rgba(255, 255, 255, 0.35);
+  }
+
   /* force OL canvas to fill the container */
   .map-container :global(.ol-viewport) {
     width: 100% !important;
@@ -769,6 +1241,71 @@
     width: 24px;
     height: 24px;
     margin-right: 8px;
+  }
+
+  .sys-health {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .sys-health-title {
+    margin: 0;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgba(0, 0, 0, 0.45);
+  }
+
+  .health-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .health-metric-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: rgba(0, 0, 0, 0.8);
+  }
+
+  .health-metric-header span:first-child {
+    font-weight: 600;
+  }
+
+  .bar {
+    width: 100%;
+    height: 4px;
+    background-color: rgba(0, 0, 0, 0.12);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    width: 0%;
+    background-color: rgba(51, 153, 204, 0.85);
+    border-radius: 2px;
+    transition: width 0.8s ease;
+  }
+
+  .bar-fill.bar-warn {
+    background-color: rgba(230, 155, 0, 0.9);
+  }
+
+  .bar-fill.bar-danger {
+    background-color: rgba(210, 50, 50, 0.9);
+  }
+
+  .health-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    color: rgba(0, 0, 0, 0.7);
+    margin-top: 2px;
   }
 
 </style>

@@ -12,6 +12,13 @@ import type {
   LatestTrackPoint,
   CheckNewRoadResponse,
   GPSData,
+  SysHealthData,
+  APRSStation,
+  ImportTrackResponse,
+  LineString,
+  Region,
+  RegionDataModel,
+  UpdateTrackVal,
 } from "./types";
 import { ENDPOINTS } from "../utils/constants";
 
@@ -45,7 +52,8 @@ export async function listTracks(): Promise<Track[]> {
 
   if (!res.ok) throw new Error("Failed to fetch all tracks");
 
-  return res.json();
+  const data = await res.json();
+  return data.tracks ?? [];
 }
 
 // fetches a specific track, could be used if the user is looking for a specific track
@@ -62,14 +70,14 @@ export async function getTrack(trackId: number): Promise<Track> {
 // updates a specified track by id.
 export async function updateTrack(
   trackId: number,
-  track: Partial<Track>,
+  trackVal: UpdateTrackVal,
 ): Promise<UpdateTrackResponse> {
   const res = await fetch(`${ENDPOINTS.getTrack}/${trackId}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(track),
+    body: JSON.stringify(trackVal),
   });
 
   if (!res.ok) throw new Error("Failed to update a track");
@@ -92,10 +100,9 @@ export async function deleteTrack(
 
 // this usese the track id and a track point(latitude, longitude, speed, and heading)
 export async function addTrackPoint(
-  trackId: number,
   point: TrackPoint,
 ): Promise<AddTrackPointResponse> {
-  const res = await fetch(`${ENDPOINTS.addTrackPoint}/${trackId}`, {
+  const res = await fetch(`${ENDPOINTS.addTrackPoint}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -104,6 +111,26 @@ export async function addTrackPoint(
   });
 
   if (!res.ok) throw new Error("Failed to add track point");
+
+  return res.json();
+}
+
+// imports a full geojson track into backend
+export async function importTrack(
+  geojson: LineString,
+): Promise<ImportTrackResponse> {
+  const res = await fetch(`${ENDPOINTS.addTrack}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ geojson_data: JSON.stringify(geojson) }),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Failed to import track: ${errorText}`);
+  }
 
   return res.json();
 }
@@ -130,13 +157,93 @@ export async function checkNewRoad(): Promise<CheckNewRoadResponse> {
 
 // gets the most recent position snapshot from the backend.
 export async function getCurrentPosition(): Promise<GPSData> {
-  const res = await fetch(ENDPOINTS.getCurrentPosition, {
-    method: "GET",
-  });
+  return fetchJsonWithFallback<GPSData>(
+    ENDPOINTS.getCurrentPosition,
+    "Failed to fetch current GPS position",
+    undefined,
+    getCoreApiHttpBaseUrl,
+  );
+}
 
-  if (!res.ok) throw new Error("Failed to fetch current GPS position");
+function getCoreApiHttpBaseUrl(): string {
+  const env = import.meta.env as Record<string, string | undefined>;
+  if (env.VITE_CORE_API_HTTP_URL) {
+    return env.VITE_CORE_API_HTTP_URL;
+  }
 
-  return res.json();
+  // In Vite dev (:5173), target the core-api directly on port 8888.
+  // In Docker (:3000), route through nginx (/v2/ proxy).
+  if (window.location.port === "5173") {
+    return `${window.location.protocol}//${window.location.hostname}:8888`;
+  }
+
+  return window.location.origin;
+}
+
+function getApiHttpBaseUrl(): string {
+  const env = import.meta.env as Record<string, string | undefined>;
+  if (env.VITE_API_HTTP_URL) {
+    return env.VITE_API_HTTP_URL;
+  }
+
+  // In Vite dev (:5173), target the legacy API directly on port 8000.
+  // In Docker (:3000), route through nginx (/api/ proxy).
+  if (window.location.port === "5173") {
+    return `${window.location.protocol}//${window.location.hostname}:8000`;
+  }
+
+  return window.location.origin;
+}
+
+function getApiHttpFallbackBaseUrl(primaryBase: string): string | null {
+  const sameOriginBase = window.location.origin;
+  if (sameOriginBase !== primaryBase) {
+    return sameOriginBase;
+  }
+
+  return null;
+}
+
+async function fetchJsonWithFallback<T>(
+  endpoint: string,
+  errorMessage: string,
+  searchParams?: Record<string, string>,
+  getBaseUrl: () => string = getApiHttpBaseUrl,
+): Promise<T> {
+  const primaryBase = getBaseUrl();
+  const primaryUrl = new URL(endpoint, primaryBase);
+  if (searchParams) {
+    Object.entries(searchParams).forEach(([key, value]) => {
+      primaryUrl.searchParams.set(key, value);
+    });
+  }
+
+  try {
+    const primaryRes = await fetch(primaryUrl.toString(), { method: "GET" });
+    if (!primaryRes.ok) {
+      throw new Error(`Primary request failed: ${primaryRes.status}`);
+    }
+    return primaryRes.json();
+  } catch {
+    const fallbackBase = getApiHttpFallbackBaseUrl(primaryBase);
+    if (!fallbackBase) {
+      throw new Error(errorMessage);
+    }
+
+    const fallbackUrl = new URL(endpoint, fallbackBase);
+    if (searchParams) {
+      Object.entries(searchParams).forEach(([key, value]) => {
+        fallbackUrl.searchParams.set(key, value);
+      });
+    }
+
+    const fallbackRes = await fetch(fallbackUrl.toString(), { method: "GET" });
+    if (!fallbackRes.ok) {
+      throw new Error(errorMessage);
+    }
+
+    return fallbackRes.json();
+  }
 }
 
 // subscribes to backend websocket stream of live GPS data.
@@ -144,34 +251,170 @@ export function subscribeToPositionStream(
   onMessage: (position: GPSData) => void,
   onError?: (error: string) => void,
 ): () => void {
-  const ws = new WebSocket(getPositionWebSocketUrl());
+  const primaryUrl = getPositionWebSocketUrl();
+  const fallbackUrl = getPositionWebSocketFallbackUrl(primaryUrl);
+  const GPS_WS_CONNECT_TIMEOUT_MS = 6000;
 
-  ws.onmessage = (event: MessageEvent) => {
-    try {
-      const raw = JSON.parse(event.data);
-      const latitude = Number(raw.latitude);
-      const longitude = Number(raw.longitude);
-      const heading = Number(raw.heading);
-      const speed = Number(raw.speed);
+  let socket: WebSocket | null = null;
+  let hasAttemptedFallback = false;
+  let isClosedByCaller = false;
+  let hasOpenedSocket = false;
+  let connectTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
-      if (
-        !Number.isFinite(latitude) ||
-        !Number.isFinite(longitude) ||
-        !Number.isFinite(heading) ||
-        !Number.isFinite(speed)
-      ) {
+  const clearConnectTimeout = (): void => {
+    if (connectTimeoutId !== null) {
+      clearTimeout(connectTimeoutId);
+      connectTimeoutId = null;
+    }
+  };
+
+  const tryFallback = (): boolean => {
+    if (hasAttemptedFallback || !fallbackUrl || isClosedByCaller) {
+      return false;
+    }
+
+    hasAttemptedFallback = true;
+    connect(fallbackUrl);
+    return true;
+  };
+
+  const bindHandlers = (ws: WebSocket): void => {
+    ws.onopen = () => {
+      hasOpenedSocket = true;
+      clearConnectTimeout();
+    };
+
+    ws.onmessage = (event: MessageEvent) => {
+      try {
+        const raw = JSON.parse(event.data);
+        const latitude = Number(raw.latitude);
+        const longitude = Number(raw.longitude);
+        const heading = Number(raw.heading);
+        const speed = Number(raw.speed);
+
+        if (
+          !Number.isFinite(latitude) ||
+          !Number.isFinite(longitude) ||
+          !Number.isFinite(heading) ||
+          !Number.isFinite(speed)
+        ) {
+          return;
+        }
+
+        onMessage({ latitude, longitude, heading, speed });
+      } catch (error: unknown) {
+        if (onError)
+          onError(`Failed to parse GPS websocket payload: ${String(error)}`);
+      }
+    };
+
+    ws.onerror = () => {
+      // Avoid surfacing premature startup errors until connect timeout has elapsed.
+      if (!hasOpenedSocket) {
         return;
       }
 
-      onMessage({ latitude, longitude, heading, speed });
+      if (tryFallback()) {
+        return;
+      }
+
+      if (onError) {
+        onError("GPS websocket connection failed");
+      }
+    };
+
+    ws.onclose = () => {
+      clearConnectTimeout();
+
+      if (isClosedByCaller) {
+        return;
+      }
+
+      // If never opened, let the timeout path decide whether to error/fallback.
+      if (!hasOpenedSocket) {
+        return;
+      }
+
+      if (tryFallback()) {
+        return;
+      }
+
+      if (onError) {
+        onError("GPS websocket connection closed");
+      }
+    };
+  };
+
+  const connect = (url: string): void => {
+    if (
+      socket &&
+      (socket.readyState === WebSocket.OPEN ||
+        socket.readyState === WebSocket.CONNECTING)
+    ) {
+      socket.close();
+    }
+
+    clearConnectTimeout();
+    hasOpenedSocket = false;
+    socket = new WebSocket(url);
+    bindHandlers(socket);
+
+    const activeSocket = socket;
+    connectTimeoutId = setTimeout(() => {
+      if (isClosedByCaller || socket !== activeSocket || hasOpenedSocket) {
+        return;
+      }
+
+      try {
+        activeSocket.close();
+      } catch {
+        // No action needed; we'll still attempt fallback/report below.
+      }
+
+      if (tryFallback()) {
+        return;
+      }
+
+      if (onError) {
+        onError("GPS websocket connection timed out");
+      }
+    }, GPS_WS_CONNECT_TIMEOUT_MS);
+  };
+
+  connect(primaryUrl);
+
+  return () => {
+    isClosedByCaller = true;
+    clearConnectTimeout();
+
+    if (
+      socket &&
+      (socket.readyState === WebSocket.OPEN ||
+        socket.readyState === WebSocket.CONNECTING)
+    ) {
+      socket.close();
+    }
+  };
+}
+
+export function subscribeToSysHealth(
+  onMessage: (data: SysHealthData) => void,
+  onError?: (error: string) => void,
+): () => void {
+  const ws = new WebSocket(getSysHealthWebSocketUrl());
+
+  ws.onmessage = (event: MessageEvent) => {
+    try {
+      const data = JSON.parse(event.data) as SysHealthData;
+      onMessage(data);
     } catch (error: unknown) {
       if (onError)
-        onError(`Failed to parse GPS websocket payload: ${String(error)}`);
+        onError(`Failed to parse sys-health payload: ${String(error)}`);
     }
   };
 
   ws.onerror = () => {
-    if (onError) onError("GPS websocket connection failed");
+    if (onError) onError("sys-health websocket connection failed");
   };
 
   return () => {
@@ -184,6 +427,23 @@ export function subscribeToPositionStream(
   };
 }
 
+function getSysHealthWebSocketUrl(): string {
+  const env = import.meta.env as Record<string, string | undefined>;
+  if (env.VITE_SYS_HEALTH_WS_URL) {
+    return env.VITE_SYS_HEALTH_WS_URL;
+  }
+
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+
+  // In Vite dev (:5173), connect directly to sys-health on port 8090.
+  // In Docker, route through nginx (/ws/sys-health proxy).
+  if (window.location.port === "5173") {
+    return `${protocol}//${window.location.hostname}:8090${ENDPOINTS.sysHealthStream}`;
+  }
+
+  return `${protocol}//${window.location.host}${ENDPOINTS.sysHealthStream}`;
+}
+
 function getPositionWebSocketUrl(): string {
   const env = import.meta.env as Record<string, string | undefined>;
   if (env.VITE_GPS_WS_URL) {
@@ -192,10 +452,148 @@ function getPositionWebSocketUrl(): string {
 
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
-  // Vite dev server commonly runs on :5173 while API runs on :8000.
+  // In dev mode (Vite on :5173), connect directly to the API server on port 8000.
+  // In production (port 3000), use the same host and port (proxied through nginx).
   if (window.location.port === "5173") {
     return `${protocol}//${window.location.hostname}:8000${ENDPOINTS.getPositionStream}`;
   }
 
   return `${protocol}//${window.location.host}${ENDPOINTS.getPositionStream}`;
+}
+
+function getPositionWebSocketFallbackUrl(primaryUrl: string): string | null {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const sameOriginUrl = `${protocol}//${window.location.host}${ENDPOINTS.getPositionStream}`;
+
+  if (sameOriginUrl !== primaryUrl) {
+    return sameOriginUrl;
+  }
+
+  return null;
+}
+
+// fetches APRS stations near the current GPS position.
+export async function getAprsStations(
+  radiusM: number = 50000,
+): Promise<APRSStation[] | null> {
+  const primaryBase = getCoreApiHttpBaseUrl();
+  const primaryUrl = new URL(ENDPOINTS.getAprsStations, primaryBase);
+
+  const fetchOptions: RequestInit = {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ meters: radiusM }),
+  };
+
+  try {
+    const primaryRes = await fetch(primaryUrl.toString(), fetchOptions);
+    if (!primaryRes.ok) {
+      throw new Error(`Primary request failed: ${primaryRes.status}`);
+    }
+    const data = await primaryRes.json();
+    return data.aprs_stations ?? null;
+  } catch {
+    const fallbackBase = getApiHttpFallbackBaseUrl(primaryBase);
+    if (!fallbackBase) {
+      throw new Error("Failed to fetch APRS stations");
+    }
+
+    const fallbackUrl = new URL(ENDPOINTS.getAprsStations, fallbackBase);
+    const fallbackRes = await fetch(fallbackUrl.toString(), fetchOptions);
+    if (!fallbackRes.ok) {
+      throw new Error("Failed to fetch APRS stations");
+    }
+    const data = await fallbackRes.json();
+    return data.aprs_stations ?? null;
+  }
+}
+
+// creates a new persisted region in core-api.
+export async function createRegion(region: Region): Promise<void> {
+  const primaryBase = getCoreApiHttpBaseUrl();
+  const primaryUrl = new URL(ENDPOINTS.region, primaryBase);
+
+  const fetchOptions: RequestInit = {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(region),
+  };
+
+  try {
+    const primaryRes = await fetch(primaryUrl.toString(), fetchOptions);
+    if (!primaryRes.ok) {
+      throw new Error(`Primary request failed: ${primaryRes.status}`);
+    }
+    return;
+  } catch {
+    const fallbackBase = getApiHttpFallbackBaseUrl(primaryBase);
+    if (!fallbackBase) {
+      throw new Error("Failed to create region");
+    }
+
+    const fallbackUrl = new URL(ENDPOINTS.region, fallbackBase);
+    const fallbackRes = await fetch(fallbackUrl.toString(), fetchOptions);
+    if (!fallbackRes.ok) {
+      throw new Error("Failed to create region");
+    }
+  }
+}
+
+// fetches all persisted regions from core-api.
+export async function listRegions(): Promise<RegionDataModel[]> {
+  const primaryBase = getCoreApiHttpBaseUrl();
+  const primaryUrl = new URL(ENDPOINTS.region, primaryBase);
+
+  try {
+    const primaryRes = await fetch(primaryUrl.toString(), { method: "GET" });
+    if (!primaryRes.ok) {
+      throw new Error(`Primary request failed: ${primaryRes.status}`);
+    }
+    const data = await primaryRes.json();
+    return data.regions ?? [];
+  } catch {
+    const fallbackBase = getApiHttpFallbackBaseUrl(primaryBase);
+    if (!fallbackBase) {
+      throw new Error("Failed to list regions");
+    }
+
+    const fallbackUrl = new URL(ENDPOINTS.region, fallbackBase);
+    const fallbackRes = await fetch(fallbackUrl.toString(), { method: "GET" });
+    if (!fallbackRes.ok) {
+      throw new Error("Failed to list regions");
+    }
+    const data = await fallbackRes.json();
+    return data.regions ?? [];
+  }
+}
+
+// deletes a persisted region by id.
+export async function deleteRegion(id: number): Promise<void> {
+  const primaryBase = getCoreApiHttpBaseUrl();
+  const primaryUrl = new URL(ENDPOINTS.region, primaryBase);
+
+  const fetchOptions: RequestInit = {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  };
+
+  try {
+    const primaryRes = await fetch(primaryUrl.toString(), fetchOptions);
+    if (!primaryRes.ok) {
+      throw new Error(`Primary request failed: ${primaryRes.status}`);
+    }
+    return;
+  } catch {
+    const fallbackBase = getApiHttpFallbackBaseUrl(primaryBase);
+    if (!fallbackBase) {
+      throw new Error("Failed to delete region");
+    }
+
+    const fallbackUrl = new URL(ENDPOINTS.region, fallbackBase);
+    const fallbackRes = await fetch(fallbackUrl.toString(), fetchOptions);
+    if (!fallbackRes.ok) {
+      throw new Error("Failed to delete region");
+    }
+  }
 }

@@ -1,29 +1,120 @@
 <script lang="ts">
+  import { onDestroy, onMount } from 'svelte';
   import { push } from 'svelte-spa-router';
+  import {
+    getLatestVersion,
+    listTracks,
+    subscribeToPositionStream,
+    subscribeToSysHealth,
+  } from '../api/restApi';
+  import type { GPSData, SysHealthData } from '../api/types';
+  import {
+    deriveSystemHealthStatus,
+    formatBytes,
+    formatRate,
+    formatUptime,
+    UNAVAILABLE_LABEL,
+  } from '../utils/homeHealth';
 
-  type SystemHealth = {
-    systemHealthStatus: string;
-    cpuUsagePercent: number;
-    memoryUsagePercent: number;
-    diskFreeGb: number;
-    serviceUptime: string;
-    currentPatchLevel: string;
-    gpsTrackCount: number;
-  };
+  let sysHealth: SysHealthData | null = null;
+  let latestPosition: GPSData | null = null;
+  let currentPatchLevel: string | null = null;
+  let gpsTrackCount: number | null = null;
+  let lastHealthUpdateAt: Date | null = null;
+  let stopSysHealthSubscription: (() => void) | null = null;
+  let stopPositionSubscription: (() => void) | null = null;
+  let refreshTimer: ReturnType<typeof setInterval> | null = null;
+  let healthStatus: string = UNAVAILABLE_LABEL;
+  let cpuUsageText: string = UNAVAILABLE_LABEL;
+  let memoryUsageText: string = UNAVAILABLE_LABEL;
+  let diskFreeText: string = UNAVAILABLE_LABEL;
+  let serviceUptimeText: string = UNAVAILABLE_LABEL;
+  let loadAverageText: string = UNAVAILABLE_LABEL;
+  let networkText: string = UNAVAILABLE_LABEL;
+  let latestGpsFixText: string = UNAVAILABLE_LABEL;
+  let patchLevelText: string = UNAVAILABLE_LABEL;
+  let trackCountText: string = UNAVAILABLE_LABEL;
+  let lastHealthUpdateText: string = 'Waiting for telemetry...';
 
-  const systemHealth: SystemHealth = {
-    systemHealthStatus: 'Healthy',
-    cpuUsagePercent: 18,
-    memoryUsagePercent: 42,
-    diskFreeGb: 28.4,
-    serviceUptime: '2d 06h',
-    currentPatchLevel: '0.3.2',
-    gpsTrackCount: 147
-  };
+  $: healthStatus = deriveSystemHealthStatus(sysHealth);
+  $: cpuUsageText = sysHealth ? `${sysHealth.cpu.percent_total.toFixed(1)}%` : UNAVAILABLE_LABEL;
+  $: memoryUsageText = sysHealth ? `${sysHealth.memory.used_percent.toFixed(1)}%` : UNAVAILABLE_LABEL;
+  $: diskFreeText = sysHealth ? formatBytes(sysHealth.disk.free_bytes) : UNAVAILABLE_LABEL;
+  $: serviceUptimeText = sysHealth ? formatUptime(sysHealth.uptime_seconds) : UNAVAILABLE_LABEL;
+  $: loadAverageText = sysHealth
+    ? `${sysHealth.cpu.load_avg_1.toFixed(2)} / ${sysHealth.cpu.load_avg_5.toFixed(2)} / ${sysHealth.cpu.load_avg_15.toFixed(2)}`
+    : UNAVAILABLE_LABEL;
+  $: networkText = sysHealth
+    ? `Down ${formatRate(sysHealth.network.recv_rate_bytes)} | Up ${formatRate(sysHealth.network.send_rate_bytes)}`
+    : UNAVAILABLE_LABEL;
+  $: latestGpsFixText = latestPosition
+    ? `${latestPosition.latitude.toFixed(5)}, ${latestPosition.longitude.toFixed(5)} | ${latestPosition.speed.toFixed(1)} m/s @ ${latestPosition.heading.toFixed(0)}°`
+    : UNAVAILABLE_LABEL;
+  $: patchLevelText = currentPatchLevel ?? UNAVAILABLE_LABEL;
+  $: trackCountText = gpsTrackCount !== null ? `${gpsTrackCount}` : UNAVAILABLE_LABEL;
+  $: lastHealthUpdateText = lastHealthUpdateAt ? lastHealthUpdateAt.toLocaleTimeString() : 'Waiting for telemetry...';
 
-  function goToLogs() : void {
-    push("/Logs");
+  async function loadDashboardSnapshot(): Promise<void> {
+    const [trackResult, versionResult] = await Promise.allSettled([
+      listTracks(),
+      getLatestVersion(),
+    ]);
+
+    if (trackResult.status === 'fulfilled') {
+      gpsTrackCount = Array.isArray(trackResult.value) ? trackResult.value.length : null;
+    } else {
+      gpsTrackCount = null;
+      console.error('Failed to fetch track count:', trackResult.reason);
+    }
+
+    if (versionResult.status === 'fulfilled') {
+      currentPatchLevel = versionResult.value;
+    } else {
+      currentPatchLevel = null;
+      console.error('Failed to fetch current patch level:', versionResult.reason);
+    }
   }
+
+  onMount(() => {
+    loadDashboardSnapshot();
+
+    stopSysHealthSubscription = subscribeToSysHealth(
+      (data) => {
+        sysHealth = data;
+        lastHealthUpdateAt = new Date();
+      },
+      (error) => {
+        console.error('System health stream error:', error);
+      },
+    );
+
+    stopPositionSubscription = subscribeToPositionStream(
+      (position) => {
+        latestPosition = position;
+      },
+      (error) => {
+        console.error('Position stream error:', error);
+      },
+    );
+
+    // Keep slower-changing dashboard stats fresh.
+    refreshTimer = setInterval(() => {
+      loadDashboardSnapshot();
+    }, 60_000);
+  });
+
+  onDestroy(() => {
+    stopSysHealthSubscription?.();
+    stopSysHealthSubscription = null;
+
+    stopPositionSubscription?.();
+    stopPositionSubscription = null;
+
+    if (refreshTimer !== null) {
+      clearInterval(refreshTimer);
+      refreshTimer = null;
+    }
+  });
 
   function goToManageData() : void {
     push("/ManageData");
@@ -44,19 +135,22 @@
   <section class="content-grid">
     <article class="panel">
       <h3>System Health</h3>
-      <p>Health status: {systemHealth.systemHealthStatus}</p>
-      <p>Current patch level: {systemHealth.currentPatchLevel}</p>
-      <p>Number of GPS tracks: {systemHealth.gpsTrackCount}</p>
-      <p>CPU usage: {systemHealth.cpuUsagePercent}%</p>
-      <p>Memory usage: {systemHealth.memoryUsagePercent}%</p>
-      <p>Disk free: {systemHealth.diskFreeGb.toFixed(1)} GB</p>
-      <p>Service uptime: {systemHealth.serviceUptime}</p>
+      <p>Health status: {healthStatus}</p>
+      <p>Current patch level: {patchLevelText}</p>
+      <p>Number of GPS tracks: {trackCountText}</p>
+      <p>CPU usage: {cpuUsageText}</p>
+      <p>Memory usage: {memoryUsageText}</p>
+      <p>Disk free: {diskFreeText}</p>
+      <p>Service uptime: {serviceUptimeText}</p>
+      <p>Load avg (1/5/15m): {loadAverageText}</p>
+      <p>Network throughput: {networkText}</p>
+      <p>Current GPS fix: {latestGpsFixText}</p>
+      <p>Last health update: {lastHealthUpdateText}</p>
     </article>
 
     <article class="panel">
       <h3>Quick Actions</h3>
       <div class="action-list">
-        <button class="action-btn" type="button" onclick={goToLogs}>View Logs</button>
         <button class="action-btn" type="button" onclick={goToTracks}>View Tracks</button>
         <button class="action-btn" type="button" onclick={goToManageData}>Manage Data</button>
       </div>
