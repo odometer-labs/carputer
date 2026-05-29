@@ -1,4 +1,14 @@
+gpxpy==1.6.2
+iniconfig==2.3.0
+mapbox-vector-tile==2.2.0
+numpy==2.4.6
+packaging==26.2
+pluggy==1.6.0
+protobuf==6.33.6
 psycopg==3.3.3
 psycopg-binary==3.3.3
+pyclipper==1.4.0
+pygments==2.20.0
+pytest==9.0.3
 python-dotenv==1.2.2
-mapbox-vector-tile
+shapely==2.1.2
