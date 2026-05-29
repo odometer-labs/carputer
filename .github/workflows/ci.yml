@@ -76,8 +76,8 @@ jobs:
             backend/geotracker/migrations/aprs_functions.sql \
             backend/geotracker/migrations/versioning_functions.sql \
             backend/geotracker/migrations/versioning_tables.sql \
-            backend/geotracker/migrations/travel_history_tables.sql \ 
-            backend/geotracker/migrations/travel_history_functions.sql; do 
+            backend/geotracker/migrations/travel_history_functions.sql \
+            backend/geotracker/migrations/travel_history_tables.sql; do
             psql -h localhost -U testuser -d carputer -f "$f"
           done
 
