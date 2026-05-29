@@ -5,7 +5,6 @@ from ..models.track import Track
 from ..models.track_point import TrackPoint
 import json
 import gpxpy
-import gpxpy.gpx
 
 
 class TrackClient:
