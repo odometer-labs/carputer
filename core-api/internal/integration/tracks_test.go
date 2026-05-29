@@ -38,6 +38,15 @@ func TestCreateTrack_WithName(t *testing.T) {
 		t.Fatalf("CreateTrack: %v", err)
 	}
 
+	for _, pt := range []v2.TrackPoint{
+		{Latitude: 45.523, Longitude: -122.676, Speed: 10.0, Heading: 90.0},
+		{Latitude: 45.524, Longitude: -122.677, Speed: 12.0, Heading: 91.0},
+	} {
+		if _, err := c.AddTrackPoint(ctx, &v2.AddTrackPointRequest{Body: pt}); err != nil {
+			t.Fatalf("AddTrackPoint: %v", err)
+		}
+	}
+
 	_, err = c.EndTrack(ctx)
 	if err != nil {
 		t.Fatalf("EndTrack: %v", err)
@@ -152,6 +161,14 @@ func TestListTracks(t *testing.T) {
 		if _, err := c.CreateTrack(ctx, &v2.CreateTrackRequest{}); err != nil {
 			t.Fatalf("CreateTrack %d: %v", i, err)
 		}
+		for _, pt := range []v2.TrackPoint{
+			{Latitude: 45.523 + float64(i)*0.001, Longitude: -122.676, Speed: 10.0, Heading: 90.0},
+			{Latitude: 45.524 + float64(i)*0.001, Longitude: -122.677, Speed: 12.0, Heading: 91.0},
+		} {
+			if _, err := c.AddTrackPoint(ctx, &v2.AddTrackPointRequest{Body: pt}); err != nil {
+				t.Fatalf("AddTrackPoint %d: %v", i, err)
+			}
+		}
 		if _, err := c.EndTrack(ctx); err != nil {
 			t.Fatalf("EndTrack %d: %v", i, err)
 		}
@@ -183,6 +200,15 @@ func TestUpdateTrack(t *testing.T) {
 
 	if _, err := c.UpdateTrack(ctx, updateReq); err != nil {
 		t.Fatalf("UpdateTrack: %v", err)
+	}
+
+	for _, pt := range []v2.TrackPoint{
+		{Latitude: 45.523, Longitude: -122.676, Speed: 10.0, Heading: 90.0},
+		{Latitude: 45.524, Longitude: -122.677, Speed: 12.0, Heading: 91.0},
+	} {
+		if _, err := c.AddTrackPoint(ctx, &v2.AddTrackPointRequest{Body: pt}); err != nil {
+			t.Fatalf("AddTrackPoint: %v", err)
+		}
 	}
 
 	if _, err := c.EndTrack(ctx); err != nil {
