@@ -501,19 +501,6 @@ FROM gps.track_points
 WHERE track_id = end_track_id;
 END;
 $$;
-CREATE OR REPLACE FUNCTION gps.export_gpx_points(p_track_id INTEGER) RETURNS TABLE (
-        lat DOUBLE PRECISION,
-        lon DOUBLE PRECISION,
-        speed DOUBLE PRECISION
-    ) LANGUAGE plpgsql AS $$ BEGIN RETURN QUERY
-SELECT ST_Y(tp.geom::geometry) as lat,
-    ST_X(tp.geom::geometry) as lon,
-    tp.speed_mps
-FROM gps.track_points as tp
-WHERE tp.track_id = p_track_id
-ORDER BY tp.point_id ASC;
-END;
-$$;
 -- Fixes common GPS topology errors (self-intersections) to ensure spatial validity
 CREATE OR REPLACE PROCEDURE gps.validate_geometry(finished_track_id BIGINT) LANGUAGE plpgsql AS $$
 DECLARE cleaned_geom geometry;

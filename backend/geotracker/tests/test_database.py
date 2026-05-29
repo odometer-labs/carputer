@@ -1328,9 +1328,6 @@ def test_import_no_timestamp(db_conn):
     """ """
     with db_conn.cursor() as cur:
 
-        # Create "Old Track A" (Nearby)
-        # Location: roughly (0,0)
-
         cur.execute("SELECT gps.create_track() as id;")
         id = cur.fetchone()["id"]
         all_points = [
@@ -1368,9 +1365,6 @@ def test_import_ordering(db_conn):
     a mapbox vector tile.
     """
     with db_conn.cursor() as cur:
-
-        # Create "Old Track A" (Nearby)
-        # Location: roughly (0,0)
 
         cur.execute("SELECT gps.create_track() as id;")
         id = cur.fetchone()["id"]
@@ -1416,7 +1410,6 @@ def test_import_gpx_success_single_track(db_conn):
     """Verify that importing a standard single track GPX file correctly populates tables."""
     client = TrackClient()
 
-    # 1. Construct a valid single-track GPX document in-memory
     gpx = gpxpy.gpx.GPX()
     track = gpxpy.gpx.GPXTrack(name="Morning Commute")
     segment = gpxpy.gpx.GPXTrackSegment()
@@ -1430,21 +1423,19 @@ def test_import_gpx_success_single_track(db_conn):
     gpx.tracks.append(track)
     gpx_payload = gpx.to_xml().encode("utf-8")
 
-    # 2. Execute import
     response = client.import_gpx(name="fallback_name.gpx", gpx_data=gpx_payload)
 
-    # 3. Assertions
     assert response == {"result": "success"}
 
     with db_conn.cursor() as cur:
-        # Verify track metadata and name extraction hierarchy
+        # Verify track metadata and name
         cur.execute("SELECT track_name FROM gps.tracks;")
         track_row = cur.fetchone()
         assert (
             track_row["track_name"] == "Morning Commute"
         )  # Used internal name over file fallback
 
-        # Verify coordinates and speed columns mapped correctly
+        # Verify coordinates mapped correctly
         cur.execute(
             "SELECT ST_Y(geom::geometry) as lat, ST_X(geom::geometry) as lon FROM gps.track_points ORDER BY point_id ASC;"
         )
@@ -1465,7 +1456,7 @@ def test_import_gpx_multi_track_fallback_names(db_conn):
     seg1.points.append(gpxpy.gpx.GPXTrackPoint(latitude=0, longitude=0))
     track1.segments.append(seg1)
 
-    # Track 2 has NO explicit name (should get a generated name)
+    # Track 2 should get a generated name
     track2 = gpxpy.gpx.GPXTrack(name=None)
     seg2 = gpxpy.gpx.GPXTrackSegment()
     seg2.points.append(gpxpy.gpx.GPXTrackPoint(latitude=1, longitude=1))
@@ -1487,14 +1478,124 @@ def test_import_gpx_empty_or_corrupt():
     """Verify that empty configurations or malformed XML files gracefully fail."""
     client = TrackClient()
 
-    # Case A: Corrupt XML syntax string
+    # Corrupt XML syntax string
     response_corrupt = client.import_gpx(name="bad.gpx", gpx_data=b"<gpx>unclosed_tags")
     assert response_corrupt["status"] == "error"
 
-    # Case B: Syntactically valid but functionally empty track schema
+    # Syntactically valid but functionally empty track schema
     gpx_empty = gpxpy.gpx.GPX()
     response_empty = client.import_gpx(
         name="empty.gpx", gpx_data=gpx_empty.to_xml().encode("utf-8")
     )
     assert response_empty["status"] == "error"
     assert "zero tracks" in response_empty["message"]
+
+
+def test_export_gpx_success_single_track(db_conn):
+    """Verify that a valid track ID outputs correct GPX headers, metadata, and coordinates."""
+    client = TrackClient()
+
+    # 1. Pre-populate the database with a track and points
+    with db_conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO gps.tracks (track_id, track_name, start_time, end_time) VALUES (%s, %s, NOW(), NOW());",
+            (101, "Afternoon Run"),
+        )
+        # Assuming your database function `gps.export_gpx_points` relies on standard tables
+        # Adjust if your stored procedure uses a different underlying schema
+        cur.execute(
+            "INSERT INTO gps.track_points (track_id, geom) VALUES (%s, ST_SetSRID(ST_MakePoint(%s, %s), 4326));",
+            (101, -122.6, 45.5),  # Lon, Lat order for PostGIS ST_MakePoint
+        )
+        cur.execute(
+            "INSERT INTO gps.track_points (track_id, geom) VALUES (%s, ST_SetSRID(ST_MakePoint(%s, %s), 4326));",
+            (101, -122.7, 45.6),
+        )
+    db_conn.commit()
+
+    # 2. Execute the export
+    gpx_xml = client.export_gpx(export_ids=[101])
+
+    assert gpx_xml is not None
+
+    # 3. Parse and verify the generated GPX data structure
+    parsed_gpx = gpxpy.parse(gpx_xml)
+    assert parsed_gpx.creator == "TrackClient"
+    assert len(parsed_gpx.tracks) == 1
+
+    track = parsed_gpx.tracks[0]
+    assert track.name == "Afternoon Run"
+    assert len(track.segments) == 1
+
+    points = track.segments[0].points
+    assert len(points) == 2
+    assert points[0].latitude == pytest.approx(45.5)
+    assert points[0].longitude == pytest.approx(-122.6)
+
+
+def test_export_gpx_multi_track(db_conn):
+    """Verify exporting multiple distinct track IDs correctly generates multiple tracks in one file."""
+    client = TrackClient()
+
+    # 1. Pre-populate multiple tracks
+    with db_conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO gps.tracks (track_id, track_name, start_time, end_time) VALUES (%s, %s, NOW(), NOW());",
+            (201, "Day 1 Route"),
+        )
+        cur.execute(
+            "INSERT INTO gps.tracks (track_id, track_name, start_time, end_time) VALUES (%s, %s, NOW(), NOW());",
+            (202, "Day 2 Route"),
+        )
+
+        # Add a single point to each track so they have data
+        cur.execute(
+            "INSERT INTO gps.track_points (track_id, geom) VALUES (%s, ST_SetSRID(ST_MakePoint(10, 10), 4326));",
+            (201,),
+        )
+        cur.execute(
+            "INSERT INTO gps.track_points (track_id, geom) VALUES (%s, ST_SetSRID(ST_MakePoint(20, 20), 4326));",
+            (202,),
+        )
+    db_conn.commit()
+
+    # 2. Export both tracks simultaneously
+    gpx_xml = client.export_gpx(export_ids=[201, 202])
+
+    # 3. Verify both track blocks are captured within the XML wrapper
+    parsed_gpx = gpxpy.parse(gpx_xml)
+    assert len(parsed_gpx.tracks) == 2
+    assert parsed_gpx.tracks[0].name == "Day 1 Route"
+    assert parsed_gpx.tracks[1].name == "Day 2 Route"
+
+
+def test_export_gpx_non_existent_and_empty_ids(db_conn):
+    """Verify that invalid IDs or empty lists return None gracefully instead of crashing or generating blank XML wrapper blocks."""
+    client = TrackClient()
+
+    # Scenario A: Empty list parameter passed
+    response_empty = client.export_gpx(export_ids=[])
+    assert response_empty is None
+
+    # Scenario B: Single track ID that doesn't exist in the database
+    response_missing = client.export_gpx(export_ids=[9999])
+    assert response_missing is None
+
+    # Scenario C: Mix of valid and invalid IDs (should skip missing 9999, but return valid 301)
+    with db_conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO gps.tracks (track_id, track_name, start_time, end_time) VALUES (%s, %s, NOW(), NOW());",
+            (301, "Valid Track"),
+        )
+        cur.execute(
+            "INSERT INTO gps.track_points (track_id, geom) VALUES (%s, ST_SetSRID(ST_MakePoint(5, 5), 4326));",
+            (301,),
+        )
+    db_conn.commit()
+
+    response_mixed = client.export_gpx(export_ids=[9999, 301])
+    assert response_mixed is not None
+
+    parsed_mixed = gpxpy.parse(response_mixed)
+    assert len(parsed_mixed.tracks) == 1
+    assert parsed_mixed.tracks[0].name == "Valid Track"
