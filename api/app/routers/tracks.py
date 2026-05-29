@@ -1,14 +1,10 @@
-from datetime import datetime, timezone
-from fastapi import APIRouter, Response, status
-from psycopg import Connection
-from ..logging.handlers import logger
-from ..dependencies import get_connection
+from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
+from fastapi.responses import Response as FastAPIResponse
 from app.models.track import Track
 from app.models.track_point import TrackPoint
 from app.clients.track_client import track_client
 from typing import Dict, Any, Optional
 import json
-from fastapi import FastAPI, File, UploadFile
 
 router = APIRouter(prefix="/v1", tags=["Tracks"])
 
@@ -142,8 +138,26 @@ async def import_gpx(file: UploadFile = File(...)):
     Imports track points from a GPX File to create a track.
     """
     content = await file.read()
-    name = file.file_name
+    name = file.filename or "tracks.gpx"
     return track_client.import_gpx(name, content)
 
 
-@router.get
+@router.post("/tracks/export/gpx")
+async def export_gpx(track_ids: list[int]):
+    """
+    Exports the specified tracks as a GPX document.
+    """
+
+    gpx_content = track_client.export_gpx(track_ids)
+
+    if gpx_content is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No exportable tracks were found for the supplied ids.",
+        )
+
+    return FastAPIResponse(
+        content=gpx_content,
+        media_type="application/gpx+xml",
+        headers={"Content-Disposition": 'attachment; filename="tracks-export.gpx"'},
+    )
