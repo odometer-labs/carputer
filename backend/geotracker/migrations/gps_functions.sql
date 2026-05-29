@@ -192,7 +192,8 @@ DECLARE mvt bytea;
 latest_track_id BIGINT;
 latest_geom GEOGRAPHY;
 current_track_id BIGINT;
-current_track_geom_wm GEOMETRY;
+current_track_line_wm GEOMETRY;
+road_search_zone_wm GEOMETRY;
 tile_env GEOMETRY;
 BEGIN tile_env := ST_TileEnvelope(z, x, y);
 --------------------------------------------------
@@ -209,15 +210,23 @@ END IF;
 --------------------------------------------------
 -- Road only: fetch active track
 --------------------------------------------------
-IF mode = 'road' THEN
-SELECT t.track_id,
-    tl.geom_wm INTO current_track_id,
-    current_track_geom_wm
+IF mode = 'road' THEN -- 1. Find the ID of the single active track
+SELECT t.track_id INTO current_track_id
 FROM gps.tracks t
-    JOIN gps.track_lines tl ON t.track_id = tl.track_id
 WHERE t.end_time IS NULL
 ORDER BY t.start_time DESC
 LIMIT 1;
+IF current_track_id IS NOT NULL THEN
+SELECT ST_MakeLine(
+        ST_Transform(p.geom::geometry, 3857)
+        ORDER BY p.time_stamp
+    ) INTO current_track_line_wm
+FROM gps.track_points p
+WHERE p.track_id = current_track_id;
+-- 3. Create the 30-meter search zone around it
+IF current_track_line_wm IS NOT NULL THEN road_search_zone_wm := ST_Buffer(current_track_line_wm, 30);
+END IF;
+END IF;
 END IF;
 --------------------------------------------------
 -- Main Query 
@@ -274,14 +283,10 @@ FROM (
                 OR (
                     mode = 'road'
                     AND current_track_id IS NOT NULL
-                    AND current_track_geom_wm IS NOT NULL
+                    AND road_search_zone_wm IS NOT NULL
                     AND t.track_id <> current_track_id
                     AND t.end_time IS NOT NULL
-                    AND ST_DWithin(
-                        ST_Transform(tl.geom_wm, 4326)::geography,
-                        ST_Transform(current_track_geom_wm, 4326)::geography,
-                        30
-                    )
+                    AND ST_Intersects(tl.geom_wm, road_search_zone_wm)
                 )
             )
     ) AS tile;
@@ -431,17 +436,23 @@ CREATE OR REPLACE FUNCTION gps.get_track_lines_using_road() RETURNS TABLE (
         track_name VARCHAR(50)
     ) LANGUAGE plpgsql AS $$
 DECLARE current_track_id BIGINT;
-current_track_geom GEOGRAPHY;
+current_track_line_wm GEOMETRY;
+road_search_zone_wm GEOMETRY;
 BEGIN
-SELECT t.track_id,
-    tl.geom INTO current_track_id,
-    current_track_geom
+SELECT t.track_id INTO current_track_id
 FROM gps.tracks AS t
-    JOIN gps.track_lines AS tl ON t.track_id = tl.track_id
 WHERE t.end_time IS NULL
 ORDER BY t.start_time DESC
 LIMIT 1;
 IF current_track_id IS NULL THEN RETURN;
+END IF;
+SELECT ST_MakeLine(
+        ST_Transform(p.geom::geometry, 3857)
+        ORDER BY p.time_stamp
+    ) INTO current_track_line_wm
+FROM gps.track_points p
+WHERE p.track_id = current_track_id;
+IF current_track_line_wm IS NOT NULL THEN road_search_zone_wm := ST_Buffer(current_track_line_wm, 30);
 END IF;
 RETURN QUERY
 SELECT t.track_id,
@@ -453,7 +464,8 @@ FROM gps.tracks AS t
     INNER JOIN gps.track_lines AS tl ON t.track_id = tl.track_id
 WHERE t.track_id <> current_track_id
     AND t.end_time IS NOT NULL
-    AND ST_DWithin(tl.geom, current_track_geom, 30);
+    AND road_search_zone_wm IS NOT NULL
+    AND ST_Intersects(tl.geom_wm, road_search_zone_wm);
 END;
 $$;
 -- Utility for batch-importing external data sets as completed tracks

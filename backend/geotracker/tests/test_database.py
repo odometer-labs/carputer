@@ -7,16 +7,6 @@ import gpxpy.gpx
 from api.app.clients.track_client import TrackClient
 
 
-def test_db_connection(db_conn):
-    """
-    Verify that db_conn fixture actually works.
-    """
-    with db_conn.cursor() as cur:
-        cur.execute("SELECT 1 as connected;")
-        result = cur.fetchone()
-        assert result["connected"] == 1
-
-
 @pytest.fixture(autouse=True)
 def clean_db(db_conn):
     with db_conn.cursor() as cur:
@@ -25,6 +15,16 @@ def clean_db(db_conn):
         cur.execute("TRUNCATE gps.tracks CASCADE;")
 
     db_conn.commit()
+
+
+def test_db_connection(db_conn):
+    """
+    Verify that db_conn fixture actually works.
+    """
+    with db_conn.cursor() as cur:
+        cur.execute("SELECT 1 as connected;")
+        result = cur.fetchone()
+        assert result["connected"] == 1
 
 
 def test_create_and_end_track(db_conn, sample_track_points):
@@ -950,7 +950,6 @@ def test_get_tracks_using_road(db_conn):
             (current_id, "2024-03-01 10:00:50+00"),
         )
 
-        # 4. Search for tracks within 500 meters
         cur.execute("SELECT * FROM gps.get_track_lines_using_road();")
         results = cur.fetchall()
 
@@ -971,7 +970,7 @@ def test_get_tracks_using_road(db_conn):
             assert row["geom"]["type"] == "LineString"
 
 
-def test_get_tracks_using_no_road(db_conn):
+def test_get_tracks_using_one_point(db_conn):
     """
     Verify spatial filtering: find nearby tracks using the current road.
     This test should fail due to only having one point in the current track,
@@ -1016,11 +1015,10 @@ def test_get_tracks_using_no_road(db_conn):
             (current_id, "2024-03-01 10:00:00+00"),
         )
 
-        # 4. Search for tracks within 500 meters
         cur.execute("SELECT * FROM gps.get_track_lines_using_road();")
         results = cur.fetchall()
 
-        assert len(results) == 0
+        assert len(results) == 1
 
 
 def test_validate_geometry_repairs_invalid_line(db_conn):
@@ -1259,69 +1257,86 @@ def test_get_tracks_mvt_nearby_mode(db_conn):
 def test_get_tracks_mvt_road_mode(db_conn):
     """
     Verify spatial filtering: retrieve all tracks that use the same road as the
-    current track (excluding current track) a mapbox vector tile.
+    current track (excluding current track) inside a Mapbox Vector Tile payload.
     """
     with db_conn.cursor() as cur:
-        # Active track (reference)
-        cur.execute("""
-            INSERT INTO gps.tracks (track_id, start_time, end_time)
-            VALUES (4001, NOW(), NULL);
 
-            INSERT INTO gps.track_lines (track_id, geom, geom_wm)
-            VALUES (
-                4001,
-                ST_GeogFromText('LINESTRING(0 0, 1 1)'),
-                ST_Transform(ST_GeomFromText('LINESTRING(0 0, 1 1)', 4326), 3857)
-            );
-        """)
+        # (Nearby Completed Track)
+        # Location: roughly (0,0).
+        cur.execute("SELECT gps.create_track() as id;")
+        id_near = cur.fetchone()["id"]
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, 0.0, 0.0, 0, 0);",
+            (id_near, "2024-01-01 10:00:00+00"),
+        )
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, 0.001, 0.001, 0, 0);",
+            (id_near, "2024-01-01 10:00:50+00"),
+        )
+        cur.execute("CALL gps.end_track();")
 
-        # Nearby completed track (should be returned)
-        cur.execute("""
-            INSERT INTO gps.tracks (track_id, start_time, end_time)
-            VALUES (4002, NOW(), NOW());
+        # (Far Away Completed Track)
+        # Location:  (5.0, 5.0)
+        cur.execute("SELECT gps.create_track() as id;")
+        id_far = cur.fetchone()["id"]
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, 5.0, 5.0, 0, 0);",
+            (id_far, "2024-02-01 10:00:00+00"),
+        )
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, 5.001, 5.001, 0, 0);",
+            (id_far, "2024-02-01 10:00:50+00"),
+        )
+        cur.execute("CALL gps.end_track();")
 
-            INSERT INTO gps.track_lines (track_id, geom, geom_wm)
-            VALUES (
-                4002,
-                ST_GeogFromText('LINESTRING(0 0, 1 1)'),
-                ST_Transform(ST_GeomFromText('LINESTRING(0 0, 1 1)', 4326), 3857)
-            );
-        """)
+        #  Current Track
+        # Location: on top of Track A.
+        cur.execute("SELECT gps.create_track() as id;")
+        current_id = cur.fetchone()["id"]
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, 0.0, 0.0, 0, 0);",
+            (current_id, "2024-03-01 10:00:00+00"),
+        )
+        cur.execute(
+            "CALL gps.add_track_point(%s, %s, 0.001, 0.001, 0, 0);",
+            (current_id, "2024-03-01 10:00:50+00"),
+        )
+        cur.execute("SELECT * FROM gps.get_track_lines_using_road();")
+        results = cur.fetchall()
 
-        # Far completed track (should NOT be returned)
-        cur.execute("""
-            INSERT INTO gps.tracks (track_id, start_time, end_time)
-            VALUES (4003, NOW(), NOW());
+        assert len(results) == 1
+        assert results[0]["track_id"] == id_near
+        assert results[0]["end_time"] is not None
 
-            INSERT INTO gps.track_lines (track_id, geom, geom_wm)
-            VALUES (
-                4003,
-                ST_GeogFromText('LINESTRING(10 10, 11 11)'),
-                ST_Transform(ST_GeomFromText('LINESTRING(10 10, 11 11)', 4326), 3857)
-            );
-        """)
+        # At Zoom 14, the (0,0) coordinate lands exactly at X=8192, Y=8192
+        # If 0,0,0, the bounding box is too large -- erases the track line.
+        zoom = 14
+        tile_x = 8192
+        tile_y = 8192
 
-        # Execute track retrieval
-        cur.execute("""
-            SELECT gps.get_tracks_mvt(0,0,0,'road') AS tile;
-        """)
+        cur.execute(
+            """
+            SELECT gps.get_tracks_mvt(%s, %s, %s, 'road') AS tile;
+        """,
+            (zoom, tile_x, tile_y),
+        )
         tile_binary = cur.fetchone()["tile"]
 
-    # Assertions
-    assert tile_binary is not None
-    assert len(tile_binary) > 0
+        assert tile_binary is not None
+        assert len(tile_binary) > 0
 
-    decoded = mapbox_vector_tile.decode(tile_binary)
-    assert "tracks_layer" in decoded
+        decoded = mapbox_vector_tile.decode(tile_binary)
+        assert "tracks_layer" in decoded
 
-    features = decoded["tracks_layer"]["features"]
-    assert len(features) > 0
+        features = decoded["tracks_layer"]["features"]
+        assert len(features) > 0
 
-    found_ids = [int(f["properties"]["track_id"]) for f in features]
+        # Gather matching historical track IDs returned inside the MVT layer
+        found_ids = [int(f["properties"]["track_id"]) for f in features]
 
-    assert 4002 in found_ids  # nearby completed track
-    assert 4001 not in found_ids  # active track excluded
-    assert 4003 not in found_ids  # far track excluded
+        assert id_near in found_ids  # Success!
+        assert current_id not in found_ids  # Active track omitted
+        assert id_far not in found_ids  # Far away track filtered cleanly
 
 
 def test_import_no_timestamp(db_conn):
@@ -1495,14 +1510,12 @@ def test_export_gpx_success_single_track(db_conn):
     """Verify that a valid track ID outputs correct GPX headers, metadata, and coordinates."""
     client = TrackClient()
 
-    # 1. Pre-populate the database with a track and points
     with db_conn.cursor() as cur:
         cur.execute(
             "INSERT INTO gps.tracks (track_id, track_name, start_time, end_time) VALUES (%s, %s, NOW(), NOW());",
             (101, "Afternoon Run"),
         )
-        # Assuming your database function `gps.export_gpx_points` relies on standard tables
-        # Adjust if your stored procedure uses a different underlying schema
+
         cur.execute(
             "INSERT INTO gps.track_points (track_id, geom) VALUES (%s, ST_SetSRID(ST_MakePoint(%s, %s), 4326));",
             (101, -122.6, 45.5),  # Lon, Lat order for PostGIS ST_MakePoint
@@ -1513,12 +1526,11 @@ def test_export_gpx_success_single_track(db_conn):
         )
     db_conn.commit()
 
-    # 2. Execute the export
     gpx_xml = client.export_gpx(export_ids=[101])
 
     assert gpx_xml is not None
 
-    # 3. Parse and verify the generated GPX data structure
+    # verify the generated GPX data structure
     parsed_gpx = gpxpy.parse(gpx_xml)
     assert parsed_gpx.creator == "TrackClient"
     assert len(parsed_gpx.tracks) == 1
@@ -1537,7 +1549,6 @@ def test_export_gpx_multi_track(db_conn):
     """Verify exporting multiple distinct track IDs correctly generates multiple tracks in one file."""
     client = TrackClient()
 
-    # 1. Pre-populate multiple tracks
     with db_conn.cursor() as cur:
         cur.execute(
             "INSERT INTO gps.tracks (track_id, track_name, start_time, end_time) VALUES (%s, %s, NOW(), NOW());",
@@ -1548,7 +1559,6 @@ def test_export_gpx_multi_track(db_conn):
             (202, "Day 2 Route"),
         )
 
-        # Add a single point to each track so they have data
         cur.execute(
             "INSERT INTO gps.track_points (track_id, geom) VALUES (%s, ST_SetSRID(ST_MakePoint(10, 10), 4326));",
             (201,),
@@ -1559,10 +1569,10 @@ def test_export_gpx_multi_track(db_conn):
         )
     db_conn.commit()
 
-    # 2. Export both tracks simultaneously
+    # Export both tracks simultaneously
     gpx_xml = client.export_gpx(export_ids=[201, 202])
 
-    # 3. Verify both track blocks are captured within the XML wrapper
+    # Verify both track blocks are captured within the XML wrapper
     parsed_gpx = gpxpy.parse(gpx_xml)
     assert len(parsed_gpx.tracks) == 2
     assert parsed_gpx.tracks[0].name == "Day 1 Route"

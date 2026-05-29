@@ -230,16 +230,6 @@ class TrackClient:
 
         with get_connection() as conn:
             with conn.cursor() as cursor:
-                # for track_id in export_ids:
-                #     cursor.execute(
-                #         """SELECT gps.get_track_name(%s) as track_name;""",
-                #         (track_id,),
-                #     )
-                #     result = cursor.fetchone()
-                #     if result and result[0]:
-                #         track_name = result[0]
-                #     else:
-                #         continue
                 cursor.execute(
                     """SELECT track_id, track_name FROM gps.tracks WHERE track_id = ANY(%s);""",
                     (export_ids,),
@@ -262,7 +252,7 @@ class TrackClient:
                 )
                 all_points = cursor.fetchall()
 
-                # 3. Group the points by track_id in Python memory for lightning-fast lookups
+                # Group the points by track_id in Python memory
                 from collections import defaultdict
 
                 points_by_track = defaultdict(list)
@@ -272,7 +262,7 @@ class TrackClient:
                     lon = point_row["lon"]
                     points_by_track[t_id].append((lat, lon))
 
-                # 4. Construct the GPX structure
+                #  GPX structure
                 for track_row in tracks_data:
                     gpx_track = gpxpy.gpx.GPXTrack(name=track_row["track_name"])
                     gpx.tracks.append(gpx_track)
@@ -280,7 +270,7 @@ class TrackClient:
                     gpx_segment = gpxpy.gpx.GPXTrackSegment()
                     gpx_track.segments.append(gpx_segment)
 
-                    # Instantly grab the points from our in-memory dictionary
+                    # grab the points from in-memory dictionary
                     track_points = points_by_track.get(track_row["track_id"], [])
                     for lat, lon in track_points:
                         gpx_point = gpxpy.gpx.GPXTrackPoint(latitude=lat, longitude=lon)
