@@ -258,7 +258,7 @@ class TrackClient:
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
 
                 if not gpx.tracks:
@@ -315,7 +315,7 @@ class TrackClient:
         gpx = gpxpy.gpx.GPX()
         gpx.creator = "TrackClient"
 
-        with get_connection() as conn:
+        with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     """SELECT track_id, track_name FROM gps.tracks WHERE track_id = ANY(%s);""",
