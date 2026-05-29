@@ -11,10 +11,10 @@ export const ENDPOINTS = {
   addTrackPoint: `${API_V2_BASE}/tracks/track-point`,
   getLatestTrackPoint: `${API_BASE}/tracks-latest-point`,
   checkNewRoad: `${API_V2_BASE}/tracks/check-new-road`,
+  region: `${API_V2_BASE}/region`,
   getCurrentPosition: `${API_BASE}/position`,
   getPositionStream: "/ws/get-position",
   sysHealthStream: "/ws/sys-health",
   getAprsStations: `${API_V2_BASE}/aprs/stations`,
   addTrack: `${API_V2_BASE}/tracks/import-track`,
-  getLatestVersion: `${API_V2_BASE}/versioning/latest`,
 };

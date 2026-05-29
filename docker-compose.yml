@@ -180,6 +180,8 @@ services:
       - ./backend/geotracker/migrations/versioning_tables.sql:/docker-entrypoint-initdb.d/04_versioning_tables.sql
       - ./backend/geotracker/migrations/travel_history_functions.sql:/docker-entrypoint-initdb.d/05_travel_history_functions.sql
       - ./backend/geotracker/migrations/travel_history_tables.sql:/docker-entrypoint-initdb.d/06_travel_history_tables.sql
+      - ./backend/geotracker/migrations/region_tables.sql:/docker-entrypoint-initdb.d/07_region_tables.sql
+      - ./backend/geotracker/migrations/region_functions.sql:/docker-entrypoint-initdb.d/08_region_functions.sql
       - postgres_data:/var/lib/postgresql/data
     networks:
       - carputer

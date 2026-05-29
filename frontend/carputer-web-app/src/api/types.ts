@@ -113,12 +113,14 @@ export interface APRSStation {
   packet_count: number;
 }
 
-export interface LatestVersionResponse {
-  id?: number;
+export interface Region {
+  min_x: number;
+  max_x: number;
+  min_y: number;
+  max_y: number;
+  name: string;
+}
 
-  Version?: {
-    version_number?: string;
-    git_hash?: string | null;
-    release_date?: string | null;
-  };
+export interface RegionDataModel extends Region {
+  id: number;
 }

@@ -40,6 +40,7 @@ func RegisterHumaHandlers(api huma.API) {
 	registerAPRSHandlers(v2Grp)
 	registerVersionHandlers(v2Grp)
 	registerTravelHistoryHandlers(v2Grp)
+	registerRegionHandlers(v2Grp)
 }
 
 func registerTracksHandlers(grp *huma.Group) {
@@ -290,7 +291,42 @@ func registerTravelHistoryHandlers(grp *huma.Group) {
 			Method:      http.MethodGet,
 			Path:        "/travel/history",
 			Summary:     "List Travel History",
-			Description: "Get a list of travel history.",
+			Description: "Get a list of travel history. The list is retrieved in descending order, with the latest travel on top.",
 			Tags:        []string{"Travel History"},
 		}, handler.ListTravelHistoryHandler)
+}
+
+func registerRegionHandlers(grp *huma.Group) {
+	huma.Register(
+		grp,
+		huma.Operation{
+			OperationID: "create-region",
+			Method:      http.MethodPost,
+			Path:        "/region",
+			Summary:     "Create Region",
+			Description: "Create a region, which is a bounding limit of how much to render our map in the frontend.",
+			Tags:        []string{"Region"},
+		}, handler.CreateRegionHandler)
+
+	huma.Register(
+		grp,
+		huma.Operation{
+			OperationID: "list-regions",
+			Method:      http.MethodGet,
+			Path:        "/region",
+			Summary:     "List Regions",
+			Description: "List all regions the user has created. Retrives the list in descending order, with the latest created region on top.",
+			Tags:        []string{"Region"},
+		}, handler.ListRegionHandler)
+
+	huma.Register(
+		grp,
+		huma.Operation{
+			OperationID: "delete-regions",
+			Method:      http.MethodDelete,
+			Path:        "/region",
+			Summary:     "Delete Region",
+			Description: "Delete a region, specified by the id.",
+			Tags:        []string{"Region"},
+		}, handler.DeleteRegionHandler)
 }

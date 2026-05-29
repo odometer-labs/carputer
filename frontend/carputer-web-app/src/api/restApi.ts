@@ -16,8 +16,9 @@ import type {
   APRSStation,
   ImportTrackResponse,
   LineString,
+  Region,
+  RegionDataModel,
   UpdateTrackVal,
-  LatestVersionResponse,
 } from "./types";
 import { ENDPOINTS } from "../utils/constants";
 
@@ -507,15 +508,92 @@ export async function getAprsStations(
   }
 }
 
+// creates a new persisted region in core-api.
+export async function createRegion(region: Region): Promise<void> {
+  const primaryBase = getCoreApiHttpBaseUrl();
+  const primaryUrl = new URL(ENDPOINTS.region, primaryBase);
 
-//gets the current version/patch level of the application
-export async function getLatestVersion(): Promise<LatestVersionResponse> {
-  const version = await fetchJsonWithFallback<LatestVersionResponse>(
-    ENDPOINTS.getLatestVersion,
-    "Failed to fetch latest version",
-    undefined,
-    getCoreApiHttpBaseUrl,
-  );
+  const fetchOptions: RequestInit = {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(region),
+  };
 
-  return version;
+  try {
+    const primaryRes = await fetch(primaryUrl.toString(), fetchOptions);
+    if (!primaryRes.ok) {
+      throw new Error(`Primary request failed: ${primaryRes.status}`);
+    }
+    return;
+  } catch {
+    const fallbackBase = getApiHttpFallbackBaseUrl(primaryBase);
+    if (!fallbackBase) {
+      throw new Error("Failed to create region");
+    }
+
+    const fallbackUrl = new URL(ENDPOINTS.region, fallbackBase);
+    const fallbackRes = await fetch(fallbackUrl.toString(), fetchOptions);
+    if (!fallbackRes.ok) {
+      throw new Error("Failed to create region");
+    }
+  }
+}
+
+// fetches all persisted regions from core-api.
+export async function listRegions(): Promise<RegionDataModel[]> {
+  const primaryBase = getCoreApiHttpBaseUrl();
+  const primaryUrl = new URL(ENDPOINTS.region, primaryBase);
+
+  try {
+    const primaryRes = await fetch(primaryUrl.toString(), { method: "GET" });
+    if (!primaryRes.ok) {
+      throw new Error(`Primary request failed: ${primaryRes.status}`);
+    }
+    const data = await primaryRes.json();
+    return data.regions ?? [];
+  } catch {
+    const fallbackBase = getApiHttpFallbackBaseUrl(primaryBase);
+    if (!fallbackBase) {
+      throw new Error("Failed to list regions");
+    }
+
+    const fallbackUrl = new URL(ENDPOINTS.region, fallbackBase);
+    const fallbackRes = await fetch(fallbackUrl.toString(), { method: "GET" });
+    if (!fallbackRes.ok) {
+      throw new Error("Failed to list regions");
+    }
+    const data = await fallbackRes.json();
+    return data.regions ?? [];
+  }
+}
+
+// deletes a persisted region by id.
+export async function deleteRegion(id: number): Promise<void> {
+  const primaryBase = getCoreApiHttpBaseUrl();
+  const primaryUrl = new URL(ENDPOINTS.region, primaryBase);
+
+  const fetchOptions: RequestInit = {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  };
+
+  try {
+    const primaryRes = await fetch(primaryUrl.toString(), fetchOptions);
+    if (!primaryRes.ok) {
+      throw new Error(`Primary request failed: ${primaryRes.status}`);
+    }
+    return;
+  } catch {
+    const fallbackBase = getApiHttpFallbackBaseUrl(primaryBase);
+    if (!fallbackBase) {
+      throw new Error("Failed to delete region");
+    }
+
+    const fallbackUrl = new URL(ENDPOINTS.region, fallbackBase);
+    const fallbackRes = await fetch(fallbackUrl.toString(), fetchOptions);
+    if (!fallbackRes.ok) {
+      throw new Error("Failed to delete region");
+    }
+  }
 }
