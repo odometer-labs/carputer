@@ -87,7 +87,7 @@ jobs:
           python-version: "3.13"
 
       - name: Install dependencies
-        run: pip install psycopg python-dotenv pytest mapbox-vector-tile
+        run: pip install -r backend/requirements.txt
 
       - name: Run DB tests
         env:

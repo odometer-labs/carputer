@@ -36,7 +36,8 @@ Standard operations to manage your tracking data:
 `gps.add_track_point(track_id, ...)`: Ingests raw GPS coordinates with specified track id.
 `gps.add_track_point(...)`: Ingests raw GPS coordinates to add to current track.
 
-`gps.end_track()`: Ends the current session.
+`gps.end_track()`: Ends the current session and creates the linestring from the current track's track points.
+                    Updated from the previous version due to the track line trigger being removed.
 
 ### Data Management
 
@@ -47,7 +48,6 @@ Standard operations to manage your tracking data:
 `gps.delete_track(id)`: Removes a track and all associated spatial data (cascading)
 
 `gps.import_track()`: Creates a new track and track line using a GEOJSON text string.
-
 `gps.get_tracks_mvt(...)`: Retrieval track function with 4 modes that return a mapbox vector tile: 
                             -- CAN ONLY RETRIEVE TRACKS IN SPECIFIED TILE ENVELOPE
                                 -- `z,x,y` = 0,0,0 for `whole world`
@@ -66,7 +66,8 @@ Advanced PostGIS-driven logic for real-time discovery and historical analysis.
 `gps.get_track_lines_near_location(meters)`: Finds all historical tracks within a specific radius of the current user, as GEOJSON.
 
 `gps.get_track_lines_using_road()`: Identifies historical tracks that overlap with the current active path, as GEOJSON.
-
+    `Note`: Both using road and road mode in get_tracks_mvt dynamically creates a linestring of the points in the current track
+            and compares. Updated from the previous version where the line string was pre-computed.
 ---------------------------------------------------------------------------------------------------------------
 Utilities
 
@@ -75,7 +76,9 @@ Utilities
 `gps.get_latest_track_point()`: Quick-access helper for last inserted telemetry data
 
 ---------------------------------------------------------------------------------------------------------------
+Helper Functions
+`gps.import_gpx(track_name)`: Helper function for importing gpx tracks.
+`gps.end_gpx_track(track_id)`: Helper function for importing gpx tracks. 
+                                Does nearly the same function as gps.end_track()
 
-### Database Only (Not required for application)
-This system uses a PostgreSQL Trigger (`trg_update_track_line`) to manage spatial data automatically after each raw telemetry data insert.
 

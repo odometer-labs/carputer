@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Response, status
-from ..logging.handlers import logger
+from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
+from fastapi.responses import Response as FastAPIResponse
 from app.models.track import Track
 from app.models.track_point import TrackPoint
 from app.clients.track_client import track_client
@@ -153,3 +153,34 @@ async def import_track(geojson_data: Dict[str, Any]):
     """
     geojson_str = json.dumps(geojson_data)
     return track_client.import_track(geojson_str)
+
+
+@router.post("/tracks/import/gpx")
+async def import_gpx(file: UploadFile = File(...)):
+    """
+    Imports track points from a GPX File to create a track.
+    """
+    content = await file.read()
+    name = file.filename or "tracks.gpx"
+    return track_client.import_gpx(name, content)
+
+
+@router.post("/tracks/export/gpx")
+async def export_gpx(track_ids: list[int]):
+    """
+    Exports the specified tracks as a GPX document.
+    """
+
+    gpx_content = track_client.export_gpx(track_ids)
+
+    if gpx_content is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No exportable tracks were found for the supplied ids.",
+        )
+
+    return FastAPIResponse(
+        content=gpx_content,
+        media_type="application/gpx+xml",
+        headers={"Content-Disposition": 'attachment; filename="tracks-export.gpx"'},
+    )

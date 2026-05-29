@@ -5,6 +5,7 @@ from ..models.track import Track
 from ..models.track_point import TrackPoint
 from ..beaconing import SmartBeacon, BeaconConfig
 import json
+import gpxpy
 
 
 class TrackClient:
@@ -164,6 +165,7 @@ class TrackClient:
                     "SELECT gps.import_track(%s) as track_id;", (geojson_data,)
                 )
                 result = cursor.fetchone()
+                conn.commit()
                 return {"track_id": result["track_id"], "status": "imported"}
     
     def get_track_lines_near_location(self, p_within_meters: float):
@@ -248,6 +250,123 @@ class TrackClient:
     def get_beacon_stats(self) -> dict:
         """Get smart beacon statistics."""
         return self._smart_beacon.get_stats()
+
+    def import_gpx(self, name: str, gpx_data: bytes):
+        try:
+            # gpxpy.parse() accepts both strings and bytes
+            gpx = gpxpy.parse(gpx_data)
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+        with dbConnectionPool.get_connection() as conn:
+            with conn.cursor() as cursor:
+
+                if not gpx.tracks:
+                    return {
+                        "status": "error",
+                        "message": "The uploaded GPX file contains zero tracks.",
+                    }
+                for index, track in enumerate(gpx.tracks):
+                    # 1. Check if the track has an internal name (e.g., <trk><name>Day 1</name></trk>)
+                    track_name = ""
+                    if track.name:
+                        track_name = track.name
+                    # 2. If it has no internal name and it's a multi-track file, add a counter to the filename
+                    elif len(gpx.tracks) > 1:
+                        track_name = f"{name} (Track {index + 1})"
+                    # 3. If it's a single track with no internal name, use the filename
+                    else:
+                        track_name = name
+
+                    cursor.execute(
+                        """SELECT gps.import_gpx(%s) as id;""", (track_name,)
+                    )
+
+                    # fetch id
+                    result = cursor.fetchone()
+                    track_id = result["id"]
+
+                    all_points = [
+                        (
+                            track_id,
+                            point.longitude,
+                            point.latitude,
+                        )
+                        for segment in track.segments
+                        for point in segment.points
+                    ]
+                    if all_points:
+                        cursor.executemany(
+                            """
+                            INSERT INTO gps.track_points (track_id, geom) 
+                            VALUES (%s, ST_SetSRID(ST_MakePoint(%s, %s), 4326))
+                            """,
+                            all_points,
+                        )
+                    else:
+                        cursor.execute("""CALL gps.delete_track(%s);""", (track_id,))
+                conn.commit()
+                return {"result": "success"}
+
+    def export_gpx(self, export_ids: list[int]):
+        if not export_ids:
+            return None
+
+        gpx = gpxpy.gpx.GPX()
+        gpx.creator = "TrackClient"
+
+        with dbConnectionPool.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """SELECT track_id, track_name FROM gps.tracks WHERE track_id = ANY(%s);""",
+                    (export_ids,),
+                )
+                tracks_data = cursor.fetchall()
+
+                if not tracks_data:
+                    return None
+
+                cursor.execute(
+                    """
+                    SELECT track_id, 
+                    ST_Y(geom::geometry) as lat,
+                    ST_X(geom::geometry) as lon
+                    FROM gps.track_points 
+                    WHERE track_id = ANY(%s)
+                    ORDER BY track_id ASC, point_id ASC; 
+                    """,
+                    (export_ids,),
+                )
+                all_points = cursor.fetchall()
+
+                # Group the points by track_id in Python memory
+                from collections import defaultdict
+
+                points_by_track = defaultdict(list)
+                for point_row in all_points:
+                    t_id = point_row["track_id"]
+                    lat = point_row["lat"]
+                    lon = point_row["lon"]
+                    points_by_track[t_id].append((lat, lon))
+
+                #  GPX structure
+                for track_row in tracks_data:
+                    gpx_track = gpxpy.gpx.GPXTrack(name=track_row["track_name"])
+                    gpx.tracks.append(gpx_track)
+
+                    gpx_segment = gpxpy.gpx.GPXTrackSegment()
+                    gpx_track.segments.append(gpx_segment)
+
+                    # grab the points from in-memory dictionary
+                    track_points = points_by_track.get(track_row["track_id"], [])
+                    for lat, lon in track_points:
+                        gpx_point = gpxpy.gpx.GPXTrackPoint(latitude=lat, longitude=lon)
+                        gpx_segment.points.append(gpx_point)
+
+        if not gpx.tracks:
+            return None
+        # raw XML string representation
+        return gpx.to_xml()
 
 
 # singleton object
