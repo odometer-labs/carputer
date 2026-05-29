@@ -5,9 +5,10 @@ import type {
   GPSData,
   LatestVersionResponse,
   SysHealthData,
+  Track,
 } from "./types";
 
-export async function listTracks(): Promise<unknown[]> {
+export async function listTracks(): Promise<Track[]> {
   const res = await fetch(ENDPOINTS.listTracks, {
     method: "GET",
   });

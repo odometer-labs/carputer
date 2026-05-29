@@ -6,8 +6,10 @@ export interface LineString {
 export interface Track {
   track_id: number;
   geom: LineString;
+  geom_wm: LineString | null;
   start_time: string;
   end_time: string | null;
+  track_name: string | null;
 }
 
 export interface DeleteTrackResponse {
