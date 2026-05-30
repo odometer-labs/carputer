@@ -13,7 +13,7 @@ import (
 	v2 "github.com/odometer-labs/carputer/core-api/api/rest/v2"
 )
 
-const GetLongLatUrl = "http://api:8888/ws/get-current-pos"
+const GetLongLatUrl = "http://api:8000/ws/get-current-pos"
 
 type Track struct {
 	Pool *pgxpool.Pool
