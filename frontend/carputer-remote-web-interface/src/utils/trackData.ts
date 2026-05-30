@@ -220,7 +220,7 @@ export function buildDemoTrackItems(): TrackListItem[] {
       date: track.startTime.split("T")[0] ?? track.startTime,
       distanceMi: calculateDistanceMiles(track.coordinates),
       durationMin,
-      startPoint: [...track.coordinates[0]] as LonLatCoordinate,
+      startPoint: [...(track.coordinates[0] ?? [0, 0])] as LonLatCoordinate,
       coordinates: track.coordinates.map(
         (coordinate) => [...coordinate] as LonLatCoordinate,
       ),

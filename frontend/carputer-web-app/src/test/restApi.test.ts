@@ -130,8 +130,8 @@ describe("restApi", () => {
         ok: true,
         json: async () => ({}),
       } as Response),
-    ) as unknown as typeof fetch;
-    global.fetch = fetchMock;
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
 
     await updateTrack(1, {
       start_time: "2002",
@@ -139,7 +139,7 @@ describe("restApi", () => {
       track_name: "non",
     });
 
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("/v2/tracks/1");
     expect(init.method).toBe("PUT");
     expect(JSON.parse(init.body as string)).toEqual({
@@ -170,8 +170,8 @@ describe("restApi", () => {
         ok: true,
         json: async () => ({}),
       } as Response),
-    ) as unknown as typeof fetch;
-    global.fetch = fetchMock;
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
 
     await addTrackPoint({
       latitude: 1,
@@ -180,7 +180,7 @@ describe("restApi", () => {
       heading: 90,
     });
 
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("/v2/tracks/track-point");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual({
@@ -237,8 +237,8 @@ describe("restApi", () => {
         ok: true,
         json: async () => ({ track_id: 9 }),
       } as Response),
-    ) as unknown as typeof fetch;
-    global.fetch = fetchMock;
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
 
     const geojson = {
       type: "LineString" as const,
@@ -250,7 +250,7 @@ describe("restApi", () => {
 
     await importTrack(geojson);
 
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("/v2/tracks/import-track");
     expect(init.method).toBe("POST");
     expect((init.headers as Record<string, string>)["Content-Type"]).toBe(
@@ -277,8 +277,8 @@ describe("restApi", () => {
           heading: 90,
         }),
       } as Response),
-    ) as unknown as typeof fetch;
-    global.fetch = fetchMock;
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
 
     const pos = await getCurrentPosition();
 
@@ -289,7 +289,7 @@ describe("restApi", () => {
       heading: 90,
     });
 
-    const [calledUrl, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [calledUrl, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(calledUrl).toBe("http://localhost:8888/v2/position");
     expect(init.method).toBe("GET");
   });
