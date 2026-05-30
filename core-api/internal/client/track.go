@@ -62,7 +62,7 @@ func (t Track) ListTracks(ctx context.Context, request *v2.ViewAllTracksRequest)
 	for rows.Next() {
 		var item v2.Track
 
-		err := rows.Scan(&item.TrackID, &item.Geom, &item.StartTime, item.EndTime, &item.TrackName)
+		err := rows.Scan(&item.TrackID, &item.Geom, &item.StartTime, &item.EndTime, &item.TrackName)
 		if err != nil {
 			return nil, huma.Error500InternalServerError("Unable to list tracks", err)
 		}
@@ -138,9 +138,8 @@ func (t Track) UpdateTrack(
 		startTime = &st
 	}
 	var endTime *time.Time
-	if !request.Body.EndTime.IsZero() {
-		et := request.Body.EndTime
-		endTime = &et
+	if request.Body.EndTime != nil && !request.Body.EndTime.IsZero() {
+		endTime = request.Body.EndTime
 	}
 
 	_, err := t.Pool.Exec(
