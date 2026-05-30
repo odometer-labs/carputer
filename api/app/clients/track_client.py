@@ -182,8 +182,12 @@ class TrackClient:
                 cursor.execute(
                     "SELECT EXISTS(SELECT 1 FROM gps.tracks WHERE end_time IS NULL);"
                 )
-                result = cursor.fetchone()
-                return result if result else False
+                row = cursor.fetchone()
+                if not row:
+                    return False
+                # Support both tuple rows and dict-like rows
+                value = row[0] if isinstance(row, (tuple, list)) else row.get("exists")
+                return bool(value)
 
     def process_gps_update(
         self,
