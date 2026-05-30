@@ -12,9 +12,7 @@ export interface Track {
   track_name: string | null;
 }
 
-export interface DeleteTrackResponse {
-  result: string;
-}
+export type DeleteTrackResponse = Record<string, never>;
 
 export interface GPSData {
   latitude: number;
