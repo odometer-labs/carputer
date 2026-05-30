@@ -23,10 +23,6 @@ type Track struct {
 // service at GetLongLatUrl, decodes the JSON response, and returns it as a v2
 // response. Returns a 500 if the HTTP request or JSON decoding fails.
 func (t Track) GetPosition(ctx context.Context) (*v2.GetPositionResponse, error) {
-	var longitude float64 = 0.0
-	var latitude float64 = 0.0
-	var speed float64 = 0.0
-	var heading float64 = 0.0
 
 	resp, err := http.Get(GetLongLatUrl)
 	if err != nil {
@@ -41,10 +37,10 @@ func (t Track) GetPosition(ctx context.Context) (*v2.GetPositionResponse, error)
 
 	v2Resp := v2.GetPositionResponse{}
 
-	v2Resp.Body.Longitude = longitude
-	v2Resp.Body.Latitude = latitude
-	v2Resp.Body.Speed = speed
-	v2Resp.Body.Heading = heading
+	v2Resp.Body.Longitude = v1Resp.Longitude
+	v2Resp.Body.Latitude = v1Resp.Latitude
+	v2Resp.Body.Speed = v1Resp.Speed
+	v2Resp.Body.Heading = v1Resp.Heading
 
 	return &v2Resp, nil
 }
@@ -142,9 +138,8 @@ func (t Track) UpdateTrack(
 		startTime = &st
 	}
 	var endTime *time.Time
-	if !request.Body.EndTime.IsZero() {
-		et := request.Body.EndTime
-		endTime = &et
+	if request.Body.EndTime != nil && !request.Body.EndTime.IsZero() {
+		endTime = request.Body.EndTime
 	}
 
 	_, err := t.Pool.Exec(

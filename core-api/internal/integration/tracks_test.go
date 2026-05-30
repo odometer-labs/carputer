@@ -118,7 +118,7 @@ func TestTrackLifecycle(t *testing.T) {
 	if getResp.Body.TrackID != trackID {
 		t.Errorf("track ID: want %d, got %d", trackID, getResp.Body.TrackID)
 	}
-	if getResp.Body.EndTime.IsZero() {
+	if getResp.Body.EndTime == nil || getResp.Body.EndTime.IsZero() {
 		t.Error("expected EndTime to be set after EndTrack")
 	}
 	if getResp.Body.Geom == nil {
