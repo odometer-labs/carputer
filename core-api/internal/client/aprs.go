@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/danielgtaylor/huma/v2"
 	fap "github.com/hessu/go-aprs-fap"
@@ -140,7 +139,7 @@ func (a APRS) GetNearbyStations(ctx context.Context, request *v2.GetAPRSStations
 			&aprsStation.PacketCount,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to execute rows.Scan() for GetNearbyStations: %w", err)
+			return nil, huma.Error500InternalServerError("Failed to execute rows.Scan() for GetNearbyStations: %w", err)
 		}
 
 		resp.Body.APRSStations = append(resp.Body.APRSStations, aprsStation)
