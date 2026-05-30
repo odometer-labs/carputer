@@ -110,6 +110,14 @@ func ImportTrackPointHandler(ctx context.Context, request *v2.ImportTrackPointRe
 	return resp, err
 }
 
+func GetLatestTrackPointHandler(ctx context.Context, request *v2.GetLatestTrackPointRequest) (*v2.GetLatestTrackPointResponse, error) {
+	resp, err := trackClient.GetLatestTrackPoint(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
 func CheckNewRoadHandler(ctx context.Context, request *v2.CheckNewRoadRequest) (*v2.CheckNewRoadResponse, error) {
 	resp, err := trackClient.CheckNewRoad(ctx, request)
 	if err != nil {

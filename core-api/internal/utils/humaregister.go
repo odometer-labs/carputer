@@ -36,6 +36,17 @@ func RegisterHumaHandlers(api huma.API) {
 			Tags:        []string{"Position"},
 		}, handler.GetPositionHandler)
 
+	huma.Register(
+		v2Grp,
+		huma.Operation{
+			OperationID: "get-position-v2",
+			Method:      http.MethodGet,
+			Path:        "/position",
+			Summary:     "Get Position",
+			Description: "Fetches the current GPS position.",
+			Tags:        []string{"Position"},
+		}, handler.GetPositionHandler)
+
 	registerTracksHandlers(v2Grp)
 	registerAPRSHandlers(v2Grp)
 	registerVersionHandlers(v2Grp)
@@ -167,6 +178,17 @@ func registerTracksHandlers(grp *huma.Group) {
 			Description: "Checks if we are currently on a new road.",
 			Tags:        []string{"Tracks"},
 		}, handler.CheckNewRoadHandler)
+
+	huma.Register(
+		grp,
+		huma.Operation{
+			OperationID: "get-latest-track-point",
+			Method:      http.MethodGet,
+			Path:        "/tracks/latest-track-point",
+			Summary:     "Get Latest Track Point",
+			Description: "Returns the most recent GPS track point.",
+			Tags:        []string{"Tracks"},
+		}, handler.GetLatestTrackPointHandler)
 }
 
 func registerAPRSHandlers(grp *huma.Group) {

@@ -11,7 +11,8 @@ CREATE SCHEMA IF NOT EXISTS gps;
 CREATE TABLE gps.tracks (
     track_id BIGSERIAL PRIMARY KEY,
     start_time TIMESTAMPTZ NOT NULL,
-    end_time TIMESTAMPTZ
+    end_time TIMESTAMPTZ,
+    track_name VARCHAR(50)
 );
 CREATE TABLE gps.track_points (
     point_id BIGSERIAL PRIMARY KEY,
@@ -45,6 +46,7 @@ CREATE INDEX IF NOT EXISTS idx_track_lines_geom ON gps.track_lines USING GIST (g
 -- Handles logic to either start a new track or return the currently active one
 CREATE OR REPLACE FUNCTION gps.create_track() RETURNS BIGINT LANGUAGE plpgsql AS $$
 DECLARE new_track_id BIGINT;
+generated_name VARCHAR(50);
 BEGIN
 SELECT track_id INTO new_track_id
 FROM gps.tracks
@@ -52,8 +54,24 @@ WHERE end_time IS NULL
 LIMIT 1;
 IF new_track_id IS NOT NULL THEN RETURN new_track_id;
 END IF;
-INSERT INTO gps.tracks(start_time)
-VALUES (NOW())
+generated_name := 'Track ' || TO_CHAR(NOW(), 'YYYY-MM-DD HH24:MI');
+INSERT INTO gps.tracks(start_time, track_name)
+VALUES (NOW(), generated_name)
+RETURNING track_id INTO new_track_id;
+RETURN new_track_id;
+END;
+$$;
+CREATE OR REPLACE FUNCTION gps.create_track(p_track_name VARCHAR(50)) RETURNS BIGINT LANGUAGE plpgsql AS $$
+DECLARE new_track_id BIGINT;
+BEGIN
+SELECT track_id INTO new_track_id
+FROM gps.tracks
+WHERE end_time IS NULL
+LIMIT 1;
+IF new_track_id IS NOT NULL THEN RETURN new_track_id;
+END IF;
+INSERT INTO gps.tracks(start_time, track_name)
+VALUES (NOW(), p_track_name)
 RETURNING track_id INTO new_track_id;
 RETURN new_track_id;
 END;
@@ -112,12 +130,14 @@ CREATE OR REPLACE FUNCTION gps.view_all_tracks() RETURNS TABLE (
         track_id BIGINT,
         geom JSONB,
         start_time TIMESTAMPTZ,
-        end_time TIMESTAMPTZ
+        end_time TIMESTAMPTZ,
+        track_name VARCHAR(50)
     ) LANGUAGE plpgsql AS $$ BEGIN RETURN QUERY
 SELECT t.track_id,
     ST_AsGeoJSON(tl.geom, 6)::jsonb,
     t.start_time,
-    t.end_time
+    t.end_time,
+    t.track_name
 FROM gps.tracks AS t
     INNER JOIN gps.track_lines AS tl ON t.track_id = tl.track_id;
 END;

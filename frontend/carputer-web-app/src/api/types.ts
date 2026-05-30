@@ -46,11 +46,11 @@ export interface TrackPoint {
 
 // this is getting a track point from the get latest track point.
 export interface LatestTrackPoint {
-  point_id: number; // this is track point
+  point_id: number;
   track_id: number;
   time_stamp: string;
-  geom: string; // strangely this isn't in geojson but a string? might have to ask backend to change this
-  speed_mph: number;
+  geom: string;
+  speed_mps: number;
   heading_deg: number;
 }
 
