@@ -219,7 +219,7 @@
 
     return {
       id: track.track_id,
-      name: `Track ${track.track_id}`,
+      name: track.track_name ?? `Track ${track.track_id}`,//it should have a name but just incase
       date: track.start_time.split('T')[0] ?? track.start_time,
       distanceMi: calculateDistanceMiles(coordinates),
       durationMin,
