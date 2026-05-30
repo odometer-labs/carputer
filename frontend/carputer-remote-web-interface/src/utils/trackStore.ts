@@ -41,7 +41,7 @@ export const exportTrackCount = derived(
 );
 
 export async function loadTracksFromApi(): Promise<void> {
-  trackLoadStateStore.set({ isLoading: true, error: null });
+  trackLoadStateStore.set({ isLoading: true, error: null, usingDemoData: false });
 
   try {
     const payload = await listTracks();

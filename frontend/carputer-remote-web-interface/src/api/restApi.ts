@@ -6,16 +6,19 @@ import type {
   LatestVersionResponse,
   SysHealthData,
   ImportTracksResponse,
+  Track,
 } from "./types";
 
-export async function listTracks(): Promise<unknown[]> {
+export async function listTracks(): Promise<Track[]> {
   const res = await fetch(ENDPOINTS.listTracks, {
     method: "GET",
   });
 
   if (!res.ok) throw new Error("Failed to fetch all tracks");
 
-  return res.json();
+  const data = (await res.json()) as Track[] | { tracks?: Track[] };
+  if (Array.isArray(data)) return data;
+  return data.tracks ?? [];
 }
 
 export async function deleteTrack(
@@ -38,7 +41,7 @@ export async function importTracksGeoJson(
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(geojsonData),
+    body: JSON.stringify({ geojson_data: JSON.stringify(geojsonData) }),
   });
 
   if (!res.ok) {
