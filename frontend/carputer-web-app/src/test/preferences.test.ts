@@ -35,7 +35,8 @@ describe("preferences service", () => {
   });
 
   it("loadSettingsPreferences sanitizes stored values", async () => {
-    const { loadSettingsPreferences } = await loadSettingsPreferencesModule();
+    const { loadSettingsPreferences, DEFAULT_PREFERENCES } =
+      await loadSettingsPreferencesModule();
 
     localStorage.setItem(
       STORAGE_KEY,
@@ -57,8 +58,8 @@ describe("preferences service", () => {
       areAllTracksOn: true,
       areAprsPointsOn: true,
       milesToDiscoverRoads: 100,
-      selectedTrackColor: "#ff34f1",
-      restingTrackColor: "#fa5fff",
+      selectedTrackColor: DEFAULT_PREFERENCES.selectedTrackColor,
+      restingTrackColor: DEFAULT_PREFERENCES.restingTrackColor,
       trackThickness: 12,
       nightMode: false,
       brightness: 10,
@@ -116,8 +117,11 @@ describe("preferences service", () => {
   });
 
   it("sanitizes selected/resting track colors to 6-digit hex values", async () => {
-    const { saveSettingsPreferences, loadSettingsPreferences } =
-      await loadSettingsPreferencesModule();
+    const {
+      saveSettingsPreferences,
+      loadSettingsPreferences,
+      DEFAULT_PREFERENCES,
+    } = await loadSettingsPreferencesModule();
 
     saveSettingsPreferences({
       selectedTrackColor: "#12abEF",
@@ -130,8 +134,12 @@ describe("preferences service", () => {
       selectedTrackColor: "#abc",
       restingTrackColor: "invalid",
     });
-    expect(loadSettingsPreferences().selectedTrackColor).toBe("#ff34f1");
-    expect(loadSettingsPreferences().restingTrackColor).toBe("#fa5fff");
+    expect(loadSettingsPreferences().selectedTrackColor).toBe(
+      DEFAULT_PREFERENCES.selectedTrackColor,
+    );
+    expect(loadSettingsPreferences().restingTrackColor).toBe(
+      DEFAULT_PREFERENCES.restingTrackColor,
+    );
   });
 
   it("migrates legacy trackColor to selected and resting colors", async () => {
