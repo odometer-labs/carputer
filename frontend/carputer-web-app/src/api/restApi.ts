@@ -3,7 +3,6 @@
 */
 import type {
   StartTrackResponse,
-  EndTrackResponse,
   Track,
   UpdateTrackResponse,
   DeleteTrackResponse,
@@ -23,25 +22,29 @@ import type {
 import { ENDPOINTS } from "../utils/constants";
 
 // starts a new track in the database
-export async function startTrack(): Promise<StartTrackResponse> {
+export async function startTrack(trackName: string): Promise<StartTrackResponse> {
   const res = await fetch(ENDPOINTS.startTrack, {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({track_name: trackName || null}),
   });
 
-  if (!res.ok) throw new Error("Failed to start track");
+  if (!res.ok) {
+    throw new Error("Failed to start track");
+  }
 
   return res.json();
 }
 
 // ends a current active track in the database
-export async function endTrack(): Promise<EndTrackResponse> {
+export async function endTrack() : Promise<void> {
   const res = await fetch(ENDPOINTS.endTrack, {
     method: "GET",
   });
 
   if (!res.ok) throw new Error("Failed to end track");
-
-  return res.json();
 }
 
 // fetches all tracks, which have atleast one geom point

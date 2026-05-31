@@ -2,7 +2,6 @@
   import { createEventDispatcher, onMount } from 'svelte';
   import '../styles/popups.css';
   export let show: boolean = false;
-  export let pendingFinalize: boolean = false;
   export let initialTrackName: string = "";
 
   const dispatch = createEventDispatcher();
@@ -15,9 +14,12 @@
   });
 
   function confirmTrackName() {
-    if (!pendingFinalize) return;
-    let name = trackName && trackName.trim() !== "" ? trackName : `Track ${new Date().toLocaleString()}`;
+    const name = trackName.trim() !== ""
+        ? trackName
+        : `Track ${new Date().toLocaleString()}`;
+
     dispatch('confirm', { trackName: name });
+
     trackName = "";
   }
 
@@ -40,7 +42,7 @@
           bind:this={inputEl}
         />
         <div class="popup-buttons-container">
-          <button class="track-button" on:click={confirmTrackName}>Save</button>
+          <button class="track-button" on:click={confirmTrackName}>Start</button>
           <button class="track-button" on:click={cancelTrackName}>Cancel</button>
         </div>
       </div>

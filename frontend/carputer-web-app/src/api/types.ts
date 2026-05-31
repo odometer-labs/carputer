@@ -6,7 +6,9 @@ export interface StartTrackResponse {
   id: number;
 }
 
-export type EndTrackResponse = Record<string, never>;
+export interface StartTrackRequest {
+  track_name?: string;
+}
 
 export type UpdateTrackResponse = Record<string, never>;
 

@@ -1,5 +1,7 @@
 import { writable, type Writable } from "svelte/store";
 import {
+  startTrack,
+  endTrack,
   listTracks,
   checkNewRoad,
   addTrackPoint,
@@ -45,15 +47,14 @@ export class TrackStore {
   }
 
   //A function that calls the rest api startTrack and changes values from this class
-  async start() {
+  async start(trackName: string) {
     try {
-      //TODO: uncomment this once we have the API add track point working
-      //const res = await startTrack();
+      const res = await startTrack(trackName);
 
       this.store.update((state) => ({
         ...state,
         isTracking: true,
-        trackId: null, //TODO: change it to (trackId: res.id) once add track point works
+        trackId: res.id
       }));
     } catch (error) {
       reportNonVitalError(error, "trackStore.start", true);
@@ -64,8 +65,7 @@ export class TrackStore {
   // to false and trackId to null
   async end() {
     try {
-      //TODO: uncomment this once we have the API add track point working
-      //await endTrack();
+      await endTrack();
 
       this.store.update((state) => ({
         ...state,

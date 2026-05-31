@@ -47,8 +47,7 @@
 
   // this is to store the tracks points to be sent to backend
   let trackCoords: [number, number][] = [];
-  let trackName: string;
-  let startTime: Date;
+  let trackName: string = "";
 
   //APRS locations
   let aprsLayer: VectorLayer | undefined;
@@ -93,7 +92,7 @@
 
   // for the popup window to set the name
   let showTrackNamePopup: boolean = false;
-  let pendingFinalize: boolean = false;
+  let pendingStart: boolean = false;
 
   // this is used to prevent the user track having too many points on 1 spot
   let lastUserTrackCoord: [number, number] | null = null;
@@ -886,66 +885,37 @@
   // presses end track
   async function startEndTracking() : Promise<void> {
     if ($trackStore.isTracking) {
-      //open the popup before stopping the track
-      trackName = "";
-      showTrackNamePopup = true;
-      pendingFinalize = true;
-      return;
+      await trackStore.end();
+
+      currentTrackSource?.clear();
+      currentTrackFeature = undefined;
+
+      await trackStore.loadTracks();
     } else {
-      startTime = new Date();
-      trackCoords = []; //just to make sure it's empty
-      await trackStore.start();
+      showTrackNamePopup = true;
+      pendingStart = true;
     }
   }
 
   
   // for handling the naming of a track with the popup
   // Called by NameTrackPopUp confirm event
-  async function confirmTrackNameFromPopup(name: string): Promise<void> {
-    if (!pendingFinalize) return;
-    trackName = name;
-    await finalizeTrack(trackName);
-    await trackStore.end();
-    currentTrackSource?.clear();
-    currentTrackFeature = undefined;
-    await trackStore.loadTracks();
+  async function startTrackingNameIt(name: string): Promise<void> {
+    if (!pendingStart) return;
+    trackName = "";
+    trackCoords = [];
+
+    await trackStore.start(name);
+
     showTrackNamePopup = false;
-    pendingFinalize = false;
+    pendingStart = false;
   }
 
   //in case the user wishes to cancel ending the track or naming
   function cancelTrackName(): void {
+    trackName = "";
     showTrackNamePopup = false;
-    pendingFinalize = false;
-  }
-
-  // this puts the trackCoords into a LineString type to be put into back end DB
-  async function finalizeTrack(customTrackName: string) {
-    //must have atleast 2 points
-    if (trackCoords.length < 2) {
-      trackCoords = [];
-      return;
-    }
-
-    const lineString: ApiLineString= {
-      type: "LineString",
-      coordinates: trackCoords,
-    };
-
-    const res = await trackStore.addTrack(lineString);
-
-    trackCoords = [];
-    
-    if (res === null) return;
-
-    //set the name and correct time
-    const track = {
-      start_time: startTime.toISOString(),
-      end_time: new Date().toISOString(),
-      track_name: customTrackName,
-    }
-
-    await trackStore.updateTrack(res, track)
+    pendingStart = false;
   }
 
 
@@ -1013,9 +983,7 @@
     ];
   }
 
-  //This is just for testing purposes and eventually will be removed when we get APRS data
-  // this gets a random location near the user and sends that information to the addAprsPoint()
-  // to make a aprs feature point.
+  
   async function loadAprsStations(): Promise<void> {
     if (!$settingsPreferences.areAprsPointsOn) {
       aprsSource?.clear();
@@ -1147,9 +1115,8 @@
 
   <NameTrackPopUp
     show={showTrackNamePopup}
-    pendingFinalize={pendingFinalize}
     initialTrackName={trackName}
-    on:confirm={e => confirmTrackNameFromPopup(e.detail.trackName)}
+    on:confirm={e => startTrackingNameIt(e.detail.trackName)}
     on:cancel={cancelTrackName}
   />
 </main>
