@@ -1,19 +1,17 @@
 import { derived, get, writable } from "svelte/store";
 import { listTracks } from "../api/restApi";
 import type { TrackListItem } from "./trackData";
-import { buildDemoTrackItems, normalizeTrackPayload } from "./trackData";
+import { normalizeTrackPayload } from "./trackData";
 
 interface TrackLoadState {
   isLoading: boolean;
   error: string | null;
-  usingDemoData: boolean;
 }
 
 const trackItemsStore = writable<TrackListItem[]>([]);
 const trackLoadStateStore = writable<TrackLoadState>({
   isLoading: false,
   error: null,
-  usingDemoData: false,
 });
 const exportQueueStore = writable<number[]>([]);
 
@@ -41,42 +39,24 @@ export const exportTrackCount = derived(
 );
 
 export async function loadTracksFromApi(): Promise<void> {
-  trackLoadStateStore.set({ isLoading: true, error: null, usingDemoData: false });
+  trackLoadStateStore.set({ isLoading: true, error: null });
 
   try {
     const payload = await listTracks();
     const normalizedTracks = normalizeTrackPayload(payload);
 
-    if (normalizedTracks.length > 0) {
-      trackItemsStore.set(normalizedTracks);
-      pruneExportQueue(normalizedTracks);
-      trackLoadStateStore.set({
-        isLoading: false,
-        error: null,
-        usingDemoData: false,
-      });
-      return;
-    }
-
-    const demoTracks = buildDemoTrackItems();
-    trackItemsStore.set(demoTracks);
-    pruneExportQueue(demoTracks);
+    trackItemsStore.set(normalizedTracks);
+    pruneExportQueue(normalizedTracks);
     trackLoadStateStore.set({
       isLoading: false,
       error: null,
-      usingDemoData: true,
     });
   } catch (error: unknown) {
-    const demoTracks = buildDemoTrackItems();
-    trackItemsStore.set(demoTracks);
-    pruneExportQueue(demoTracks);
+    trackItemsStore.set([]);
+    pruneExportQueue([]);
     trackLoadStateStore.set({
       isLoading: false,
-      error:
-        error instanceof Error
-          ? `${error.message} Showing demo tracks for UI testing.`
-          : "Failed to load tracks. Showing demo tracks for UI testing.",
-      usingDemoData: true,
+      error: error instanceof Error ? error.message : "Failed to load tracks.",
     });
   }
 }

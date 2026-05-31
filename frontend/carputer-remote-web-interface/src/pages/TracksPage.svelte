@@ -28,7 +28,6 @@
     loadTracksFromApi,
     removeTrackFromStores,
     trackItems,
-    trackLoadState,
     toggleTrackQueued,
   } from '../utils/trackStore';
   import { formatDuration, type TrackListItem } from '../utils/trackData';
@@ -194,9 +193,7 @@
     pageError = null;
 
     try {
-      if (!$trackLoadState.usingDemoData) {
-        await deleteTrack(deletingTrack.id);
-      }
+      await deleteTrack(deletingTrack.id);
       removeTrackFromStores(deletingTrack.id);
       if (selectedTrackId === deletingTrack.id) {
         selectedTrackId = null;
