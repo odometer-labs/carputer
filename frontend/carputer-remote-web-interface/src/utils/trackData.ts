@@ -21,63 +21,6 @@ export const SUPPORTED_IMPORT_EXTENSIONS = [
 export const SUPPORTED_IMPORT_HINT =
   "Supported imports: GPX (.gpx) and GeoJSON (.geojson, .json).";
 
-const DEMO_TRACK_SEEDS = [
-  {
-    id: 9101,
-    name: "Morning Loop Demo",
-    startTime: "2026-05-20T07:10:00Z",
-    endTime: "2026-05-20T07:42:00Z",
-    coordinates: [
-      [-122.4194, 37.7749],
-      [-122.4142, 37.7791],
-      [-122.4056, 37.7818],
-      [-122.3984, 37.7772],
-      [-122.4032, 37.7695],
-      [-122.4128, 37.7684],
-    ] as LonLatCoordinate[],
-  },
-  {
-    id: 9102,
-    name: "Canyon Run Demo",
-    startTime: "2026-05-19T16:05:00Z",
-    endTime: "2026-05-19T17:21:00Z",
-    coordinates: [
-      [-105.2705, 40.015],
-      [-105.2848, 40.0087],
-      [-105.3012, 39.9984],
-      [-105.3169, 39.9898],
-      [-105.3346, 39.9835],
-    ] as LonLatCoordinate[],
-  },
-  {
-    id: 9103,
-    name: "Lakefront Demo",
-    startTime: "2026-05-18T11:30:00Z",
-    endTime: "2026-05-18T12:06:00Z",
-    coordinates: [
-      [-87.6298, 41.8781],
-      [-87.6214, 41.8822],
-      [-87.6138, 41.8881],
-      [-87.6096, 41.8957],
-      [-87.6127, 41.9034],
-    ] as LonLatCoordinate[],
-  },
-  {
-    id: 9104,
-    name: "Desert Test Demo",
-    startTime: "2026-05-17T20:15:00Z",
-    endTime: "2026-05-17T21:29:00Z",
-    coordinates: [
-      [-115.1728, 36.1147],
-      [-115.1582, 36.1219],
-      [-115.1434, 36.1262],
-      [-115.1285, 36.1247],
-      [-115.1168, 36.1185],
-      [-115.1091, 36.1099],
-    ] as LonLatCoordinate[],
-  },
-];
-
 export function parseTrack(payload: unknown): Track | null {
   if (Array.isArray(payload)) {
     const trackId = Number(payload[0]);
@@ -201,31 +144,6 @@ export function getImportFileKind(fileName: string): ImportFileKind | null {
   }
 
   return null;
-}
-
-export function buildDemoTrackItems(): TrackListItem[] {
-  return DEMO_TRACK_SEEDS.map((track) => {
-    const durationMin = Math.max(
-      0,
-      Math.round(
-        (new Date(track.endTime).getTime() -
-          new Date(track.startTime).getTime()) /
-          60000,
-      ),
-    );
-
-    return {
-      id: track.id,
-      name: track.name,
-      date: track.startTime.split("T")[0] ?? track.startTime,
-      distanceMi: calculateDistanceMiles(track.coordinates),
-      durationMin,
-      startPoint: [...(track.coordinates[0] ?? [0, 0])] as LonLatCoordinate,
-      coordinates: track.coordinates.map(
-        (coordinate) => [...coordinate] as LonLatCoordinate,
-      ),
-    };
-  });
 }
 
 export function createGpxFromTracks(tracks: TrackListItem[]): string {

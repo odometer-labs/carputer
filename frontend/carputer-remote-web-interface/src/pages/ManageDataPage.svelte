@@ -14,7 +14,6 @@
     trackLoadState,
   } from '../utils/trackStore';
   import {
-    createGpxFromTracks,
     getImportFileKind,
     SUPPORTED_IMPORT_HINT,
     type ImportFileKind,
@@ -140,16 +139,10 @@
     exportSuccess = null;
 
     try {
-      const fileBlob = $trackLoadState.usingDemoData
-        ? new Blob([createGpxFromTracks($exportTracks)], {
-            type: 'application/gpx+xml',
-          })
-        : await exportTracksGpx($exportTrackIds);
+      const fileBlob = await exportTracksGpx($exportTrackIds);
       const timestamp = new Date().toISOString().slice(0, 10);
       downloadBlob(fileBlob, `carputer-tracks-${timestamp}.${exportFormat}`);
-      exportSuccess = $trackLoadState.usingDemoData
-        ? `Downloaded ${$exportTrackCount} demo track${$exportTrackCount === 1 ? '' : 's'} as GPX.`
-        : `Downloaded ${$exportTrackCount} queued track${$exportTrackCount === 1 ? '' : 's'} as GPX.`;
+      exportSuccess = `Downloaded ${$exportTrackCount} queued track${$exportTrackCount === 1 ? '' : 's'} as GPX.`;
     } catch (error: unknown) {
       exportError = error instanceof Error ? error.message : 'Failed to export the queued tracks.';
     } finally {
