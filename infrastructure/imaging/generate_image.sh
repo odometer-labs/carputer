@@ -16,13 +16,19 @@ fi
 
 git clone --depth 1 --single-branch --branch "$PIGEN_BRANCH" "$PIGEN_REPO"
 
-cp .env stage-custom/03-carputer/files/.env
+cp .env files
+
+cp setup_script.sh stage-custom/01-carputer/01-run-chroot.sh
+
+chmod +x stage-custom/01-carputer/01-run-chroot.sh
+
+cp -r files stage-custom/01-carputer
 
 cp -r stage-custom pi-gen
 
 cd pi-gen
 
-cat > config <<HEREDOC
+cat > config << EOF
 IMG_NAME="$APP_NAME-img"
 TARGET_HOSTNAME="$APP_NAME"
 FIRST_USER_NAME="$APP_NAME"
@@ -34,7 +40,9 @@ TIMEZONE_DEFAULT="America/Los_Angeles"
 ENABLE_CLOUD_INIT=0
 ENABLE_SSH=1
 STAGE_LIST="stage0 stage1 stage2 stage3 stage-custom"
-HEREDOC
+EOF
+
+export CARPUTER_NONINTERACTIVE="y"
 
 sudo ./build.sh
 

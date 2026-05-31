@@ -5,8 +5,8 @@ Requires=aprs-receiver.service
 
 [Service]
 Type=simple
-User=emb_usr
-ExecStart=/usr/bin/python3 /opt/carputer/aprs/aprs_bridge.py
+User=carputer
+ExecStart=/usr/bin/python3 /opt/carputer/embedded/bridge.py
 Restart=always
 RestartSec=10
 StandardOutput=journal

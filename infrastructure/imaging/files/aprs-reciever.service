@@ -5,7 +5,7 @@ Wants=network.target
 
 [Service]
 Type=simple
-User=emb_usr
+User=carputer
 Group=plugdev
 WorkingDirectory=/opt/carputer/aprs
 ExecStartPre=/bin/sleep 5
