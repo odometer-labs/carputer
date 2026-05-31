@@ -43,6 +43,7 @@
   let trackLineLayer: VectorLayer<VectorSource> | undefined;
   let searchQuery: string = '';
   let selectedTrackId: number | null = null;
+  let showAllTrackLines: boolean = false;
   let filteredTracks: TrackListItem[] = [];
   let pageError: string | null = null;
   let isDeleting: boolean = false;
@@ -75,7 +76,7 @@
 
     return new Style({
       stroke: new Stroke({
-        color: selected ? "#1565c0" : "#888",
+        color: selected ? '#1565c0' : (showAllTrackLines ? '#2e7d32' : '#888'),
         width: 5
       })
     });
@@ -102,6 +103,25 @@
     if (!source) return;
 
     source.clear();
+
+    if (showAllTrackLines) {
+      for (const track of $trackItems) {
+        if (!track.coordinates.length) continue;
+
+        const projectedCoords = track.coordinates.map(
+          ([lon, lat]) => fromLonLat([lon, lat])
+        );
+
+        source.addFeature(
+          new Feature({
+            geometry: new LineString(projectedCoords),
+            trackId: track.id
+          })
+        );
+      }
+
+      return;
+    }
 
     const selectedTrack =
       $trackItems.find(track => track.id === selectedTrackId);
@@ -135,6 +155,7 @@
   $: if (trackLineLayer) {
     $trackItems;
     selectedTrackId;
+    showAllTrackLines;
     rebuildTrackLines();
   }
 
@@ -265,6 +286,10 @@
     <div class="right-panel">
       <div class="search-bar-container">
         <p class="panel-note">{$exportTrackCount} track{$exportTrackCount === 1 ? '' : 's'} queued for export.</p>
+        <label class="line-toggle">
+          <input type="checkbox" bind:checked={showAllTrackLines} />
+          <span>Show all track lines</span>
+        </label>
         <input
           class="search-input"
           type="text"
@@ -405,6 +430,23 @@
   .panel-note {
     margin: 0 0 0.55rem;
     font-size: 0.78rem;
+  }
+
+  .line-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0 0 0.65rem;
+    font-size: 0.82rem;
+    color: #333;
+  }
+
+  .line-toggle input {
+    margin: 0;
+    width: 0.95rem;
+    height: 0.95rem;
+    accent-color: #2e7d32;
+    cursor: pointer;
   }
 
   .search-input {
