@@ -19,11 +19,11 @@ describe("TrackStore", () => {
     const state = get(store);
 
     expect(state.isTracking).toBe(true);
-    expect(state.trackId).toBe(null);
+    expect(state.trackId).toBe(42);
   });
 
   it("end() resets isTracking and trackId", async () => {
-    vi.spyOn(api, "endTrack").mockResolvedValue({});
+    vi.spyOn(api, "endTrack").mockResolvedValue();
 
     await store.end();
     const state = get(store);

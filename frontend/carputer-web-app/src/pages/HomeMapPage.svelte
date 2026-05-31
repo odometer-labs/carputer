@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { derived } from 'svelte/store';
+  import { derived, writable } from 'svelte/store';
   import Map from 'ol/Map.js';
   import View from 'ol/View.js';
   import TileLayer from 'ol/layer/Tile.js';
@@ -13,10 +13,11 @@
   import VectorLayer from 'ol/layer/Vector.js';
   import VectorSource from 'ol/source/Vector.js';
   import { Style, Circle, Fill, Stroke, RegularShape, Icon, Text } from 'ol/style.js';
+  import { getDistance as getGeoDistance } from 'ol/sphere.js';
   import 'ol/ol.css';
-  import { getCurrentPosition, subscribeToPositionStream, getAprsStations } from '../api/restApi';
+  import { getCurrentPosition, subscribeToPositionStream, getAprsStations, subscribeToSysHealth } from '../api/restApi';
   import { getCurrentWifiConnection, getWifiAccessPoints } from '../api/wifiApi';
-  import type { GPSData, APRSStation } from '../api/types';
+  import type { GPSData, APRSStation, SysHealthData } from '../api/types';
   import { push, location } from 'svelte-spa-router';
   import { Cluster } from 'ol/source';
   import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
@@ -47,8 +48,7 @@
 
   // this is to store the tracks points to be sent to backend
   let trackCoords: [number, number][] = [];
-  let trackName: string;
-  let startTime: Date;
+  let trackName: string = "";
 
   //APRS locations
   let aprsLayer: VectorLayer | undefined;
@@ -82,6 +82,7 @@
   // device orientation listener (reserved for future compass integration)
   let orientationListener: ((event: DeviceOrientationEvent) => void) | null = null;
   let stopGPSSubscription: (() => void) | null = null;
+  let stopSysHealthSubscription: (() => void) | null = null;
   let aprsRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
   let zoomLevel: number = 18;
@@ -93,7 +94,7 @@
 
   // for the popup window to set the name
   let showTrackNamePopup: boolean = false;
-  let pendingFinalize: boolean = false;
+  let pendingStart: boolean = false;
 
   // this is used to prevent the user track having too many points on 1 spot
   let lastUserTrackCoord: [number, number] | null = null;
@@ -102,12 +103,14 @@
   const GPS_JITTER_DISTANCE_METERS = 4;
   const GPS_STATIONARY_SPEED_MPS = 0.8;
   const ROAD_HISTORY_MIN_DISTANCE_METERS = 8;
+  const MILES_TO_METERS = 1609.34;
   const LOCAL_TILE_URL = '/tile/{z}/{x}/{y}.png';
+  const userLonLat = writable<[number, number] | null>(null);
 
   // this is the list of tracks that is shown on the page, filtered
   const filteredTracks = derived(
-    [trackStore, settingsPreferences],
-    ([$trackStore, $settingsPreferences]) => {
+    [trackStore, settingsPreferences, userLonLat],
+    ([$trackStore, $settingsPreferences, $userLonLat]) => {
       //disable all tracks 
       if (!$settingsPreferences.areAllTracksOn) {
         //set the selectedTrackID to null
@@ -121,6 +124,7 @@
       }
 
       const afterDate = getAfterDate($settingsPreferences.trackRange);
+      const radiusMeters = $settingsPreferences.milesToDiscoverRoads * MILES_TO_METERS;
 
       return {
         tracks: $trackStore.tracks.filter(track => {
@@ -128,6 +132,11 @@
 
           //this is for after the date
           if ((afterDate) && (start < afterDate)) return false;
+
+          // Apply the frontend-only radius filter from the current user location.
+          if ($userLonLat && !isTrackWithinRadius(track, $userLonLat, radiusMeters)) {
+            return false;
+          }
 
           return true;
         }),
@@ -163,6 +172,21 @@
     }
 
     return date;
+  }
+
+  function isTrackWithinRadius(track: Track, centerLonLat: [number, number], radiusMeters: number): boolean {
+    if (!track.geom?.coordinates?.length) {
+      return false;
+    }
+
+    for (const [lon, lat] of track.geom.coordinates) {
+      const distanceMeters = getGeoDistance(centerLonLat, [lon, lat]);
+      if (distanceMeters <= radiusMeters) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   function getUserIconScale(): number {
@@ -244,6 +268,7 @@
       void initializeWifiStateForMap();
       loadMap();             // create map instance and hook events
       startGPSTracking();    // begin receiving backend GPS data
+      startSystemHealthTracking(); // subscribe to live system health for menu hints
     } catch (error: unknown) {
       reportVitalError(error, 'HomeMapPage.onMount');
     }
@@ -267,6 +292,8 @@
       map?.setTarget(undefined);
       stopGPSSubscription?.();
       stopGPSSubscription = null;
+      stopSysHealthSubscription?.();
+      stopSysHealthSubscription = null;
 
       if (orientationListener) {
         window.removeEventListener('deviceorientationabsolute', orientationListener);
@@ -678,6 +705,7 @@
     }
 
     latestUserCoords = filteredCoords;
+    userLonLat.set([lon, lat]);
 
     if (!map) {
       return;
@@ -886,66 +914,37 @@
   // presses end track
   async function startEndTracking() : Promise<void> {
     if ($trackStore.isTracking) {
-      //open the popup before stopping the track
-      trackName = "";
-      showTrackNamePopup = true;
-      pendingFinalize = true;
-      return;
+      await trackStore.end();
+
+      currentTrackSource?.clear();
+      currentTrackFeature = undefined;
+
+      await trackStore.loadTracks();
     } else {
-      startTime = new Date();
-      trackCoords = []; //just to make sure it's empty
-      await trackStore.start();
+      showTrackNamePopup = true;
+      pendingStart = true;
     }
   }
 
   
   // for handling the naming of a track with the popup
   // Called by NameTrackPopUp confirm event
-  async function confirmTrackNameFromPopup(name: string): Promise<void> {
-    if (!pendingFinalize) return;
-    trackName = name;
-    await finalizeTrack(trackName);
-    await trackStore.end();
-    currentTrackSource?.clear();
-    currentTrackFeature = undefined;
-    await trackStore.loadTracks();
+  async function startTrackingNameIt(name: string): Promise<void> {
+    if (!pendingStart) return;
+    trackName = "";
+    trackCoords = [];
+
+    await trackStore.start(name);
+
     showTrackNamePopup = false;
-    pendingFinalize = false;
+    pendingStart = false;
   }
 
   //in case the user wishes to cancel ending the track or naming
   function cancelTrackName(): void {
+    trackName = "";
     showTrackNamePopup = false;
-    pendingFinalize = false;
-  }
-
-  // this puts the trackCoords into a LineString type to be put into back end DB
-  async function finalizeTrack(customTrackName: string) {
-    //must have atleast 2 points
-    if (trackCoords.length < 2) {
-      trackCoords = [];
-      return;
-    }
-
-    const lineString: ApiLineString= {
-      type: "LineString",
-      coordinates: trackCoords,
-    };
-
-    const res = await trackStore.addTrack(lineString);
-
-    trackCoords = [];
-    
-    if (res === null) return;
-
-    //set the name and correct time
-    const track = {
-      start_time: startTime.toISOString(),
-      end_time: new Date().toISOString(),
-      track_name: customTrackName,
-    }
-
-    await trackStore.updateTrack(res, track)
+    pendingStart = false;
   }
 
 
@@ -1013,9 +1012,7 @@
     ];
   }
 
-  //This is just for testing purposes and eventually will be removed when we get APRS data
-  // this gets a random location near the user and sends that information to the addAprsPoint()
-  // to make a aprs feature point.
+  
   async function loadAprsStations(): Promise<void> {
     if (!$settingsPreferences.areAprsPointsOn) {
       aprsSource?.clear();
@@ -1057,8 +1054,57 @@
 
   let isDropdownOpen: boolean = false;
 
+  let latestSysHealth: SysHealthData | null = null;
+  let wifiMenuHint: string = 'Checking Wi-Fi...';
+  let settingsMenuHint: string = 'Day mode activated';
+  let systemDataMenuHint: string = 'Free storage unavailable';
+
+  $: wifiMenuHint = getWifiMenuHint();
+  $: settingsMenuHint = $settingsPreferences.nightMode ? 'Night mode activated' : 'Day mode activated';
+  $: systemDataMenuHint = getSystemDataMenuHint(latestSysHealth);
+
   // APRS popup: set when the user clicks a single APRS station on the map
   let aprsPopupData: { aprsId: string; callsign: string; comment: string | null } | null = null;
+
+  function bytesToGigabytes(bytes: number): number {
+    return bytes / 1_073_741_824;
+  }
+
+  function getSystemDataMenuHint(sysHealth: SysHealthData | null): string {
+    if (!sysHealth) {
+      return 'Free storage unavailable';
+    }
+
+    const freeGb = Math.max(0, bytesToGigabytes(sysHealth.disk.free_bytes));
+    return `${freeGb.toFixed(1)} GB free`;
+  }
+
+  function getWifiMenuHint(): string {
+    if (!hasResolvedWifiStatus) {
+      return 'Checking Wi-Fi...';
+    }
+
+    if (!$wifiStore.isWifiOn) {
+      return 'Wi-Fi is off';
+    }
+
+    if ($wifiStore.isConnected) {
+      return `Connected to ${$wifiStore.ssid ?? 'network'}`;
+    }
+
+    return 'Not connected';
+  }
+
+  function startSystemHealthTracking(): void {
+    stopSysHealthSubscription = subscribeToSysHealth(
+      (data: SysHealthData) => {
+        latestSysHealth = data;
+      },
+      (error: string) => {
+        reportNonVitalError(error, 'HomeMapPage.subscribeToSysHealth');
+      }
+    );
+  }
 </script>
 
 <main style="margin: 0; padding: 0; height: 100%; width: 100%;">
@@ -1096,7 +1142,7 @@
               <i class="iconoir-wifi dropdown-menu_btn_icons"></i>
               Wifi
               <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
-                <sub class="sub_text">Connected to PSU-Guest</sub>
+                <sub class="sub_text">{wifiMenuHint}</sub>
               </div>  
             </button>
         </li>
@@ -1105,7 +1151,7 @@
               <i class="iconoir-settings dropdown-menu_btn_icons"></i>
               Settings
               <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
-                <sub class="sub_text">Day mode activated</sub>
+                <sub class="sub_text">{settingsMenuHint}</sub>
               </div>  
             </button>
         </li>
@@ -1114,7 +1160,7 @@
             <i class="iconoir-info-circle dropdown-menu_btn_icons"></i>
             System Data
             <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
-                <sub class="sub_text">Patch Level: 0.0.0</sub>
+                <sub class="sub_text">{systemDataMenuHint}</sub>
             </div>  
           </button>
         </li>
@@ -1147,9 +1193,8 @@
 
   <NameTrackPopUp
     show={showTrackNamePopup}
-    pendingFinalize={pendingFinalize}
     initialTrackName={trackName}
-    on:confirm={e => confirmTrackNameFromPopup(e.detail.trackName)}
+    on:confirm={e => startTrackingNameIt(e.detail.trackName)}
     on:cancel={cancelTrackName}
   />
 </main>

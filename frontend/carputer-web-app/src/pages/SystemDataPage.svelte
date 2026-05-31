@@ -18,17 +18,15 @@
   import { Style, Fill, Stroke, Text, Circle } from 'ol/style.js';
   import { fromLonLat } from 'ol/proj.js';
   import { createXYZ } from 'ol/tilegrid.js';
-  import { createRegion, deleteRegion, getCurrentPosition, listRegions, listTracks, subscribeToPositionStream, subscribeToSysHealth } from '../api/restApi';
+  import { createRegion, deleteRegion, getCurrentPosition, getLatestVersion, listRegions, listTracks, subscribeToPositionStream, subscribeToSysHealth } from '../api/restApi';
   import type { GPSData, RegionDataModel, SysHealthData } from '../api/types';
   import { reportNonVitalError } from '../stores/errorStore';
   import { wifiStore } from '../stores/wifiStore';
   import 'ol/ol.css';
 
-  // TODO: These values should be fetched from the backend, currently they are just placeholders for display.
   let num_tracks: number = 0;
-  let patch_level: string = "0.1.2";
-  let storage_amount_dowloaded: number = 2;
-  let storage_amount_left: number = 1;
+  let patch_level: string = 'Unavailable';
+  let maps_downloaded: number = 0;
 
   let sysHealth: SysHealthData | null = null;
   let stopSysHealthSubscription: (() => void) | null = null;
@@ -302,6 +300,8 @@
   $: if (map && gridSource) updateGrid();
   $: hasPendingTileSyncChanges = selectionDiffersFromDownloaded();
   $: canDownloadTiles = $wifiStore.isWifiOn && $wifiStore.isConnected;
+  let storage_left: string = 'Unavailable';
+  $: storage_left = sysHealth ? formatBytes(Math.max(0, sysHealth.disk.free_bytes)) : 'Unavailable';
 
   async function loadDashboardInfo(): Promise<void> {
     try {
@@ -309,6 +309,14 @@
       num_tracks = Array.isArray(tracks) ? tracks.length : 0;
     } catch (error: unknown) {
       reportNonVitalError(error, 'SystemDataPage.listTracks');
+    }
+
+    try {
+      const latestVersion = await getLatestVersion();
+      patch_level = latestVersion ?? 'Unavailable';
+    } catch (error: unknown) {
+      patch_level = 'Unavailable';
+      reportNonVitalError(error, 'SystemDataPage.getLatestVersion');
     }
   }
 
@@ -703,6 +711,7 @@
     }
 
     hasSelection = selectedTiles.size > 0;
+    maps_downloaded = downloadedRegionIdsByTileKey.size;
     selectedTiles = new Map(selectedTiles);
     downloadedRegionIdsByTileKey = new Map(downloadedRegionIdsByTileKey);
   }
@@ -832,15 +841,15 @@
       </div>
       <div class="info-box">
         <p class="info-row">
-          <span class="info-label">Maps Downloaded:</span>
-          <span class="info-value">{storage_amount_dowloaded}GB</span>
+          <span class="info-label">Map Tiles Downloaded:</span>
+          <span class="info-value">{maps_downloaded}</span>
         </p>
       </div>
 
       <div class="info-box">
         <p class="info-row">
           <span class="info-label">Storage Left:</span>
-          <span class="info-value">{storage_amount_left}GB</span>
+          <span class="info-value">{storage_left}</span>
         </p>
       </div>
     </div>
@@ -1010,10 +1019,12 @@
     box-sizing: border-box;
     width: 100%;
     overflow-y: hidden;
+    overflow-x: hidden;
   }
 
   .left-column {
-    width: 40%;
+    flex: 0 1 40%;
+    min-width: 0;
     height: 100%;
     min-height: 0;
     display: flex;
@@ -1114,7 +1125,8 @@
     position: relative;
     box-sizing: border-box;
     background-color: var(--secondary-color);
-    width: 60%;
+    flex: 1 1 0;
+    min-width: 0;
     height: 100%;
     min-height: 0;
     border-width: 2px;

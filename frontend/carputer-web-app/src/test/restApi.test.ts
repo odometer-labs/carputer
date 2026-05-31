@@ -45,7 +45,15 @@ describe("restApi", () => {
 
     const res = await startTrack();
     expect(res.id).toBe(123);
-    expect(fetchMock).toHaveBeenCalledWith("/v2/tracks", { method: "POST" });
+    expect(fetchMock).toHaveBeenCalledWith("/v2/tracks", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        track_name: null,
+      }),
+    });
   });
 
   it("endTrack returns correct data", async () => {

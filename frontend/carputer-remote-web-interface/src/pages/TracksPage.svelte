@@ -32,14 +32,18 @@
     toggleTrackQueued,
   } from '../utils/trackStore';
   import { formatDuration, type TrackListItem } from '../utils/trackData';
+  import LineString from 'ol/geom/LineString.js'
+  import { boundingExtent } from 'ol/extent';
 
   const POINT_VISIBILITY_MIN_ZOOM = 6;
 
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
   let trackLayer: VectorLayer<VectorSource> | undefined;
+  let trackLineLayer: VectorLayer<VectorSource> | undefined;
   let searchQuery: string = '';
   let selectedTrackId: number | null = null;
+  let showAllTrackLines: boolean = false;
   let filteredTracks: TrackListItem[] = [];
   let pageError: string | null = null;
   let isDeleting: boolean = false;
@@ -65,6 +69,19 @@
     });
   }
 
+  //line routes style
+  function getTrackLineStyle(feature: FeatureLike): Style | undefined{
+    const trackId = feature.get('trackId');
+    const selected = trackId === selectedTrackId;
+
+    return new Style({
+      stroke: new Stroke({
+        color: selected ? '#1565c0' : (showAllTrackLines ? '#2e7d32' : '#888'),
+        width: 5
+      })
+    });
+  }
+
   function rebuildTrackPoints(): void {
     const source = trackLayer?.getSource();
     if (!source) return;
@@ -81,9 +98,53 @@
     }
   }
 
-  $: if (trackLayer) {
+  function rebuildTrackLines(): void {
+    const source = trackLineLayer?.getSource();
+    if (!source) return;
+
+    source.clear();
+
+    if (showAllTrackLines) {
+      for (const track of $trackItems) {
+        if (!track.coordinates.length) continue;
+
+        const projectedCoords = track.coordinates.map(
+          ([lon, lat]) => fromLonLat([lon, lat])
+        );
+
+        source.addFeature(
+          new Feature({
+            geometry: new LineString(projectedCoords),
+            trackId: track.id
+          })
+        );
+      }
+
+      return;
+    }
+
+    const selectedTrack =
+      $trackItems.find(track => track.id === selectedTrackId);
+
+    if (!selectedTrack) return;
+
+    const projectedCoords = selectedTrack.coordinates.map(
+      ([lon, lat]) => fromLonLat([lon, lat])
+    );
+
+    source.addFeature(
+      new Feature({
+        geometry: new LineString(projectedCoords),
+        trackId: selectedTrack.id
+      })
+    );
+  }
+
+  $: if (trackLayer && trackLineLayer) {
     $trackItems;
+
     rebuildTrackPoints();
+    rebuildTrackLines();
   }
 
   $: if (trackLayer) {
@@ -91,16 +152,27 @@
     trackLayer.changed();
   }
 
+  $: if (trackLineLayer) {
+    $trackItems;
+    selectedTrackId;
+    showAllTrackLines;
+    rebuildTrackLines();
+  }
+
   function selectTrack(track: TrackListItem): void {
     selectedTrackId = track.id;
     if (!map) return;
 
-    const projectedStart = fromLonLat(track.startPoint);
+    const coords = track.coordinates.map(
+      ([lon, lat]) => fromLonLat([lon, lat])
+    );
 
-    map.getView().animate({
-      center: projectedStart,
-      zoom: 13,
-      duration: 650
+    const extent = boundingExtent(coords);
+
+    map.getView().fit(extent, {
+      padding: [50, 50, 50, 50],
+      duration: 500,
+      maxZoom: 15
     });
   }
 
@@ -152,10 +224,16 @@
       style: (feature) => getPointStyle(feature)
     });
 
+    trackLineLayer = new VectorLayer({
+      source: new VectorSource(),
+      style: (feature) =>  getTrackLineStyle(feature)
+    });
+
     map = new Map({
       target: mapElement,
       layers: [
         new TileLayer({ source: new OSM() }),
+        trackLineLayer,
         trackLayer
       ],
       view: new View({
@@ -208,6 +286,10 @@
     <div class="right-panel">
       <div class="search-bar-container">
         <p class="panel-note">{$exportTrackCount} track{$exportTrackCount === 1 ? '' : 's'} queued for export.</p>
+        <label class="line-toggle">
+          <input type="checkbox" bind:checked={showAllTrackLines} />
+          <span>Show all track lines</span>
+        </label>
         <input
           class="search-input"
           type="text"
@@ -348,6 +430,23 @@
   .panel-note {
     margin: 0 0 0.55rem;
     font-size: 0.78rem;
+  }
+
+  .line-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0 0 0.65rem;
+    font-size: 0.82rem;
+    color: #333;
+  }
+
+  .line-toggle input {
+    margin: 0;
+    width: 0.95rem;
+    height: 0.95rem;
+    accent-color: #2e7d32;
+    cursor: pointer;
   }
 
   .search-input {
