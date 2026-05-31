@@ -106,6 +106,9 @@ class TrackClient:
                 return {"result": "success"}
 
     def add_track_point(self, track_point: TrackPoint):
+        if not self.is_tracking_active():
+            return {"result": "No active tracks"}
+        
         with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -180,9 +183,9 @@ class TrackClient:
         with dbConnectionPool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    "SELECT EXISTS(SELECT 1 FROM gps.tracks WHERE end_time IS NULL);"
+                    "SELECT has_active_track FROM gps.has_active_track WHERE id = 1;"
                 )
-                result = cursor.fetchone()
+                result = cursor.fetchone()["has_active_track"]
                 return result if result else False
 
     def process_gps_update(

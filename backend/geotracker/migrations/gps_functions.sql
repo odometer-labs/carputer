@@ -29,6 +29,10 @@ CREATE TABLE gps.track_lines (
     geom GEOGRAPHY(LINESTRING, 4326) NOT NULL,
     geom_wm GEOMETRY(LINESTRING, 3857) -- For Vector Tiles (Web Mercator)
 );
+CREATE TABLE gps.has_active_track (
+    id INT PRIMARY KEY CHECK (id = 1),
+    has_active_track BOOLEAN NOT NULL DEFAULT FALSE
+);
 ---------------------------
 -- 3. INDEXES & CONSTRAINTS
 ---------------------------
@@ -51,6 +55,7 @@ CREATE OR REPLACE FUNCTION gps.create_track() RETURNS BIGINT LANGUAGE plpgsql AS
 DECLARE new_track_id BIGINT;
 generated_name VARCHAR(50);
 BEGIN
+UPDATE gps.has_active_track SET has_active_track = TRUE WHERE id = 1;
 SELECT track_id INTO new_track_id
 FROM gps.tracks
 WHERE end_time IS NULL
@@ -68,6 +73,7 @@ $$;
 CREATE OR REPLACE FUNCTION gps.create_track(p_track_name VARCHAR(50)) RETURNS BIGINT LANGUAGE plpgsql AS $$
 DECLARE new_track_id BIGINT;
 BEGIN
+UPDATE gps.has_active_track SET has_active_track = TRUE WHERE id = 1;
 SELECT track_id INTO new_track_id
 FROM gps.tracks
 WHERE end_time IS NULL
@@ -174,6 +180,7 @@ DELETE FROM gps.tracks
 WHERE track_id = end_track_id;
 END IF;
 END IF;
+UPDATE gps.has_active_track SET has_active_track = FALSE WHERE id = 1;
 END;
 $$;
 -- Gets tracks vector tile based on mode -- all, single, nearby, road
@@ -533,5 +540,21 @@ $$;
 CREATE OR REPLACE FUNCTION ST_LevelScale(z integer) RETURNS float8 LANGUAGE plpgsql AS $$ BEGIN -- 40075016.68 is the Earth's circumference in meters (EPSG:3857)
     -- 256 is the standard tile pixel width
     RETURN 40075016.68 / (256 * |/ 2 ^ z);
+END;
+$$;
+
+-- Tracker for checking if we have an active track
+INSERT INTO gps.has_active_track (id, has_active_track) VALUES (1, FALSE);
+
+CREATE OR REPLACE FUNCTION gps.is_tracking()
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN EXISTS (
+        SELECT 1
+        FROM gps.has_active_track as t
+        WHERE t.has_active_track = TRUE
+    );
 END;
 $$;
