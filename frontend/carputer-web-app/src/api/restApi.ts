@@ -22,7 +22,7 @@ import type {
 import { ENDPOINTS } from "../utils/constants";
 
 // starts a new track in the database
-export async function startTrack(trackName: string): Promise<StartTrackResponse> {
+export async function startTrack(trackName?: string): Promise<StartTrackResponse> {
   const res = await fetch(ENDPOINTS.startTrack, {
     method: "POST",
     headers: {

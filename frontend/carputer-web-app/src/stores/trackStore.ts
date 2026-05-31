@@ -47,7 +47,7 @@ export class TrackStore {
   }
 
   //A function that calls the rest api startTrack and changes values from this class
-  async start(trackName: string) {
+  async start(trackName?: string) {
     try {
       const res = await startTrack(trackName);
 
