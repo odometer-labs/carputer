@@ -126,3 +126,26 @@ export interface Region {
 export interface RegionDataModel extends Region {
   id: number;
 }
+
+export interface LatestVersionResponse {
+  body?: {
+    id?: number;
+    version?: {
+      version_number?: string;
+      git_hash?: string | null;
+      release_date?: string | null;
+    };
+    Version?: {
+      VersionNumber?: string;
+      GitHash?: string | null;
+      ReleaseDate?: string | null;
+    };
+  };
+  version?: {
+    version_number?: string;
+    VersionNumber?: string;
+  };
+  Version?: {
+    VersionNumber?: string;
+  };
+}

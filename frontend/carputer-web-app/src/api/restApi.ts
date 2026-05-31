@@ -12,6 +12,7 @@ import type {
   CheckNewRoadResponse,
   GPSData,
   SysHealthData,
+  LatestVersionResponse,
   APRSStation,
   ImportTrackResponse,
   LineString,
@@ -22,13 +23,15 @@ import type {
 import { ENDPOINTS } from "../utils/constants";
 
 // starts a new track in the database
-export async function startTrack(trackName?: string): Promise<StartTrackResponse> {
+export async function startTrack(
+  trackName?: string,
+): Promise<StartTrackResponse> {
   const res = await fetch(ENDPOINTS.startTrack, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({track_name: trackName || null}),
+    body: JSON.stringify({ track_name: trackName || null }),
   });
 
   if (!res.ok) {
@@ -39,7 +42,7 @@ export async function startTrack(trackName?: string): Promise<StartTrackResponse
 }
 
 // ends a current active track in the database
-export async function endTrack() : Promise<void> {
+export async function endTrack(): Promise<void> {
   const res = await fetch(ENDPOINTS.endTrack, {
     method: "GET",
   });
@@ -166,6 +169,31 @@ export async function getCurrentPosition(): Promise<GPSData> {
     undefined,
     getCoreApiHttpBaseUrl,
   );
+}
+
+export async function getLatestVersion(): Promise<string | null> {
+  const payload = await fetchJsonWithFallback<LatestVersionResponse>(
+    ENDPOINTS.getLatestVersion,
+    "Failed to fetch latest version",
+    undefined,
+    getCoreApiHttpBaseUrl,
+  );
+
+  const candidates = [
+    payload.body?.version?.version_number,
+    payload.body?.Version?.VersionNumber,
+    payload.version?.version_number,
+    payload.version?.VersionNumber,
+    payload.Version?.VersionNumber,
+  ];
+
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+
+  return null;
 }
 
 function getCoreApiHttpBaseUrl(): string {

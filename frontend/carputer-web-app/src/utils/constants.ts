@@ -5,6 +5,7 @@ export const ENDPOINTS = {
   startTrack: `${API_V2_BASE}/tracks`,
   endTrack: `${API_V2_BASE}/tracks`,
   listTracks: `${API_V2_BASE}/tracks/list-tracks`,
+  getLatestVersion: `${API_V2_BASE}/versioning/latest`,
   getTrack: `${API_V2_BASE}/tracks`,
   updateTrack: `${API_V2_BASE}/tracks`,
   deleteTrack: `${API_V2_BASE}/tracks`,

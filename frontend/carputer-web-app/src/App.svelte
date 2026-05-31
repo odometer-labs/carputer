@@ -159,8 +159,11 @@
   .warning-popup-stack {
     position: fixed;
     bottom: 0.9rem;
+    left: 0.9rem;
     right: 0.9rem;
-    width: min(420px, calc(100vw - 2rem));
+    width: auto;
+    max-width: 420px;
+    margin-left: auto;
     box-sizing: border-box;
     z-index: 2500;
     display: grid;
