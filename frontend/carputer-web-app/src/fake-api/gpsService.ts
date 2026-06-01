@@ -321,7 +321,7 @@ export class GPSService {
     }
 
     try {
-      const response = await fetch("/src/fake-api/kras-en.nmea");
+      const response = await fetch("/src/fake-api/portland-loop.nmea");
       if (!response.ok) {
         throw new Error(`Failed to load NMEA file: ${response.statusText}`);
       }
