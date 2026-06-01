@@ -1471,6 +1471,11 @@ def test_import_gpx_success_single_track(db_conn):
             track_row["track_name"] == "Morning Commute"
         )  # Used internal name over file fallback
 
+        # GPX import must also generate a track line so it appears in list views.
+        cur.execute("SELECT COUNT(*) AS count FROM gps.track_lines;")
+        line_row = cur.fetchone()
+        assert line_row["count"] == 1
+
         # Verify coordinates mapped correctly
         cur.execute(
             "SELECT ST_Y(geom::geometry) as lat, ST_X(geom::geometry) as lon FROM gps.track_points ORDER BY point_id ASC;"

@@ -16,7 +16,7 @@ CREATE TABLE gps.tracks (
 );
 CREATE TABLE gps.track_points (
     point_id BIGSERIAL PRIMARY KEY,
-    track_id BIGSERIAL NOT NULL REFERENCES gps.tracks(track_id) ON DELETE CASCADE,
+    track_id BIGINT NOT NULL REFERENCES gps.tracks(track_id) ON DELETE CASCADE,
     time_stamp TIMESTAMPTZ,
     geom GEOGRAPHY(Point, 4326) NOT NULL,
     -- WGS84 Standard
@@ -25,7 +25,7 @@ CREATE TABLE gps.track_points (
     heading_deg DOUBLE PRECISION -- Units: 0-360 Degrees (0 = North)
 );
 CREATE TABLE gps.track_lines (
-    track_id BIGSERIAL PRIMARY KEY REFERENCES gps.tracks(track_id) ON DELETE CASCADE,
+    track_id BIGINT PRIMARY KEY REFERENCES gps.tracks(track_id) ON DELETE CASCADE,
     geom GEOGRAPHY(LINESTRING, 4326) NOT NULL,
     geom_wm GEOMETRY(LINESTRING, 3857) -- For Vector Tiles (Web Mercator)
 );
