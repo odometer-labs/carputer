@@ -315,7 +315,9 @@
 
   // re-render grid whenever select mode changes
   $: if (map && gridSource) updateGrid();
-  $: hasPendingTileSyncChanges = selectionDiffersFromDownloaded();
+  $: hasPendingTileSyncChanges =
+    selectedTiles.size !== downloadedRegionIdsByTileKey.size ||
+    [...selectedTiles.keys()].some(key => !downloadedRegionIdsByTileKey.has(key));
   $: canDownloadTiles = $wifiStore.isWifiOn && $wifiStore.isConnected;
   $: if (map) {
     canDownloadTiles;
