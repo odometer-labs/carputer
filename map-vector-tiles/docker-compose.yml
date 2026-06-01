@@ -1,0 +1,18 @@
+version: '3'
+
+services:
+  map:
+    build: .
+    volumes:
+      - osm-data:/data/database/
+    ports:
+      - "8070:80"
+    command: "run"
+    networks:
+      - carputer
+    environment:
+      - ALLOW_CORS=enabled
+
+volumes:
+  osm-data:
+    external: true

@@ -6,6 +6,7 @@ export type TrackRange = "all" | "day" | "week" | "month" | "year";
 
 export interface Preferences {
   areAllTracksOn: boolean;
+  areAprsPointsOn: boolean;
   milesToDiscoverRoads: number;
   trackRange: TrackRange;
   selectedTrackColor: string;
@@ -21,10 +22,11 @@ type PreferencesPatch = Partial<Preferences>;
 
 export const DEFAULT_PREFERENCES: Preferences = {
   areAllTracksOn: true,
+  areAprsPointsOn: true,
   milesToDiscoverRoads: 50,
   trackRange: "all",
-  selectedTrackColor: "#ff34f1",
-  restingTrackColor: "#fa5fff",
+  selectedTrackColor: "#0000ff",
+  restingTrackColor: "#008000",
   trackThickness: 4,
   nightMode: false,
   brightness: 100,
@@ -144,6 +146,10 @@ function sanitizeSettingsPreferences(
     areAllTracksOn: sanitizeBoolean(
       rawPreferences.areAllTracksOn,
       DEFAULT_PREFERENCES.areAllTracksOn,
+    ),
+    areAprsPointsOn: sanitizeBoolean(
+      rawPreferences.areAprsPointsOn,
+      DEFAULT_PREFERENCES.areAprsPointsOn,
     ),
     milesToDiscoverRoads: clampMiles(rawPreferences.milesToDiscoverRoads),
     selectedTrackColor: sanitizeTrackColor(

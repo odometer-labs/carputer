@@ -1,36 +1,43 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { derived } from 'svelte/store';
+  import { derived, writable } from 'svelte/store';
   import Map from 'ol/Map.js';
   import View from 'ol/View.js';
   import TileLayer from 'ol/layer/Tile.js';
   import OSM from 'ol/source/OSM.js';
   import { defaults as defaultControls } from 'ol/control/defaults.js';
-  import { fromLonLat, toLonLat } from 'ol/proj.js';
+  import { fromLonLat } from 'ol/proj.js';
   import Feature from 'ol/Feature.js';
   import Point from 'ol/geom/Point.js';
   import LineString from 'ol/geom/LineString.js'
   import VectorLayer from 'ol/layer/Vector.js';
   import VectorSource from 'ol/source/Vector.js';
   import { Style, Circle, Fill, Stroke, RegularShape, Icon, Text } from 'ol/style.js';
+  import { getDistance as getGeoDistance } from 'ol/sphere.js';
   import 'ol/ol.css';
-  import { getCurrentPosition, subscribeToPositionStream } from '../api/restApi';
-  import type { GPSData } from '../api/types';
-  import { push } from 'svelte-spa-router';
+  import { getCurrentPosition, subscribeToPositionStream, getAprsStations, subscribeToSysHealth } from '../api/restApi';
+  import { getCurrentWifiConnection, getWifiAccessPoints } from '../api/wifiApi';
+  import type { GPSData, APRSStation, SysHealthData } from '../api/types';
+  import { push, location } from 'svelte-spa-router';
   import { Cluster } from 'ol/source';
   import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
+  import { setWifiConnected, setWifiDisconnected, setWifiPower, wifiStore } from '../stores/wifiStore';
   import { settingsPreferences, type TrackRange } from '../services/settings_preferences';
   import aprsIconUrl from '../assets/icons/aprs-bold.svg';
   import userArrowIconUrl from '../assets/icons/maps-arrow-blue-white.svg';
   import { trackStore } from '../stores/trackStore'
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
   import SystemIndicators from "../assets/components/SystemIndicators.svelte";
-  //remove this later
-  import type { Track } from '../api/types';
+  import NameTrackPopUp from '../assets/components/NameTrackPopUp.svelte';
+  import APRSPopUp from '../assets/components/APRSPopUp.svelte';
+  import type { Track, LineString as ApiLineString } from '../api/types';
 
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
   let locationStatus: string = 'Getting location...';
+  let baseTileLayer: TileLayer | undefined;
+  let usingOnlineTiles: boolean = false;
+  let hasResolvedWifiStatus: boolean = false;
 
   // roadhistory and current track line
   let oldTrackLayer: VectorLayer | undefined;
@@ -38,6 +45,10 @@
   let currentTrackLayer: VectorLayer | undefined;
   let currentTrackSource: VectorSource | undefined;
   let currentTrackFeature: Feature<LineString> | undefined;
+
+  // this is to store the tracks points to be sent to backend
+  let trackCoords: [number, number][] = [];
+  let trackName: string = "";
 
   //APRS locations
   let aprsLayer: VectorLayer | undefined;
@@ -50,7 +61,7 @@
   let vectorSource: VectorSource | undefined;
 
   // latest GPS state (map projection coords + heading)
-  let latestUserCoords: number[] | null = null;
+  let latestUserCoords: [number, number] | null = null;
   let latestHeadingDegrees: number | null = null;
 
   // follow-lock state: position only vs. position + heading (compass mode)
@@ -71,6 +82,8 @@
   // device orientation listener (reserved for future compass integration)
   let orientationListener: ((event: DeviceOrientationEvent) => void) | null = null;
   let stopGPSSubscription: (() => void) | null = null;
+  let stopSysHealthSubscription: (() => void) | null = null;
+  let aprsRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
   let zoomLevel: number = 18;
   $: zoomLevel = $settingsPreferences.defaultZoom; // default zoom level when centering on user
@@ -79,13 +92,25 @@
   let lastCheckTime: number = 0;
   const CHECK_ROAD_INTERVAL: number = 1000; //one second
 
+  // for the popup window to set the name
+  let showTrackNamePopup: boolean = false;
+  let pendingStart: boolean = false;
+
   // this is used to prevent the user track having too many points on 1 spot
   let lastUserTrackCoord: [number, number] | null = null;
+  let lastRoadHistoryCoord: [number, number] | null = null;
+
+  const GPS_JITTER_DISTANCE_METERS = 4;
+  const GPS_STATIONARY_SPEED_MPS = 0.8;
+  const ROAD_HISTORY_MIN_DISTANCE_METERS = 8;
+  const MILES_TO_METERS = 1609.34;
+  const LOCAL_TILE_URL = '/tile/{z}/{x}/{y}.png';
+  const userLonLat = writable<[number, number] | null>(null);
 
   // this is the list of tracks that is shown on the page, filtered
   const filteredTracks = derived(
-    [trackStore, settingsPreferences],
-    ([$trackStore, $settingsPreferences]) => {
+    [trackStore, settingsPreferences, userLonLat],
+    ([$trackStore, $settingsPreferences, $userLonLat]) => {
       //disable all tracks 
       if (!$settingsPreferences.areAllTracksOn) {
         //set the selectedTrackID to null
@@ -99,6 +124,7 @@
       }
 
       const afterDate = getAfterDate($settingsPreferences.trackRange);
+      const radiusMeters = $settingsPreferences.milesToDiscoverRoads * MILES_TO_METERS;
 
       return {
         tracks: $trackStore.tracks.filter(track => {
@@ -106,6 +132,11 @@
 
           //this is for after the date
           if ((afterDate) && (start < afterDate)) return false;
+
+          // Apply the frontend-only radius filter from the current user location.
+          if ($userLonLat && !isTrackWithinRadius(track, $userLonLat, radiusMeters)) {
+            return false;
+          }
 
           return true;
         }),
@@ -141,6 +172,21 @@
     }
 
     return date;
+  }
+
+  function isTrackWithinRadius(track: Track, centerLonLat: [number, number], radiusMeters: number): boolean {
+    if (!track.geom?.coordinates?.length) {
+      return false;
+    }
+
+    for (const [lon, lat] of track.geom.coordinates) {
+      const distanceMeters = getGeoDistance(centerLonLat, [lon, lat]);
+      if (distanceMeters <= radiusMeters) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   function getUserIconScale(): number {
@@ -191,38 +237,54 @@
     currentTrackLayer.changed();
   }
 
+  // HomeMapPage remains mounted under overlay routes; clear popup when leaving map route.
+  $: if ($location !== '/' && aprsPopupData !== null) {
+    aprsPopupData = null;
+  }
+
+  $: if (aprsLayer) {
+    aprsLayer.setVisible($settingsPreferences.areAprsPointsOn);
+    aprsPopupData;
+    aprsLayer.changed();
+  }
+
+  $: if (!$settingsPreferences.areAprsPointsOn && aprsPopupData !== null) {
+    aprsPopupData = null;
+  }
+
+  // Use online tiles only when Wi-Fi is both powered and connected.
+  // Otherwise prefer local tiles for offline operation.
+  $: if (baseTileLayer) {
+    const shouldUseOnlineTiles = !hasResolvedWifiStatus || ($wifiStore.isWifiOn && $wifiStore.isConnected);
+    if (shouldUseOnlineTiles !== usingOnlineTiles) {
+      usingOnlineTiles = shouldUseOnlineTiles;
+      baseTileLayer.setSource(createBaseTileSource(usingOnlineTiles));
+    }
+  }
+
   // run once when the Svelte component is mounted
   onMount(() => {
     try {
+      void initializeWifiStateForMap();
       loadMap();             // create map instance and hook events
       startGPSTracking();    // begin receiving backend GPS data
+      startSystemHealthTracking(); // subscribe to live system health for menu hints
     } catch (error: unknown) {
       reportVitalError(error, 'HomeMapPage.onMount');
-
     }
 
-    ///TODO: remove this after getting real APRS data.
-    // this will be removed in the future but for now this sets up 10 aprs points around the 
-    // the user, to display an aprs icon.
-    const interval = setInterval(() => {
-      if (!latestUserCoords) return;
-
-      for (let i = 0; i < 10; i++) {
-        setRandomAprsPoints();
-      }
-
-      clearInterval(interval); // run once
-    }, 500);
+    // Load APRS stations from backend and refresh periodically.
+    loadAprsStations();
+    aprsRefreshInterval = setInterval(() => {
+      loadAprsStations();
+    }, 15000);
 
     // subscribes to track changes
     const unsubscribeTracks = filteredTracks.subscribe(({ tracks, selectedTrackId }) => {
       renderTracks(tracks, selectedTrackId);
     });
-    //TODO: uncomment this for real data from back end
-    //trackStore.loadTracks();  //this loads in the old tracks from backend.
-
-    //TODO: remove this line when we don't want mock data anymore
-    trackStore.setTrack(mockTracks);
+    // Load completed tracks from backend.
+    trackStore.loadTracks();
 
     return () => {
       unsubscribeTracks();
@@ -230,6 +292,8 @@
       map?.setTarget(undefined);
       stopGPSSubscription?.();
       stopGPSSubscription = null;
+      stopSysHealthSubscription?.();
+      stopSysHealthSubscription = null;
 
       if (orientationListener) {
         window.removeEventListener('deviceorientationabsolute', orientationListener);
@@ -245,6 +309,11 @@
       if (rotationProgrammaticGuardTimeout !== null) {
         clearTimeout(rotationProgrammaticGuardTimeout);
       }
+
+      if (aprsRefreshInterval !== null) {
+        clearInterval(aprsRefreshInterval);
+        aprsRefreshInterval = null;
+      }
     };
   });
 
@@ -255,12 +324,15 @@
    * isProgrammaticMove / isProgrammaticRotationChange flags.
    */
   function loadMap(): void {
+    usingOnlineTiles = !hasResolvedWifiStatus || ($wifiStore.isWifiOn && $wifiStore.isConnected);
+    baseTileLayer = new TileLayer({
+      source: createBaseTileSource(usingOnlineTiles),
+    });
+
     map = new Map({
       target: mapElement,
       layers: [
-        new TileLayer({
-          source: new OSM() // OpenStreetMap tiles
-        })
+        baseTileLayer
       ],
       view: new View({
         center: fromLonLat([-122.6765, 45.5231]), // Default center: Portland, OR (fallback when GPS is unavailable)
@@ -325,7 +397,10 @@
 
         // Single point = normal APRS icon
         if (size === 1) {
-          return getAprsPinStyle(getAprsIcon());
+          const inner = feature.get('features')[0] as Feature | undefined;
+          const aprsId = inner?.get('aprsId') as string | undefined;
+          const isSelected = aprsId !== undefined && aprsPopupData?.aprsId === aprsId;
+          return getAprsPinStyle(getAprsIcon(), isSelected);
         }
 
         // Cluster (circle with number, combined close by points)
@@ -392,6 +467,7 @@
     });
 
     map.on('singleclick', (event) => {
+      // Handle track selection clicks
       map?.forEachFeatureAtPixel(event.pixel, (featureLike) => {
         if (!(featureLike instanceof Feature)) return;
 
@@ -404,7 +480,71 @@
         layerFilter: (layer) => layer === oldTrackLayer,
         hitTolerance: 13
       });
+
+      // Handle APRS station clicks — only show popup for single (non-clustered) points
+      let hitAprs = false;
+      map?.forEachFeatureAtPixel(event.pixel, (featureLike) => {
+        if (!(featureLike instanceof Feature)) return;
+
+        const clusteredFeatures = featureLike.get('features') as Feature[] | undefined;
+        if (!clusteredFeatures || clusteredFeatures.length !== 1) return;
+
+        const inner = clusteredFeatures[0];
+        if (!inner) return;
+        const aprsId = inner?.get('aprsId') as string | undefined;
+        const callsign = inner?.get('callsign') as string | undefined;
+        if (callsign && aprsId) {
+          aprsPopupData = {
+            aprsId,
+            callsign,
+            comment: inner.get('comment') ?? null
+          };
+          hitAprs = true;
+        }
+      },
+      {
+        layerFilter: (layer) => layer === aprsLayer,
+        hitTolerance: 10
+      });
+
+      if (!hitAprs) {
+        aprsPopupData = null;
+      }
     });
+  }
+
+  function createBaseTileSource(useOnlineTiles: boolean): OSM {
+    if (useOnlineTiles) {
+      return new OSM();
+    }
+
+    return new OSM({
+      url: LOCAL_TILE_URL,
+    });
+  }
+
+  async function initializeWifiStateForMap(): Promise<void> {
+    try {
+      const [currentConnection, accessPoints] = await Promise.all([
+        getCurrentWifiConnection(),
+        getWifiAccessPoints(),
+      ]);
+
+      if (!currentConnection) {
+        setWifiDisconnected();
+        return;
+      }
+
+      setWifiPower(true);
+      const matchingAccessPoint = accessPoints.find(
+        (accessPoint) => accessPoint.ssid === currentConnection.ssid,
+      );
+      setWifiConnected(currentConnection.ssid, matchingAccessPoint?.signal_strength ?? 0);
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'HomeMapPage.initializeWifiStateForMap');
+    } finally {
+      hasResolvedWifiStatus = true;
+    }
   }
 
 
@@ -516,9 +656,8 @@
     getCurrentPosition()
       .then((position) => handleGPSPosition(position))
       .catch((error: unknown) => {
-        const message = `Initial GPS fetch failed: ${String(error)}`;
-        locationStatus = message;
-        console.warn('GPS unavailable — map defaulting to Portland, OR');
+        // Keep startup resilient: websocket updates can still provide the first valid fix.
+        locationStatus = 'Waiting for GPS fix...';
         reportNonVitalError(error, 'HomeMapPage.getCurrentPosition');
       });
 
@@ -537,8 +676,14 @@
   function handleGPSPosition(position: GPSData): void {
     const lon: number = Number(position.longitude);
     const lat: number = Number(position.latitude);
+    const speedMps = Number(position.speed);
 
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return;
+    }
+
+    // gpsd and some upstreams emit 0/0 placeholders before a real fix is available.
+    if (lat === 0 && lon === 0) {
       return;
     }
 
@@ -546,23 +691,30 @@
       latestHeadingDegrees = position.heading;
     }
 
-    const coords = fromLonLat([lon, lat]);
-    latestUserCoords = coords;
+    const coords = fromLonLat([lon, lat]) as [number, number];
+
+    let filteredCoords: [number, number] = coords;
+    if (latestUserCoords) {
+      const movementMeters = getDistanceMeters(coords, latestUserCoords);
+      const isLikelyStationary = Number.isFinite(speedMps) && speedMps < GPS_STATIONARY_SPEED_MPS;
+
+      // Hold position when stationary to suppress GPS drift jitter on the marker.
+      if (isLikelyStationary && movementMeters < GPS_JITTER_DISTANCE_METERS) {
+        filteredCoords = latestUserCoords;
+      }
+    }
+
+    latestUserCoords = filteredCoords;
+    userLonLat.set([lon, lat]);
 
     if (!map) {
       return;
     }
 
-    // use the coord from the user to add it to the current users track line
-    applyTrackLine(coords);
-
-    // checks if the current road is a new road or not.
-    checkRoadHistory();
-
     if (!userMarker) {
       // first fix: create marker feature and add to map
       userMarker = new Feature({
-        geometry: new Point(coords)
+        geometry: new Point(filteredCoords)
       });
 
       userMarker.setStyle(new Style({
@@ -593,9 +745,9 @@
       // subsequent fixes: move marker and refresh style
       const geometry = userMarker.getGeometry();
       if (geometry) {
-        geometry.setCoordinates(coords);
+        geometry.setCoordinates(filteredCoords);
       } else {
-        userMarker.setGeometry(new Point(coords));
+        userMarker.setGeometry(new Point(filteredCoords));
       }
 
       if (isFollowingUser) {
@@ -620,6 +772,14 @@
     applyHeadingRotation();
 
     locationStatus = `Location: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+
+    // Non-critical side effects should never block primary GPS rendering.
+    try {
+      applyTrackLine(filteredCoords, lon, lat);
+      checkRoadHistory(filteredCoords);
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'HomeMapPage.handleGPSPosition.sideEffects');
+    }
   }
 
   /**
@@ -651,41 +811,6 @@
     }
   }
 
-  //TODO remove this when we have working tracks to recieve from the database
-  export const mockTracks: Track[] = [
-    {
-      track_id: 1,
-      start_time: "2026-04-15T10:00:00Z",
-      end_time: "2026-04-15T10:20:00Z",
-      geom: {
-        type: "LineString",
-        coordinates: [
-          [-122.6865, 45.5120],
-          [-122.6862, 45.5125],
-          [-122.6859, 45.5130],
-          [-122.6850, 45.5147],
-          [-122.6825, 45.5140]
-        ]
-      }
-    },
-    {
-      track_id: 2,
-      start_time: "2026-04-16T14:00:00Z",
-      end_time: "2026-04-16T14:35:00Z",
-      geom: {
-        type: "LineString",
-        coordinates: [
-          [-122.6855, 45.5115],
-          [-122.6805, 45.5120],
-          [-122.6835, 45.5125],
-          [-122.6815, 45.5130],
-          [-122.6815, 45.5135],
-          [-122.6805, 45.5140]
-        ]
-      }
-    }
-  ];
-
   // this function checks if the user has passed a certain amount of distance
   // I made this becuase I realized that the applyTrackLine will add multiple 
   // points on the same spot on the map and that just seem very wastefull.
@@ -700,9 +825,14 @@
 
   // this is used to make the track line for the user, given that the coordnates pushed
   // in are the user's coordinates.
-  function applyTrackLine(coords : number[]) : void {
-    // this adds a line (blue line) so the user can see where they have been (current track) 
+  async function applyTrackLine(
+    coords : [number, number],
+    lon: number,
+    lat: number
+  ) : Promise<void> {
+    // this adds a line so the user can see where they have been (current track) 
     if ($trackStore.isTracking) { 
+
       //this determines if this is the beggining of a new line 
       if (!currentTrackFeature) { 
         currentTrackFeature = new Feature({
@@ -711,14 +841,20 @@
         
         currentTrackSource?.addFeature(currentTrackFeature);
         
-        lastUserTrackCoord = coords as [number, number];
+        lastUserTrackCoord = coords;
+
+        trackCoords = [[lon, lat]];
+        return;
       } 
-      else if (hasMovedEnough(coords as [number, number])){ 
+
+      // adds a point to an existing track line
+      if (hasMovedEnough(coords as [number, number])){ 
         const geom = currentTrackFeature.getGeometry();
         if (geom) {
           geom.appendCoordinate(coords);
+          lastUserTrackCoord = coords;
 
-          lastUserTrackCoord = coords as [number, number];
+          trackCoords.push([lon, lat])
         }
       }
     }
@@ -726,15 +862,26 @@
 
   // this function is used to check if the current road the user is on is a road
   // that the user has never driven on before.
-  function checkRoadHistory() : void {
+  function checkRoadHistory(coords: [number, number]) : void {
     const now = Date.now();
 
     // makes sure that the most a call for checking if the road is new is at most 1 per sec
-    if (now - lastCheckTime > CHECK_ROAD_INTERVAL) {
-      lastCheckTime = now;
+    if (now - lastCheckTime <= CHECK_ROAD_INTERVAL) return;
 
-      trackStore.checkIfNewRoad();
+    if (lastRoadHistoryCoord) {
+      const movementMeters = getDistanceMeters(coords, lastRoadHistoryCoord);
+      if (movementMeters < ROAD_HISTORY_MIN_DISTANCE_METERS) return;
     }
+
+    lastCheckTime = now;
+    lastRoadHistoryCoord = [coords[0], coords[1]];
+    trackStore.checkIfNewRoad();
+  }
+
+  function getDistanceMeters(a: [number, number], b: [number, number]): number {
+    const dx = a[0] - b[0];
+    const dy = a[1] - b[1];
+    return Math.sqrt(dx * dx + dy * dy);
   }
 
 
@@ -768,14 +915,36 @@
   async function startEndTracking() : Promise<void> {
     if ($trackStore.isTracking) {
       await trackStore.end();
-      currentTrackSource?.clear(); // remove the current user track (red line)
+
+      currentTrackSource?.clear();
       currentTrackFeature = undefined;
 
-      await trackStore.loadTracks(); //this way when the new track was made it will
-                                // be added to the track list from backend.
+      await trackStore.loadTracks();
     } else {
-      await trackStore.start();
+      showTrackNamePopup = true;
+      pendingStart = true;
     }
+  }
+
+  
+  // for handling the naming of a track with the popup
+  // Called by NameTrackPopUp confirm event
+  async function startTrackingNameIt(name: string): Promise<void> {
+    if (!pendingStart) return;
+    trackName = "";
+    trackCoords = [];
+
+    await trackStore.start(name);
+
+    showTrackNamePopup = false;
+    pendingStart = false;
+  }
+
+  //in case the user wishes to cancel ending the track or naming
+  function cancelTrackName(): void {
+    trackName = "";
+    showTrackNamePopup = false;
+    pendingStart = false;
   }
 
 
@@ -788,26 +957,26 @@
   }
 
   /**
-   * Sets up feature points for APRS points, this isn't ment to be the final
-   * version. it simply is putting points onto the map. 
-   * in the future we should make it so that the points can be updated.
+   * Sets up feature points for APRS stations fetched from the backend API.
    */
-  function addAprsPoint(lat: number, long: number): void {
+  function addAprsPoint(lat: number, long: number, callsign: string, comment: string | null): void {
     //if the aprsSource hasn't been set up then don't do anything
     if (!aprsSource) return;
 
-    //create marker feature and add to map
-    // make the point(feature) using lat and long
+    const aprsId = `${callsign}-${lat.toFixed(6)}-${long.toFixed(6)}`;
+
     const aprsMarker = new Feature({
       geometry: new Point(fromLonLat([long, lat])),
-      name: 'aprs point'
+      aprsId,
+      callsign,
+      comment,
     });
 
     aprsSource.addFeature(aprsMarker);
   }
 
   // this is the style for the pins, you can insert the image to the pin
-  function getAprsPinStyle(img: string): Style[] {
+  function getAprsPinStyle(img: string, isSelected: boolean = false): Style[] {
     return [
       // pin stem (triangle)
       new Style({
@@ -825,7 +994,7 @@
       new Style({
         image: new Circle({
           radius: 13,
-          fill: new Fill({ color: 'white' }),
+          fill: new Fill({ color: isSelected ? '#93e38b' : 'white' }),
           stroke: new Stroke({ color: 'black', width: 2 }),
           displacement: [0, 26]
         })
@@ -843,23 +1012,29 @@
     ];
   }
 
-  //This is just for testing purposes and eventually will be removed when we get APRS data
-  // this gets a random location near the user and sends that information to the addAprsPoint()
-  // to make a aprs feature point.
-  function setRandomAprsPoints(): void{
-    if (!latestUserCoords) return;
+  
+  async function loadAprsStations(): Promise<void> {
+    if (!$settingsPreferences.areAprsPointsOn) {
+      aprsSource?.clear();
+      return;
+    }
 
-    const coords = toLonLat(latestUserCoords); //gets the coordnates
+    aprsSource?.clear();
 
-    const long = coords[0];
-    const lat = coords[1];
+    try {
+      let stations: APRSStation[] | null = await getAprsStations();
 
-    if (lat === undefined || long === undefined) return; //makes sure it isn't null
+      // If nothing is nearby, widen the search radius to show available APRS traffic.
+      if (!stations || stations.length === 0) {
+        stations = await getAprsStations(500000);
+      }
 
-    addAprsPoint(
-      lat + (Math.random() - 0.5)* 0.01,
-      long + (Math.random() - 0.5)* 0.01
-    );
+      stations?.forEach((station) => {
+        addAprsPoint(station.latitude, station.longitude, station.callsign, station.last_comment ?? null);
+      });
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'HomeMapPage.loadAprsStations');
+    }
   }
 
   // this function changes route to /SettingPreference
@@ -878,6 +1053,58 @@
   }
 
   let isDropdownOpen: boolean = false;
+
+  let latestSysHealth: SysHealthData | null = null;
+  let wifiMenuHint: string = 'Checking Wi-Fi...';
+  let settingsMenuHint: string = 'Day mode activated';
+  let systemDataMenuHint: string = 'Free storage unavailable';
+
+  $: wifiMenuHint = getWifiMenuHint();
+  $: settingsMenuHint = $settingsPreferences.nightMode ? 'Night mode activated' : 'Day mode activated';
+  $: systemDataMenuHint = getSystemDataMenuHint(latestSysHealth);
+
+  // APRS popup: set when the user clicks a single APRS station on the map
+  let aprsPopupData: { aprsId: string; callsign: string; comment: string | null } | null = null;
+
+  function bytesToGigabytes(bytes: number): number {
+    return bytes / 1_073_741_824;
+  }
+
+  function getSystemDataMenuHint(sysHealth: SysHealthData | null): string {
+    if (!sysHealth) {
+      return 'Free storage unavailable';
+    }
+
+    const freeGb = Math.max(0, bytesToGigabytes(sysHealth.disk.free_bytes));
+    return `${freeGb.toFixed(1)} GB free`;
+  }
+
+  function getWifiMenuHint(): string {
+    if (!hasResolvedWifiStatus) {
+      return 'Checking Wi-Fi...';
+    }
+
+    if (!$wifiStore.isWifiOn) {
+      return 'Wi-Fi is off';
+    }
+
+    if ($wifiStore.isConnected) {
+      return `Connected to ${$wifiStore.ssid ?? 'network'}`;
+    }
+
+    return 'Not connected';
+  }
+
+  function startSystemHealthTracking(): void {
+    stopSysHealthSubscription = subscribeToSysHealth(
+      (data: SysHealthData) => {
+        latestSysHealth = data;
+      },
+      (error: string) => {
+        reportNonVitalError(error, 'HomeMapPage.subscribeToSysHealth');
+      }
+    );
+  }
 </script>
 
 <main style="margin: 0; padding: 0; height: 100%; width: 100%;">
@@ -915,7 +1142,7 @@
               <i class="iconoir-wifi dropdown-menu_btn_icons"></i>
               Wifi
               <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
-                <sub class="sub_text">Connected to PSU-Guest</sub>
+                <sub class="sub_text">{wifiMenuHint}</sub>
               </div>  
             </button>
         </li>
@@ -924,7 +1151,7 @@
               <i class="iconoir-settings dropdown-menu_btn_icons"></i>
               Settings
               <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
-                <sub class="sub_text">Day mode activated</sub>
+                <sub class="sub_text">{settingsMenuHint}</sub>
               </div>  
             </button>
         </li>
@@ -933,7 +1160,7 @@
             <i class="iconoir-info-circle dropdown-menu_btn_icons"></i>
             System Data
             <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
-                <sub class="sub_text">Patch Level: 0.0.0</sub>
+                <sub class="sub_text">{systemDataMenuHint}</sub>
             </div>  
           </button>
         </li>
@@ -958,6 +1185,18 @@
     <div bind:this={mapElement} class="map" style="width: 100%; height: 100%;"></div>
   </div>
 
+  <APRSPopUp
+    show={aprsPopupData !== null}
+    aprsData={aprsPopupData}
+    on:close={() => aprsPopupData = null}
+  />
+
+  <NameTrackPopUp
+    show={showTrackNamePopup}
+    initialTrackName={trackName}
+    on:confirm={e => startTrackingNameIt(e.detail.trackName)}
+    on:cancel={cancelTrackName}
+  />
 </main>
 
 

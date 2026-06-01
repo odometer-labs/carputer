@@ -17,17 +17,21 @@ CREATE TABLE gps.tracks (
 CREATE TABLE gps.track_points (
     point_id BIGSERIAL PRIMARY KEY,
     track_id BIGSERIAL NOT NULL REFERENCES gps.tracks(track_id) ON DELETE CASCADE,
-    time_stamp TIMESTAMPTZ NOT NULL,
+    time_stamp TIMESTAMPTZ,
     geom GEOGRAPHY(Point, 4326) NOT NULL,
     -- WGS84 Standard
     speed_mps DOUBLE PRECISION,
-    -- Units: Miles per Hour
+    -- Units: meters per second
     heading_deg DOUBLE PRECISION -- Units: 0-360 Degrees (0 = North)
 );
 CREATE TABLE gps.track_lines (
     track_id BIGSERIAL PRIMARY KEY REFERENCES gps.tracks(track_id) ON DELETE CASCADE,
     geom GEOGRAPHY(LINESTRING, 4326) NOT NULL,
     geom_wm GEOMETRY(LINESTRING, 3857) -- For Vector Tiles (Web Mercator)
+);
+CREATE TABLE gps.has_active_track (
+    id INT PRIMARY KEY CHECK (id = 1),
+    has_active_track BOOLEAN NOT NULL DEFAULT FALSE
 );
 ---------------------------
 -- 3. INDEXES & CONSTRAINTS
@@ -51,6 +55,7 @@ CREATE OR REPLACE FUNCTION gps.create_track() RETURNS BIGINT LANGUAGE plpgsql AS
 DECLARE new_track_id BIGINT;
 generated_name VARCHAR(50);
 BEGIN
+UPDATE gps.has_active_track SET has_active_track = TRUE WHERE id = 1;
 SELECT track_id INTO new_track_id
 FROM gps.tracks
 WHERE end_time IS NULL
@@ -68,6 +73,7 @@ $$;
 CREATE OR REPLACE FUNCTION gps.create_track(p_track_name VARCHAR(50)) RETURNS BIGINT LANGUAGE plpgsql AS $$
 DECLARE new_track_id BIGINT;
 BEGIN
+UPDATE gps.has_active_track SET has_active_track = TRUE WHERE id = 1;
 SELECT track_id INTO new_track_id
 FROM gps.tracks
 WHERE end_time IS NULL
@@ -136,11 +142,45 @@ VALUES (
     );
 END;
 $$;
--- Marks the current active track as finished
-CREATE OR REPLACE PROCEDURE gps.end_track() LANGUAGE plpgsql AS $$ BEGIN
+-- Marks the current active track as finished and creates the track line
+-- or deletes the track if no points
+CREATE OR REPLACE PROCEDURE gps.end_track() LANGUAGE plpgsql AS $$
+DECLARE end_track_id BIGINT;
+BEGIN --  Find the currently active track
+SELECT track_id INTO end_track_id
+FROM gps.tracks
+WHERE end_time IS NULL
+LIMIT 1;
+-- If an active track is found, proceed
+IF end_track_id IS NOT NULL THEN IF EXISTS (
+    SELECT 1 -- Only generate a line if the track actually has recorded points
+    FROM gps.track_points
+    WHERE track_id = end_track_id
+) THEN
+INSERT INTO gps.track_lines (track_id, geom, geom_wm)
+SELECT end_track_id,
+    ST_MakeLine(
+        geom::geometry
+        ORDER BY time_stamp ASC
+    )::geography,
+    ST_Transform(
+        ST_MakeLine(
+            geom::geometry
+            ORDER BY time_stamp ASC
+        ),
+        3857
+    )
+FROM gps.track_points
+WHERE track_id = end_track_id;
 UPDATE gps.tracks
 SET end_time = NOW()
-WHERE end_time IS NULL;
+WHERE track_id = end_track_id;
+ELSE
+DELETE FROM gps.tracks
+WHERE track_id = end_track_id;
+END IF;
+END IF;
+UPDATE gps.has_active_track SET has_active_track = FALSE WHERE id = 1;
 END;
 $$;
 -- Gets tracks vector tile based on mode -- all, single, nearby, road
@@ -159,7 +199,8 @@ DECLARE mvt bytea;
 latest_track_id BIGINT;
 latest_geom GEOGRAPHY;
 current_track_id BIGINT;
-current_track_geom_wm GEOMETRY;
+current_track_line_wm GEOMETRY;
+road_search_zone_wm GEOMETRY;
 tile_env GEOMETRY;
 BEGIN tile_env := ST_TileEnvelope(z, x, y);
 --------------------------------------------------
@@ -176,15 +217,23 @@ END IF;
 --------------------------------------------------
 -- Road only: fetch active track
 --------------------------------------------------
-IF mode = 'road' THEN
-SELECT t.track_id,
-    tl.geom_wm INTO current_track_id,
-    current_track_geom_wm
+IF mode = 'road' THEN -- 1. Find the ID of the single active track
+SELECT t.track_id INTO current_track_id
 FROM gps.tracks t
-    JOIN gps.track_lines tl ON t.track_id = tl.track_id
 WHERE t.end_time IS NULL
 ORDER BY t.start_time DESC
 LIMIT 1;
+IF current_track_id IS NOT NULL THEN
+SELECT ST_MakeLine(
+        ST_Transform(p.geom::geometry, 3857)
+        ORDER BY p.time_stamp
+    ) INTO current_track_line_wm
+FROM gps.track_points p
+WHERE p.track_id = current_track_id;
+-- 3. Create the 30-meter search zone around it
+IF current_track_line_wm IS NOT NULL THEN road_search_zone_wm := ST_Buffer(current_track_line_wm, 30);
+END IF;
+END IF;
 END IF;
 --------------------------------------------------
 -- Main Query 
@@ -241,14 +290,10 @@ FROM (
                 OR (
                     mode = 'road'
                     AND current_track_id IS NOT NULL
-                    AND current_track_geom_wm IS NOT NULL
+                    AND road_search_zone_wm IS NOT NULL
                     AND t.track_id <> current_track_id
                     AND t.end_time IS NOT NULL
-                    AND ST_DWithin(
-                        ST_Transform(tl.geom_wm, 4326)::geography,
-                        ST_Transform(current_track_geom_wm, 4326)::geography,
-                        30
-                    )
+                    AND ST_Intersects(tl.geom_wm, road_search_zone_wm)
                 )
             )
     ) AS tile;
@@ -306,9 +351,9 @@ CREATE OR REPLACE PROCEDURE gps.update_track(
         p_track_name VARCHAR(50)
     ) LANGUAGE plpgsql AS $$ BEGIN
 UPDATE gps.tracks
-SET start_time = p_start_time,
-    end_time = p_end_time,
-    track_name = p_track_name
+SET start_time = COALESCE(p_start_time, start_time),
+    end_time = COALESCE(p_end_time, end_time),
+    track_name = COALESCE(p_track_name, track_name)
 WHERE track_id = update_track_id;
 END;
 $$;
@@ -398,17 +443,23 @@ CREATE OR REPLACE FUNCTION gps.get_track_lines_using_road() RETURNS TABLE (
         track_name VARCHAR(50)
     ) LANGUAGE plpgsql AS $$
 DECLARE current_track_id BIGINT;
-current_track_geom GEOGRAPHY;
+current_track_line_wm GEOMETRY;
+road_search_zone_wm GEOMETRY;
 BEGIN
-SELECT t.track_id,
-    tl.geom INTO current_track_id,
-    current_track_geom
+SELECT t.track_id INTO current_track_id
 FROM gps.tracks AS t
-    JOIN gps.track_lines AS tl ON t.track_id = tl.track_id
 WHERE t.end_time IS NULL
 ORDER BY t.start_time DESC
 LIMIT 1;
 IF current_track_id IS NULL THEN RETURN;
+END IF;
+SELECT ST_MakeLine(
+        ST_Transform(p.geom::geometry, 3857)
+        ORDER BY p.time_stamp
+    ) INTO current_track_line_wm
+FROM gps.track_points p
+WHERE p.track_id = current_track_id;
+IF current_track_line_wm IS NOT NULL THEN road_search_zone_wm := ST_Buffer(current_track_line_wm, 30);
 END IF;
 RETURN QUERY
 SELECT t.track_id,
@@ -420,7 +471,8 @@ FROM gps.tracks AS t
     INNER JOIN gps.track_lines AS tl ON t.track_id = tl.track_id
 WHERE t.track_id <> current_track_id
     AND t.end_time IS NOT NULL
-    AND ST_DWithin(tl.geom, current_track_geom, 30);
+    AND road_search_zone_wm IS NOT NULL
+    AND ST_Intersects(tl.geom_wm, road_search_zone_wm);
 END;
 $$;
 -- Utility for batch-importing external data sets as completed tracks
@@ -439,6 +491,33 @@ VALUES (
         ST_Transform(new_geom, 3857)
     );
 RETURN new_track_id;
+END;
+$$;
+CREATE OR REPLACE FUNCTION gps.import_gpx(new_track_name TEXT) RETURNS INTEGER LANGUAGE plpgsql AS $$
+DECLARE new_track_id INTEGER;
+BEGIN
+INSERT INTO gps.tracks(start_time, end_time, track_name)
+VALUES (NOW(), NOW(), new_track_name)
+RETURNING track_id INTO new_track_id;
+RETURN new_track_id;
+END;
+$$;
+CREATE OR REPLACE PROCEDURE gps.end_gpx_track(end_track_id INTEGER) LANGUAGE plpgsql AS $$ BEGIN
+INSERT INTO gps.track_lines (track_id, geom, geom_wm)
+SELECT end_track_id,
+    ST_MakeLine(
+        geom::geometry
+        ORDER BY point_id ASC
+    )::geography,
+    ST_Transform(
+        ST_MakeLine(
+            geom::geometry
+            ORDER BY point_id ASC
+        ),
+        3857
+    )
+FROM gps.track_points
+WHERE track_id = end_track_id;
 END;
 $$;
 -- Fixes common GPS topology errors (self-intersections) to ensure spatial validity
@@ -463,45 +542,19 @@ CREATE OR REPLACE FUNCTION ST_LevelScale(z integer) RETURNS float8 LANGUAGE plpg
     RETURN 40075016.68 / (256 * |/ 2 ^ z);
 END;
 $$;
----------------------------
--- 6. TRIGGER SYSTEM
----------------------------
--- Automation: Dynamically builds LineStrings as points are inserted. 
--- Avoids expensive recalculations of the entire track during read operations.
-CREATE OR REPLACE FUNCTION gps.update_track_line_trigger() RETURNS TRIGGER LANGUAGE plpgsql AS $$ BEGIN -- Try to create the line assuming it's the 2nd point.
-    -- If it's the 1st point, this query returns 0 rows and does nothing.
-    -- If the line already exists, it hits the EXCLUDED conflict.
-INSERT INTO gps.track_lines (track_id, geom, geom_wm)
-SELECT NEW.track_id,
-    ST_MakeLine(
-        geom::geometry
-        ORDER BY time_stamp ASC
-    )::geography,
-    ST_Transform(
-        ST_MakeLine(
-            geom::geometry
-            ORDER BY time_stamp ASC
-        ),
-        3857
-    )
-FROM gps.track_points
-WHERE track_id = NEW.track_id
-HAVING COUNT(*) = 2 ON CONFLICT (track_id) DO
-UPDATE
-SET geom = ST_AddPoint(
-        gps.track_lines.geom::geometry,
-        NEW.geom::geometry,
-        -1
-    )::geography,
-    geom_wm = ST_AddPoint(
-        gps.track_lines.geom_wm,
-        ST_Transform(NEW.geom::geometry, 3857),
-        -1
+
+-- Tracker for checking if we have an active track
+INSERT INTO gps.has_active_track (id, has_active_track) VALUES (1, FALSE);
+
+CREATE OR REPLACE FUNCTION gps.is_tracking()
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RETURN EXISTS (
+        SELECT 1
+        FROM gps.has_active_track as t
+        WHERE t.has_active_track = TRUE
     );
-RETURN NEW;
 END;
 $$;
-DROP TRIGGER IF EXISTS trg_update_track_line ON gps.track_points;
-CREATE TRIGGER trg_update_track_line
-AFTER
-INSERT ON gps.track_points FOR EACH ROW EXECUTE FUNCTION gps.update_track_line_trigger();

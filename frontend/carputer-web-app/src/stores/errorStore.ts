@@ -27,8 +27,9 @@ const NOTIFICATION_DEDUP_MS = 8000;
 const state = writable<AppErrorState>(INITIAL_STATE);
 
 let nextErrorId = 1;
-let lastNotificationFingerprint = "";
-let lastNotificationAt = 0;
+// Tracks recently-shown fingerprints to deduplicate across multiple recent errors,
+// not just the immediately preceding one.
+const recentFingerprints = new Map<string, number>();
 
 function toMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -85,22 +86,32 @@ function shouldDeduplicateNotification(
   const fingerprint = `${source ?? "unknown"}|${message}`;
   const now = Date.now();
 
-  if (
-    fingerprint === lastNotificationFingerprint &&
-    now - lastNotificationAt < NOTIFICATION_DEDUP_MS
-  ) {
+  // Evict expired entries to prevent unbounded growth
+  for (const [key, ts] of recentFingerprints) {
+    if (now - ts >= NOTIFICATION_DEDUP_MS) {
+      recentFingerprints.delete(key);
+    }
+  }
+
+  if (recentFingerprints.has(fingerprint)) {
     return true;
   }
 
-  lastNotificationFingerprint = fingerprint;
-  lastNotificationAt = now;
+  recentFingerprints.set(fingerprint, now);
   return false;
 }
 
-export function reportNonVitalError(error: unknown, source?: string): void {
+export function reportNonVitalError(
+  error: unknown,
+  source?: string,
+  force = false,
+): void {
   const appError = createError("non-vital", error, source);
 
-  if (shouldDeduplicateNotification(appError.message, appError.source)) {
+  if (
+    !force &&
+    shouldDeduplicateNotification(appError.message, appError.source)
+  ) {
     return;
   }
 
