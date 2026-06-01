@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import BackButton from "../assets/components/BackButton.svelte";
   import SystemIndicators from "../assets/components/SystemIndicators.svelte";
   import check_mark from "../assets/icons/check-circle-bold.svg";
@@ -61,6 +61,8 @@
   let userMarker: Feature<Point> | undefined;
   let userSource: VectorSource | undefined;
   let gridRenderRaf: number | null = null;
+  let mapResizeRaf: number | null = null;
+  let mapResizeObserver: ResizeObserver | null = null;
   let stopGPSSubscription: (() => void) | null = null;
   const GRID_ZOOM_OFFSET = 1;
   const tileGrid = createXYZ({ maxZoom: 22 });
@@ -296,10 +298,42 @@
     });
   }
 
+  function hasMapElementSize(): boolean {
+    if (!mapElement) return false;
+    return mapElement.clientWidth > 0 && mapElement.clientHeight > 0;
+  }
+
+  async function waitForMapElementSize(maxFrames: number = 180): Promise<boolean> {
+    for (let i = 0; i < maxFrames; i++) {
+      if (hasMapElementSize()) return true;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    }
+    return hasMapElementSize();
+  }
+
+  function updateMapSizeIfVisible(): void {
+    if (!map || !hasMapElementSize()) return;
+    map.updateSize();
+  }
+
+  function scheduleMapResize(): void {
+    if (mapResizeRaf !== null) return;
+
+    mapResizeRaf = requestAnimationFrame(() => {
+      mapResizeRaf = null;
+      updateMapSizeIfVisible();
+      if (isSelectMode) scheduleGridUpdate();
+    });
+  }
+
   // re-render grid whenever select mode changes
   $: if (map && gridSource) updateGrid();
   $: hasPendingTileSyncChanges = selectionDiffersFromDownloaded();
   $: canDownloadTiles = $wifiStore.isWifiOn && $wifiStore.isConnected;
+  $: if (map) {
+    canDownloadTiles;
+    scheduleMapResize();
+  }
   let storage_left: string = 'Unavailable';
   $: storage_left = sysHealth ? formatBytes(Math.max(0, sysHealth.disk.free_bytes)) : 'Unavailable';
 
@@ -472,29 +506,7 @@
     selectionLayer.on('prerender', clipFunction);
     selectionLayer.on('postrender', restoreFunction);
 
-    map = new OLMap({
-      target: mapElement,
-      layers: [
-        new TileLayer({ source: new OSM() }),
-        gridLayer,
-        selectionLayer,
-      ],
-      view: new View({
-        center: OREGON_CENTER,
-        zoom: 7,
-        extent: OREGON_EXTENT,
-      }),
-      controls: [],
-    });
-
-    // Keep grid responsive while dragging/zooming without running updateGrid too often.
-    map.on('pointerdrag', scheduleGridUpdate);
-    map.getView().on('change:center', scheduleGridUpdate);
-    map.getView().on('change:resolution', scheduleGridUpdate);
-    map.on('moveend', scheduleGridUpdate);
-
     loadDashboardInfo();
-    startGPSTracking();
 
     stopSysHealthSubscription = subscribeToSysHealth(
       (data) => { sysHealth = data; },
@@ -503,7 +515,9 @@
 
     loadDownloadedRegions();
 
-    map.on('click', async (event: any) => {
+    let isDestroyed = false;
+
+    const handleMapClick = async (event: any) => {
       if (!isSelectMode || !map || !selectionSource || !gridLayer) return;
 
       const feature = map.forEachFeatureAtPixel(
@@ -555,7 +569,53 @@
       hasSelection = selectedTiles.size > 0;
       // reassign to trigger Svelte reactivity
       selectedTiles = new Map(selectedTiles);
-    });
+    };
+
+    const initializeMap = async (): Promise<void> => {
+      await tick();
+      const ready = await waitForMapElementSize();
+      if (!ready || isDestroyed || !mapElement) return;
+
+      map = new OLMap({
+        target: mapElement,
+        layers: [
+          new TileLayer({ source: new OSM() }),
+          gridLayer,
+          selectionLayer,
+        ],
+        view: new View({
+          center: OREGON_CENTER,
+          zoom: 7,
+          extent: OREGON_EXTENT,
+        }),
+        controls: [],
+      });
+
+      // Keep grid responsive while dragging/zooming without running updateGrid too often.
+      map.on('pointerdrag', scheduleGridUpdate);
+      map.getView().on('change:center', scheduleGridUpdate);
+      map.getView().on('change:resolution', scheduleGridUpdate);
+      map.on('moveend', scheduleGridUpdate);
+      map.on('click', handleMapClick);
+
+      mapResizeObserver = new ResizeObserver(() => {
+        scheduleMapResize();
+      });
+      mapResizeObserver.observe(mapElement);
+      window.addEventListener('resize', scheduleMapResize);
+
+      scheduleMapResize();
+      startGPSTracking();
+    };
+
+    void initializeMap();
+
+    return () => {
+      isDestroyed = true;
+      window.removeEventListener('resize', scheduleMapResize);
+      mapResizeObserver?.disconnect();
+      mapResizeObserver = null;
+    };
   });
 
   onDestroy(() => {
@@ -563,6 +623,13 @@
       cancelAnimationFrame(gridRenderRaf);
       gridRenderRaf = null;
     }
+    if (mapResizeRaf !== null) {
+      cancelAnimationFrame(mapResizeRaf);
+      mapResizeRaf = null;
+    }
+    window.removeEventListener('resize', scheduleMapResize);
+    mapResizeObserver?.disconnect();
+    mapResizeObserver = null;
     stopGPSSubscription?.();
     stopGPSSubscription = null;
     stopSysHealthSubscription?.();
