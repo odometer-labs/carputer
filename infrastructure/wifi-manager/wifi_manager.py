@@ -123,7 +123,7 @@ class WifiConnectionSettings(BaseModel):
         else:
             static_config = None
 
-        if profile.wireless_security and not profile.wireless_security.psk:
+        if not profile.wireless_security or not profile.wireless_security.psk:
             raise InvalidPassword("Missing wifi security passphrase from settings")
 
         return WifiConnectionSettings(
