@@ -557,6 +557,8 @@
     };
 
     if (mapElement && gridLayer) {
+      // eslint-disable-next-line no-console
+      console.log('[SystemDataPage] mapElement size at mount:', mapElement.offsetWidth, 'x', mapElement.offsetHeight);
       map = new OLMap({
         target: mapElement,
         layers: [
@@ -587,6 +589,8 @@
 
       // Let the browser finish layout before telling OL the canvas size.
       requestAnimationFrame(() => {
+        // eslint-disable-next-line no-console
+        console.log('[SystemDataPage] mapElement size at RAF:', mapElement?.offsetWidth, 'x', mapElement?.offsetHeight);
         map?.updateSize();
       });
 
@@ -1059,7 +1063,7 @@
   .body-container {
     display: flex;
     justify-content: flex-start;
-    align-items: flex-start;
+    align-items: stretch;
     flex: 1;
     min-height: 0;
     gap: 12px;
@@ -1175,7 +1179,6 @@
     background-color: var(--secondary-color);
     flex: 1 1 0;
     min-width: 0;
-    height: 100%;
     min-height: 0;
     border-width: 2px;
     border-color: rgb(255, 255, 255);
@@ -1195,15 +1198,15 @@
   }
 
   .map-container {
-    flex: 1;
-    min-height: 0;
-    width: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
   }
 
   .map-stage {
     position: relative;
-    display: flex;
-    flex-direction: column;
     flex: 1;
     min-height: 0;
     width: 100%;
