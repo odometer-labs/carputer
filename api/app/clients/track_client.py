@@ -306,6 +306,8 @@ class TrackClient:
                             """,
                             all_points,
                         )
+                        # Build the corresponding track_lines row so list endpoints can return this import.
+                        cursor.execute("""CALL gps.end_gpx_track(%s);""", (track_id,))
                     else:
                         cursor.execute("""CALL gps.delete_track(%s);""", (track_id,))
                 conn.commit()
