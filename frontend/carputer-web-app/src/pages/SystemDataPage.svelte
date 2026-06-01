@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, tick } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import BackButton from "../assets/components/BackButton.svelte";
   import SystemIndicators from "../assets/components/SystemIndicators.svelte";
   import check_mark from "../assets/icons/check-circle-bold.svg";
@@ -298,19 +298,8 @@
     });
   }
 
-  function hasMapElementSize(): boolean {
-    if (!mapElement) return false;
-    return mapElement.clientWidth > 0 && mapElement.clientHeight > 0;
-  }
-
-  async function waitForMapElementSize(): Promise<void> {
-    while (!hasMapElementSize()) {
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    }
-  }
-
   function updateMapSizeIfVisible(): void {
-    if (!map || !hasMapElementSize()) return;
+    if (!map || !mapElement || mapElement.clientWidth === 0 || mapElement.clientHeight === 0) return;
     map.updateSize();
   }
 
@@ -513,8 +502,6 @@
 
     loadDownloadedRegions();
 
-    let isDestroyed = false;
-
     const handleMapClick = async (event: any) => {
       if (!isSelectMode || !map || !selectionSource || !gridLayer) return;
 
@@ -569,20 +556,12 @@
       selectedTiles = new Map(selectedTiles);
     };
 
-    const initializeMap = async (): Promise<void> => {
-      await tick();
-      while (!isDestroyed && !hasMapElementSize()) {
-        await waitForMapElementSize();
-      }
-      if (isDestroyed || !mapElement || !gridLayer) return;
-
-      const activeGridLayer = gridLayer;
-
+    if (mapElement && gridLayer) {
       map = new OLMap({
         target: mapElement,
         layers: [
           new TileLayer({ source: new OSM() }),
-          activeGridLayer,
+          gridLayer,
           selectionLayer,
         ],
         view: new View({
@@ -606,14 +585,15 @@
       mapResizeObserver.observe(mapElement);
       window.addEventListener('resize', scheduleMapResize);
 
-      scheduleMapResize();
-      startGPSTracking();
-    };
+      // Let the browser finish layout before telling OL the canvas size.
+      requestAnimationFrame(() => {
+        map?.updateSize();
+      });
 
-    void initializeMap();
+      startGPSTracking();
+    }
 
     return () => {
-      isDestroyed = true;
       window.removeEventListener('resize', scheduleMapResize);
       mapResizeObserver?.disconnect();
       mapResizeObserver = null;
@@ -1217,13 +1197,13 @@
   .map-container {
     flex: 1;
     min-height: 0;
-    height: 100%;
     width: 100%;
   }
 
   .map-stage {
     position: relative;
     display: flex;
+    flex-direction: column;
     flex: 1;
     min-height: 0;
     width: 100%;
