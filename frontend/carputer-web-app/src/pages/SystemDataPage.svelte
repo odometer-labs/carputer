@@ -559,8 +559,6 @@
     };
 
     if (mapElement && gridLayer) {
-      // eslint-disable-next-line no-console
-      console.log('[SystemDataPage] mapElement size at mount:', mapElement.offsetWidth, 'x', mapElement.offsetHeight);
       map = new OLMap({
         target: mapElement,
         layers: [
@@ -591,8 +589,6 @@
 
       // Let the browser finish layout before telling OL the canvas size.
       requestAnimationFrame(() => {
-        // eslint-disable-next-line no-console
-        console.log('[SystemDataPage] mapElement size at RAF:', mapElement?.offsetWidth, 'x', mapElement?.offsetHeight);
         map?.updateSize();
       });
 
@@ -792,6 +788,44 @@
     applyDownloadedTileSelections(downloadedTiles);
   }
 
+  /**
+   * Pre-warms the local tile server cache by requesting each selected tile and
+   * its immediate sub-tiles. This triggers renderd to render and cache tiles
+   * from the local OSM database so they are served instantly when offline.
+   *
+   * Called as fire-and-forget after downloadTiles() saves regions to the DB.
+   * Errors are silently ignored — the local tile server may not have OSM data
+   * on first use, which is expected before running 'make map-import'.
+   */
+  async function prefetchLocalTiles(): Promise<void> {
+    const PREFETCH_DETAIL_LEVELS = 3; // prefetch up to 3 zoom levels deeper than selected
+    const PREFETCH_CONCURRENCY = 6;
+    const MAX_PREFETCH_TILES = 500;
+
+    const urls: string[] = [];
+
+    outer:
+    for (const [, tileCoord] of selectedTiles) {
+      const [z, x, y] = tileCoord;
+      urls.push(`/tile/${z}/${x}/${y}.png`);
+
+      for (let dz = 1; dz <= PREFETCH_DETAIL_LEVELS; dz++) {
+        const subTiles = getSubTiles(tileCoord, z + dz);
+        for (const [sz, sx, sy] of subTiles) {
+          urls.push(`/tile/${sz}/${sx}/${sy}.png`);
+          if (urls.length >= MAX_PREFETCH_TILES) break outer;
+        }
+      }
+    }
+
+    for (let i = 0; i < urls.length; i += PREFETCH_CONCURRENCY) {
+      const batch = urls.slice(i, i + PREFETCH_CONCURRENCY);
+      void Promise.allSettled(batch.map(url => fetch(url)));
+      // Yield to the event loop between batches to keep the UI responsive.
+      await new Promise<void>(resolve => setTimeout(resolve, 60));
+    }
+  }
+
   async function downloadTiles(): Promise<void> {
     if (!canDownloadTiles) {
       return;
@@ -849,6 +883,10 @@
       }
 
       await loadDownloadedRegions();
+
+      // Pre-warm the local tile server cache so tiles are ready when offline.
+      // This is fire-and-forget — it runs after the UI reflects the new state.
+      void prefetchLocalTiles();
     } catch (error: unknown) {
       reportNonVitalError(error, 'SystemDataPage.downloadTiles');
     } finally {
