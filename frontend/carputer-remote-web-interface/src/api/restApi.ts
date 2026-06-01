@@ -23,14 +23,14 @@ export async function listTracks(): Promise<Track[]> {
 
 export async function deleteTrack(
   trackId: number,
-): Promise<DeleteTrackResponse> {
+): Promise<Response> {
   const res = await fetch(`${ENDPOINTS.deleteTrack}/${trackId}`, {
     method: "DELETE",
   });
 
   if (!res.ok) throw new Error("Failed to delete track");
 
-  return res.json();
+  return res;
 }
 
 export async function importTracksGeoJson(
