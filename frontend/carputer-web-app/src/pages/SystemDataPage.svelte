@@ -303,12 +303,10 @@
     return mapElement.clientWidth > 0 && mapElement.clientHeight > 0;
   }
 
-  async function waitForMapElementSize(maxFrames: number = 180): Promise<boolean> {
-    for (let i = 0; i < maxFrames; i++) {
-      if (hasMapElementSize()) return true;
+  async function waitForMapElementSize(): Promise<void> {
+    while (!hasMapElementSize()) {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     }
-    return hasMapElementSize();
   }
 
   function updateMapSizeIfVisible(): void {
@@ -573,14 +571,18 @@
 
     const initializeMap = async (): Promise<void> => {
       await tick();
-      const ready = await waitForMapElementSize();
-      if (!ready || isDestroyed || !mapElement) return;
+      while (!isDestroyed && !hasMapElementSize()) {
+        await waitForMapElementSize();
+      }
+      if (isDestroyed || !mapElement || !gridLayer) return;
+
+      const activeGridLayer = gridLayer;
 
       map = new OLMap({
         target: mapElement,
         layers: [
           new TileLayer({ source: new OSM() }),
-          gridLayer,
+          activeGridLayer,
           selectionLayer,
         ],
         view: new View({
@@ -1053,7 +1055,6 @@
       <div
         class="map-container"
         class:select-mode={isSelectMode}
-        class:map-container--hidden={!canDownloadTiles}
         bind:this={mapElement}
       ></div>
 
@@ -1216,19 +1217,16 @@
   .map-container {
     flex: 1;
     min-height: 0;
+    height: 100%;
     width: 100%;
   }
 
   .map-stage {
     position: relative;
+    display: flex;
     flex: 1;
     min-height: 0;
     width: 100%;
-  }
-
-  .map-container--hidden {
-    visibility: hidden;
-    pointer-events: none;
   }
 
   .map-fallback-message {
