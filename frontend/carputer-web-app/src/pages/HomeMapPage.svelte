@@ -105,10 +105,14 @@
   const GPS_STATIONARY_SPEED_MPS = 0.8;
   const ROAD_HISTORY_MIN_DISTANCE_METERS = 8;
   const MILES_TO_METERS = 1609.34;
+  const METERS_PER_DEGREE_LAT = 111320;
+  const DEMO_APRS_RADIUS_METERS = 1800;
+  const DEMO_APRS_POINT_COUNT = 10;
   const LOCAL_TILE_URL = 'http://localhost:8070/tile/{z}/{x}/{y}.png';
   const TRANSPARENT_TILE_DATA_URL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
   const TILE_FETCH_TIMEOUT_MS = 10000;
   const userLonLat = writable<[number, number] | null>(null);
+  let latestUserLonLat: [number, number] | null = null;
 
   // this is the list of tracks that is shown on the page, filtered
   const filteredTracks = derived(
@@ -759,6 +763,7 @@
 
     latestUserCoords = filteredCoords;
     userLonLat.set([lon, lat]);
+    latestUserLonLat = [lon, lat];
 
     if (!map) {
       return;
@@ -1082,25 +1087,89 @@
         stations = await getAprsStations(500000);
       }
 
-      if (!stations || stations.length === 0) {
-        loadDemoAprsStations();
-        return;
-      }
-
       stations?.forEach((station) => {
         addAprsPoint(station.latitude, station.longitude, station.callsign, station.last_comment ?? null);
       });
     } catch (error: unknown) {
-      loadDemoAprsStations();
       reportNonVitalError(error, 'HomeMapPage.loadAprsStations');
+    } finally {
+      // Always include demo points so map demos still look populated.
+      loadDemoAprsStations();
     }
   }
 
   function loadDemoAprsStations(): void {
-    DEMO_APRS_STATIONS.forEach((station) => {
-      addAprsPoint(station.latitude, station.longitude, station.callsign, station.comment);
-    });
+    const center = latestUserLonLat ?? [-122.6765, 45.5231];
+
+    for (let index = 0; index < DEMO_APRS_POINT_COUNT; index += 1) {
+      const seed = DEMO_APRS_SEEDS[index % DEMO_APRS_SEEDS.length];
+      if (!seed) continue;
+
+      const [lon, lat] = randomLonLatInRadius(center, DEMO_APRS_RADIUS_METERS);
+      addAprsPoint(lat, lon, seed.callsign, seed.comment);
+    }
   }
+
+  function randomLonLatInRadius(
+    centerLonLat: [number, number],
+    radiusMeters: number,
+  ): [number, number] {
+    const [centerLon, centerLat] = centerLonLat;
+    const angle = Math.random() * Math.PI * 2;
+    const distance = Math.sqrt(Math.random()) * radiusMeters;
+
+    const deltaLat = (distance * Math.sin(angle)) / METERS_PER_DEGREE_LAT;
+    const lonScale = Math.max(0.0001, Math.cos((centerLat * Math.PI) / 180));
+    const deltaLon = (distance * Math.cos(angle)) / (METERS_PER_DEGREE_LAT * lonScale);
+
+    return [centerLon + deltaLon, centerLat + deltaLat];
+  }
+
+  const DEMO_APRS_SEEDS: Array<{
+    callsign: string;
+    comment: string | null;
+  }> = [
+    {
+      callsign: 'N7CAR-7',
+      comment: 'Demo APRS beacon near your current position.',
+    },
+    {
+      callsign: 'W7RIV-9',
+      comment: 'Mobile tracker sample for a nearby route.',
+    },
+    {
+      callsign: 'K7PDX-1',
+      comment: 'Weather relay demo station with a test packet.',
+    },
+    {
+      callsign: 'KD7HUB',
+      comment: 'Club digipeater demo marker.',
+    },
+    {
+      callsign: 'KJ7MAP-3',
+      comment: 'Balloon telemetry demo station.',
+    },
+    {
+      callsign: 'W1DEMO-4',
+      comment: 'Practice beacon for UI demos.',
+    },
+    {
+      callsign: 'N0TEST-2',
+      comment: 'Synthetic APRS traffic point.',
+    },
+    {
+      callsign: 'K7RPT-5',
+      comment: 'Repeater heartbeat sample.',
+    },
+    {
+      callsign: 'KA9SIM-8',
+      comment: 'Simulated rover station.',
+    },
+    {
+      callsign: 'W6DASH-6',
+      comment: 'Demo packet for map callout testing.',
+    },
+  ];
 
   // this function changes route to /SettingPreference
   function goToSettingPreference() : void {
@@ -1130,38 +1199,6 @@
 
   // APRS popup: set when the user clicks a single APRS station on the map
   let aprsPopupData: { aprsId: string; callsign: string; comment: string | null } | null = null;
-
-  const DEMO_APRS_STATIONS: Array<{
-    callsign: string;
-    latitude: number;
-    longitude: number;
-    comment: string | null;
-  }> = [
-    {
-      callsign: 'N7CAR-7',
-      latitude: 45.5231,
-      longitude: -122.6765,
-      comment: 'Demo APRS beacon near downtown Portland.',
-    },
-    {
-      callsign: 'W7RIV-9',
-      latitude: 45.5379,
-      longitude: -122.6814,
-      comment: 'Mobile tracker sample for the riverfront route.',
-    },
-    {
-      callsign: 'K7PDX-1',
-      latitude: 45.5124,
-      longitude: -122.6587,
-      comment: 'Weather relay demo station with a friendly test packet.',
-    },
-    {
-      callsign: 'KD7HUB',
-      latitude: 45.5482,
-      longitude: -122.6501,
-      comment: 'Club digipeater demo marker for the east side.',
-    },
-  ];
 
   function bytesToGigabytes(bytes: number): number {
     return bytes / 1_073_741_824;
