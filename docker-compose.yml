@@ -159,7 +159,7 @@ services:
   # PostgreSQL + PostGIS Database
   # ---------------------------------------------------------------------------
   db:
-    image: imresamu/postgis:17-3.5-bookworm
+    image: imresamu/postgis:17-3.5-alpine
     container_name: carputer_db
     restart: always
     environment:

@@ -1,4 +1,4 @@
-FROM python:3.13-slim-trixie
+FROM python:3.13-alpine
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -8,8 +8,6 @@ WORKDIR /app
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:0.10.10 /uv /uvx /bin/
-
-RUN apt-get update && apt-get install -y curl
 
 # Python project installation
 RUN uv pip install "psycopg[binary]"

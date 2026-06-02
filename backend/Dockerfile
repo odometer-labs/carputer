@@ -1,4 +1,4 @@
-FROM python:3.13 AS builder
+FROM python:3.13-alpine AS builder
 
 # Install uv for fast dependency management
 COPY --from=ghcr.io/astral-sh/uv:0.10.10 /uv /uvx /bin/
@@ -17,7 +17,7 @@ RUN uv build --wheel
 # -----------------------------------------------------------------------------
 # Stage 2: Runtime - slim image with just the wheel installed
 # -----------------------------------------------------------------------------
-FROM python:3.13-slim AS runtime
+FROM python:3.13-alpine AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
