@@ -61,12 +61,6 @@ services:
       DB_HOST: db
       DB_PORT: 5432
     restart: always
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
     networks:
       - carputer
     depends_on:
@@ -89,7 +83,7 @@ services:
       - carputer
     depends_on:
       api:
-        condition: service_healthy
+        condition: service_started
         restart: true
 
   # ---------------------------------------------------------------------------
@@ -103,7 +97,6 @@ services:
     networks:
       - carputer
     depends_on:
-      - api
       - wifi-manager
       - core-api
     healthcheck:
@@ -124,7 +117,6 @@ services:
     networks:
       - carputer
     depends_on:
-      - api
       - core-api
       - sys-health
       - wifi-manager
