@@ -7,9 +7,6 @@ Requires=aprs-receiver.service
 Type=simple
 User=emb_usr
 WorkingDirectory=/opt/carputer/aprs
-Environment=KISS_PORT=8003
-Environment=KISS_HOST=localhost
-Environment=BACKEND_URL=http://localhost:8000
 ExecStart=/usr/bin/python3 -m aprs_bridge
 Restart=always
 RestartSec=10
