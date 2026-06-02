@@ -5,6 +5,7 @@
   import View from 'ol/View.js';
   import TileLayer from 'ol/layer/Tile.js';
   import OSM from 'ol/source/OSM.js';
+  import ImageTile from 'ol/ImageTile.js';
   import { defaults as defaultControls } from 'ol/control/defaults.js';
   import { fromLonLat } from 'ol/proj.js';
   import Feature from 'ol/Feature.js';
@@ -524,8 +525,12 @@
       url: LOCAL_TILE_URL,
       wrapX: false,
       crossOrigin: 'anonymous',
-      tileLoadFunction: (imageTile, src) => {
-        const image = imageTile.getImage() as HTMLImageElement;
+      tileLoadFunction: (tile, src) => {
+        const imageTile = tile as ImageTile;
+        const image = imageTile.getImage();
+        if (!(image instanceof HTMLImageElement)) {
+          return;
+        }
         const controller = new AbortController();
         const timeoutId = setTimeout(() => {
           controller.abort();
