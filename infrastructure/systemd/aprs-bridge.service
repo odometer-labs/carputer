@@ -6,7 +6,13 @@ Requires=aprs-receiver.service
 [Service]
 Type=simple
 User=emb_usr
-ExecStart=/usr/bin/python3 /opt/carputer/aprs/aprs_bridge.py
+WorkingDirectory=/opt/carputer/aprs
+Environment="KISS_HOST=localhost"
+Environment="KISS_PORT=8003"
+Environment="AGW_HOST=localhost"
+Environment="AGW_PORT=8005"
+Environment="BACKEND_URL=http://localhost:8000"
+ExecStart=/usr/bin/python3 -m aprs_bridge
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -15,4 +21,3 @@ SyslogIdentifier=aprs-bridge
 
 [Install]
 WantedBy=multi-user.target
-EOF

@@ -56,7 +56,7 @@ Carputer is an in-vehicle navigation and GPS tracking computer that runs entirel
 │  └───────────────────────────────────────────────────────────────────┘  │
 │                                                                          │
 │  ┌──────────────────┐  (deployed by infrastructure/script.sh)           │
-│  │  RTL-SDR Dongle  │──USB──► rtl_fm → Direwolf (KISS :8001)           │
+│  │  RTL-SDR Dongle  │──USB──► rtl_fm → Direwolf (KISS :8003)           │
 │  │  144.390 MHz     │         → Python APRS bridge → FastAPI ingest     │
 │  └──────────────────┘                                                    │
 └──────────────────────────────────────────────────────────────────────────┘
@@ -103,7 +103,7 @@ External active patch antenna with ground plane, connected to the C099-F9P board
 | Interface | USB (appears as `/dev/bus/usb/...`; requires `rtl-sdr` kernel driver) |
 | Driver blacklist | `/etc/modprobe.d/blacklist-rtl.conf` must blacklist `dvb_usb_rtl28xxu` |
 | Software | `rtl_fm` (FM demodulation) → `Direwolf` (AX.25 / APRS decoder) |
-| Direwolf KISS port | TCP 8001 |
+| Direwolf KISS port | TCP 8003 |
 
 ---
 
@@ -166,12 +166,12 @@ rtl_fm -f 144390000 -s 24000 -g 49.6 -p 0 -d 0 - | direwolf -c /opt/carputer/apr
 ```
 
 - `rtl_fm` tunes the RTL-SDR to 144.390 MHz and demodulates FM audio at 24 kHz
-- `Direwolf` decodes 1200-baud AFSK AX.25 and serves a KISS TCP socket on **port 8001**
+- `Direwolf` decodes 1200-baud AFSK AX.25 and serves a KISS TCP socket on **port 8003**
 - Config file: `/opt/carputer/aprs/direwolf.conf` (generated at deploy time)
 
 **`aprs-bridge.service`** — Python script (`/opt/carputer/aprs/aprs_bridge.py`, generated at deploy time):
 
-1. Connects to Direwolf KISS TCP socket (`localhost:8001`)
+1. Connects to Direwolf KISS TCP socket (`localhost:8003`)
 2. Parses raw AX.25 frames into APRS packets
 3. Extracts position reports (callsign, lat, lon, symbol, comment)
 4. POSTs each packet to `POST /v1/aprs/ingest` on the FastAPI backend
@@ -588,7 +588,7 @@ rtl_fm -f 144390000 -s 24000
     ▼
 Direwolf (software TNC)
     │ decodes 1200-baud AFSK AX.25
-    │ KISS TCP :8001
+    │ KISS TCP :8003
     ▼
 aprs_bridge.py (/opt/carputer/aprs/)
     │ parses AX.25 → APRS position reports

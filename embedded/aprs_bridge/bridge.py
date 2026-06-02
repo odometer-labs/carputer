@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration from environment
 KISS_HOST = os.environ.get("KISS_HOST", "localhost")
-KISS_PORT = int(os.environ.get("KISS_PORT", "8001"))
+KISS_PORT = int(os.environ.get("KISS_PORT", "8003"))
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000")
 RECONNECT_DELAY = float(os.environ.get("RECONNECT_DELAY", "5.0"))
 
