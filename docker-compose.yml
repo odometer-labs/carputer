@@ -33,12 +33,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       DB_HOST: db
       DB_PORT: 5432
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8888/v2/root"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
     restart: always
     networks:
       - carputer
