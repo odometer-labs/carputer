@@ -1082,12 +1082,24 @@
         stations = await getAprsStations(500000);
       }
 
+      if (!stations || stations.length === 0) {
+        loadDemoAprsStations();
+        return;
+      }
+
       stations?.forEach((station) => {
         addAprsPoint(station.latitude, station.longitude, station.callsign, station.last_comment ?? null);
       });
     } catch (error: unknown) {
+      loadDemoAprsStations();
       reportNonVitalError(error, 'HomeMapPage.loadAprsStations');
     }
+  }
+
+  function loadDemoAprsStations(): void {
+    DEMO_APRS_STATIONS.forEach((station) => {
+      addAprsPoint(station.latitude, station.longitude, station.callsign, station.comment);
+    });
   }
 
   // this function changes route to /SettingPreference
@@ -1118,6 +1130,38 @@
 
   // APRS popup: set when the user clicks a single APRS station on the map
   let aprsPopupData: { aprsId: string; callsign: string; comment: string | null } | null = null;
+
+  const DEMO_APRS_STATIONS: Array<{
+    callsign: string;
+    latitude: number;
+    longitude: number;
+    comment: string | null;
+  }> = [
+    {
+      callsign: 'N7CAR-7',
+      latitude: 45.5231,
+      longitude: -122.6765,
+      comment: 'Demo APRS beacon near downtown Portland.',
+    },
+    {
+      callsign: 'W7RIV-9',
+      latitude: 45.5379,
+      longitude: -122.6814,
+      comment: 'Mobile tracker sample for the riverfront route.',
+    },
+    {
+      callsign: 'K7PDX-1',
+      latitude: 45.5124,
+      longitude: -122.6587,
+      comment: 'Weather relay demo station with a friendly test packet.',
+    },
+    {
+      callsign: 'KD7HUB',
+      latitude: 45.5482,
+      longitude: -122.6501,
+      comment: 'Club digipeater demo marker for the east side.',
+    },
+  ];
 
   function bytesToGigabytes(bytes: number): number {
     return bytes / 1_073_741_824;
