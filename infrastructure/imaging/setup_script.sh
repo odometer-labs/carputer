@@ -42,6 +42,7 @@ NC='\033[0m' # No Color
 REPO_URL="https://github.com/odometer-labs/carputer.git"
 DEPLOY_DIR="/opt/carputer"
 CURRENT_USER=carputer
+IMAGING_DIR=$DEPLOY_DIR/infrastructure/imaging
 
 # -----------------------------------------------------------------------------
 # Helper functions
@@ -64,7 +65,7 @@ warn "Ensure the RTL-SDR USB dongle is connected (for APRS reception)."
 echo ""
 
 
-cd $DEPLOY_DIR/infrastructure/imaging
+cd $IMAGING_DIR
 
 # -----------------------------------------------------------------------------
 # Step 1 — System update and package installation
@@ -281,11 +282,15 @@ sudo make install-conf
 info "Direwolf installed successfully."
 echo ""
 
+cd $IMAGING_DIR
+
 
 # -----------------------------------------------------------------------------
 # Step 6 — Enable and start systemd services
 # -----------------------------------------------------------------------------
 info "Step 6: Configuring APRS reception..."
+
+APRS_DIR="/opt/aprs"
 
 # Create APRS directory
 sudo mkdir -p "$APRS_DIR"
@@ -295,30 +300,28 @@ sudo chown -R "$CURRENT_USER":"$CURRENT_USER" /var/log/carputer
 
 # Deploy Direwolf configuration
 DIREWOLF_CONF="$APRS_DIR/direwolf.conf"
+APRS_SCRIPT="$APRS_DIR/start_aprs.sh"
 
 if [ -f "$DIREWOLF_CONF" ]; then
     info "Direwolf config already exists at $DIREWOLF_CONF."
+else
+    info "Copying Direwolf configuration..."
+    cp files/direwolf.conf "$DIREWOLF_CONF"
+    info "Direwolf configuration created at $DIREWOLF_CONF."
+
+    info "Copying APRS script..."
+    cp  files/start_aprs.sh "$APRS_SCRIPT"
+    chmod +x "$APRS_SCRIPT"
+    info "APRS reception script created at $APRS_SCRIPT."
+    echo ""
 fi
-
-info "Copying Direwolf configuration..."
-cp files/direwolf.conf "$DIREWOLF_CONF"
-info "Direwolf configuration created at $DIREWOLF_CONF."
-
-# Deploy APRS reception script
-APRS_SCRIPT="$APRS_DIR/start_aprs.sh"
-
-info "Copying APRS script..."
-cp  files/start_aprs.sh "$ARPS_SCRIPT"
-chmod +x "$APRS_SCRIPT"
-info "APRS reception script created at $APRS_SCRIPT."
-echo ""
 
 # -----------------------------------------------------------------------------
 # Step 7 — Deploy APRS bridge to backend
 # -----------------------------------------------------------------------------
 info "Step 7: Deploying APRS bridge from embedded/aprs_bridge..."
 
-APRS_BRIDGE_DIR="$APRS_DIR/aprs_bridge"
+APRS_BRIDGE_DIR="/opt/aprs_bridge"
 
 # Copy the APRS bridge module from the repo
 if [ -d "$DEPLOY_DIR/embedded/aprs_bridge" ]; then
@@ -507,17 +510,6 @@ else
         warn ".env.example not found — skipping .env setup."
     fi
 fi
-
-# Build and start Docker containers
-if command -v docker &>/dev/null && [ -f "$ENV_FILE" ]; then
-    echo ""
-    cd "$DEPLOY_DIR"
-    info "Building Docker containers..."
-    docker compose build
-    info "Docker containers built."
-    docker compose up -d
-fi
-echo ""
 
 # -----------------------------------------------------------------------------
 # Step 12 — Start APRS services (if deployed)

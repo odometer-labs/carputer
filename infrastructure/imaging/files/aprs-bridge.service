@@ -15,4 +15,3 @@ SyslogIdentifier=aprs-bridge
 
 [Install]
 WantedBy=multi-user.target
-EOF

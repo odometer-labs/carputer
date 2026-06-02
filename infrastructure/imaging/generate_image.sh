@@ -28,11 +28,17 @@ cp -r stage-custom pi-gen
 
 cd pi-gen
 
+rm stage2/EXPORT_IMAGE
+
 cat > config << EOF
 IMG_NAME="$APP_NAME-img"
 TARGET_HOSTNAME="$APP_NAME"
 FIRST_USER_NAME="$APP_NAME"
 FIRST_USER_PASS="$LOGIN_PASSWORD"
+
+DISABLE_FIRST_BOOT_USER_RENAME=1
+
+WPA_COUNTRY=US
 
 LOCALE_DEFAULT="en_US.UTF-8"
 KEYBOARD_KEYMAP="us"
@@ -41,8 +47,6 @@ ENABLE_CLOUD_INIT=0
 ENABLE_SSH=1
 STAGE_LIST="stage0 stage1 stage2 stage3 stage-custom"
 EOF
-
-export CARPUTER_NONINTERACTIVE="y"
 
 sudo ./build.sh
 

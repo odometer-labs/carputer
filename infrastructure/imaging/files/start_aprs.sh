@@ -21,4 +21,4 @@ echo "Starting APRS reception on 144.390 MHz..."
 
 # rtl_fm demodulates FM audio, pipes to Direwolf
 rtl_fm -f $FREQ -s $SAMPLE_RATE -g 49.6 -p 0 -d $DEVICE - | \
-    direwolf -c /opt/carputer/aprs/direwolf.conf -r $SAMPLE_RATE -D 1 -
+    direwolf -c /opt/aprs/direwolf.conf -r $SAMPLE_RATE -D 1 -
