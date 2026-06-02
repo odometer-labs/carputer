@@ -104,7 +104,7 @@
   const GPS_STATIONARY_SPEED_MPS = 0.8;
   const ROAD_HISTORY_MIN_DISTANCE_METERS = 8;
   const MILES_TO_METERS = 1609.34;
-  const LOCAL_TILE_URL = '/tile/{z}/{x}/{y}.png';
+  const LOCAL_TILE_URL = 'http://localhost:8070/tile/{z}/{x}/{y}.png';
   const userLonLat = writable<[number, number] | null>(null);
 
   // this is the list of tracks that is shown on the page, filtered
