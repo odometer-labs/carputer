@@ -41,6 +41,7 @@ NC='\033[0m' # No Color
 # -----------------------------------------------------------------------------
 REPO_URL="https://github.com/odometer-labs/carputer.git"
 DEPLOY_DIR="/opt/carputer"
+APRS_DIR="$DEPLOY_DIR/aprs"
 CURRENT_USER=$(whoami)
 
 # -----------------------------------------------------------------------------
@@ -338,11 +339,9 @@ sudo chown -R "$CURRENT_USER":"$CURRENT_USER" /var/log/carputer
 DIREWOLF_CONF="$APRS_DIR/direwolf.conf"
 
 if [ -f "$DIREWOLF_CONF" ]; then
-    info "Direwolf config already exists at $DIREWOLF_CONF."
-    confirm "Overwrite with default config?" || { warn "Skipping Direwolf config."; }
-fi
-
-info "Creating Direwolf configuration..."
+    info "Using existing Direwolf config at $DIREWOLF_CONF (from repo)."
+else
+info "Creating default Direwolf configuration..."
 cat > "$DIREWOLF_CONF" <<'EOF'
 #############################################################
 # Direwolf Configuration for APRS Reception
@@ -381,12 +380,15 @@ DIGIPEAT 0 0
 
 # Beaconing DISABLED (receive-only, no license needed)
 EOF
-
 info "Direwolf configuration created at $DIREWOLF_CONF."
+fi
 
 # Deploy APRS reception script
 APRS_SCRIPT="$APRS_DIR/start_aprs.sh"
 
+if [ -f "$APRS_SCRIPT" ]; then
+info "Using existing APRS reception script at $APRS_SCRIPT (from repo)."
+else
 info "Creating APRS reception script..."
 cat > "$APRS_SCRIPT" <<'EOF'
 #!/bin/bash
@@ -414,9 +416,10 @@ echo "Starting APRS reception on 144.390 MHz..."
 rtl_fm -f $FREQ -s $SAMPLE_RATE -g 49.6 -p 0 -d $DEVICE - | \
     direwolf -c /opt/carputer/aprs/direwolf.conf -r $SAMPLE_RATE -D 1 -
 EOF
+info "APRS reception script created at $APRS_SCRIPT."
+fi
 
 chmod +x "$APRS_SCRIPT"
-info "APRS reception script created at $APRS_SCRIPT."
 echo ""
 
 # -----------------------------------------------------------------------------
@@ -464,7 +467,7 @@ logging.basicConfig(
 KISS_HOST = os.environ.get('KISS_HOST', 'localhost')
 KISS_PORT = int(os.environ.get('KISS_PORT', 8003))
 AGW_HOST  = os.environ.get('AGW_HOST', 'localhost')
-AGW_PORT  = int(os.environ.get('AGW_PORT', '8005')
+AGW_PORT  = int(os.environ.get('AGW_PORT', '8005'))
 BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:8000/v1/aprs/ingest-raw')
 
 def parse_kiss_frame(frame):

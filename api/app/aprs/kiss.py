@@ -40,7 +40,7 @@ RETURN = 0xFF
 class KISSConfig:
     """Configuration for KISS connection"""
     host: str = "localhost"
-    port: int = 8001
+    port: int = 8003
     reconnect_delay: float = 5.0
     max_reconnect_attempts: int = -1  # -1 = infinite
     recv_buffer_size: int = 4096
