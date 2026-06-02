@@ -53,6 +53,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 # Get packages
 RUN apt-get update \
 && apt-get install -y --no-install-recommends \
+ apache2 \
  cron \
  dateutils \
  fonts-hanazono \
@@ -99,6 +100,27 @@ RUN pip3 install \
  requests \
  osmium \
  pyyaml
+
+# Install carto for stylesheet
+RUN npm install -g carto@1.2.0
+
+# Configure Apache
+RUN echo "LoadModule tile_module /usr/lib/apache2/modules/mod_tile.so" >> /etc/apache2/conf-available/mod_tile.conf \
+&& echo "LoadModule headers_module /usr/lib/apache2/modules/mod_headers.so" >> /etc/apache2/conf-available/mod_headers.conf \
+&& a2enconf mod_tile && a2enconf mod_headers
+COPY apache.conf /etc/apache2/sites-available/000-default.conf
+RUN ln -sf /dev/stdout /var/log/apache2/access.log \
+&& ln -sf /dev/stderr /var/log/apache2/error.log
+
+# leaflet
+COPY leaflet-demo.html /var/www/html/index.html
+RUN cd /var/www/html/ \
+&& wget https://github.com/Leaflet/Leaflet/releases/download/v1.8.0/leaflet.zip \
+&& unzip leaflet.zip \
+&& rm leaflet.zip
+
+# Icon
+RUN wget -O /var/www/html/favicon.ico https://www.openstreetmap.org/favicon.ico
 
 # Copy update scripts
 COPY openstreetmap-tiles-update-expire.sh /usr/bin/

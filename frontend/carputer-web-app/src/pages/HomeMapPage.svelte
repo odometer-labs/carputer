@@ -105,7 +105,7 @@
   const GPS_STATIONARY_SPEED_MPS = 0.8;
   const ROAD_HISTORY_MIN_DISTANCE_METERS = 8;
   const MILES_TO_METERS = 1609.34;
-  const LOCAL_TILE_URL = 'http://localhost:8070/tile/{x}/{y}/{z}.png';
+  const LOCAL_TILE_URL = 'http://localhost:8070/tile/{z}/{x}/{y}.png';
   const TRANSPARENT_TILE_DATA_URL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
   const TILE_FETCH_TIMEOUT_MS = 10000;
   const userLonLat = writable<[number, number] | null>(null);
