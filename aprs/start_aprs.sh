@@ -30,6 +30,45 @@ GAIN=33.8
 # Create log directory
 mkdir -p /var/log/carputer/aprs
 
+# Reset the RTL-SDR before opening it. If a previous rtl_fm was killed without
+# releasing the USB interface (e.g. the pipe was torn down), librtlsdr leaves
+# the dongle "claimed" and the next open fails with
+#   usb_claim_interface error -6   (LIBUSB_ERROR_BUSY)
+# A `systemctl restart` does NOT clear this - it just re-runs the same claim
+# against the still-locked interface. Only a USB port reset (electrically the
+# same as physically unplugging/replugging) frees it. USBDEVFS_RESET does that
+# in software, so the service can self-heal on (re)start and after a reboot.
+# Requires rw on the device node; the rtl-sdr udev rule grants that to plugdev,
+# and this service runs as Group=plugdev.
+reset_sdr() {
+    python3 - <<'PY' || true
+import fcntl, glob, os
+USBDEVFS_RESET = 0x5514  # _IO('U', 20)
+for d in glob.glob('/sys/bus/usb/devices/*'):
+    try:
+        if open(d + '/idVendor').read().strip() != '0bda':
+            continue
+        if open(d + '/idProduct').read().strip() != '2838':
+            continue
+        bus = int(open(d + '/busnum').read())
+        dev = int(open(d + '/devnum').read())
+        node = '/dev/bus/usb/%03d/%03d' % (bus, dev)
+        fd = os.open(node, os.O_WRONLY)
+        try:
+            fcntl.ioctl(fd, USBDEVFS_RESET, 0)
+            print('reset RTL-SDR at', node)
+        finally:
+            os.close(fd)
+    except Exception as e:
+        print('reset_sdr: skipping', d, '->', e)
+PY
+}
+
+echo "Resetting RTL-SDR (USBDEVFS_RESET) before start..."
+reset_sdr
+# Give the kernel a moment to re-enumerate the dongle after the reset.
+sleep 2
+
 # Start pipeline
 echo "Starting APRS reception on 144.390 MHz (ppm=$PPM, gain=$GAIN)..."
 

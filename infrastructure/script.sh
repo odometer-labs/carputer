@@ -419,12 +419,48 @@ SAMPLE_RATE=24000
 # Create log directory
 mkdir -p /var/log/carputer/aprs
 
+# Reset the RTL-SDR before opening it. If a previous rtl_fm was killed without
+# releasing the USB interface, librtlsdr leaves the dongle "claimed" and the
+# next open fails with `usb_claim_interface error -6` (LIBUSB_ERROR_BUSY). A
+# restart does NOT clear that - only a USB port reset (electrically the same as
+# unplug/replug) does. USBDEVFS_RESET performs that reset in software so the
+# service can self-heal on (re)start and after a reboot.
+reset_sdr() {
+    python3 - <<'PY' || true
+import fcntl, glob, os
+USBDEVFS_RESET = 0x5514  # _IO('U', 20)
+for d in glob.glob('/sys/bus/usb/devices/*'):
+    try:
+        if open(d + '/idVendor').read().strip() != '0bda':
+            continue
+        if open(d + '/idProduct').read().strip() != '2838':
+            continue
+        bus = int(open(d + '/busnum').read())
+        dev = int(open(d + '/devnum').read())
+        node = '/dev/bus/usb/%03d/%03d' % (bus, dev)
+        fd = os.open(node, os.O_WRONLY)
+        try:
+            fcntl.ioctl(fd, USBDEVFS_RESET, 0)
+            print('reset RTL-SDR at', node)
+        finally:
+            os.close(fd)
+    except Exception as e:
+        print('reset_sdr: skipping', d, '->', e)
+PY
+}
+
+echo "Resetting RTL-SDR (USBDEVFS_RESET) before start..."
+reset_sdr
+sleep 2
+
 # Start pipeline
 echo "Starting APRS reception on 144.390 MHz..."
 
 # rtl_fm demodulates FM audio, pipes to Direwolf.
 # Gain 33.8 dB (not max): max gain often overloads the front-end near strong
 # local stations. Sweep with `direwolf -a 10` and pick the best for your site.
+# PPM: cheap dongles are off by tens of ppm (several kHz at 144 MHz). Calibrate
+# with `rtl_test -p` (service stopped) for a few minutes and set the result.
 rtl_fm -f $FREQ -s $SAMPLE_RATE -g 33.8 -p 0 -d $DEVICE - | \
     direwolf -c /opt/carputer/aprs/direwolf.conf -r $SAMPLE_RATE -D 1 -
 EOF
