@@ -16,7 +16,7 @@ SAMPLE_RATE=24000
 # Frequency correction in PPM. Cheap RTL-SDR dongles drift several kHz, which
 # on 144.390 MHz is enough to miss nearly all packets. Measure yours with
 # `rtl_test -p` (or kalibrate-rtl) and set the result here.
-PPM=0
+PPM=-3
 
 # Tuner gain in dB. 49.6 is max on many dongles; sweep (28 / 33.8 / 40.2 / 49.6)
 # and pick whatever yields the most Direwolf decodes for your antenna.
