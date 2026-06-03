@@ -1,4 +1,4 @@
-FROM python:3.13 AS builder
+FROM python:3.13-alpine AS builder
 
 RUN pip3 install uv==0.10.2
 
