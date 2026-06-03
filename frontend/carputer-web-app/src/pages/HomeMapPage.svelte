@@ -21,7 +21,7 @@
   import type { GPSData, APRSStation, SysHealthData } from '../api/types';
   import { push, location } from 'svelte-spa-router';
   import { Cluster } from 'ol/source';
-  import { reportNonVitalError, reportVitalError } from '../stores/errorStore';
+  import { reportNonVitalError, reportVitalError, setNonVitalErrorSuppressed } from '../stores/errorStore';
   import { setWifiConnected, setWifiDisconnected, setWifiPower, wifiStore } from '../stores/wifiStore';
   import { settingsPreferences, type TrackRange } from '../services/settings_preferences';
   import aprsIconUrl from '../assets/icons/aprs-bold.svg';
@@ -35,6 +35,7 @@
 
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
+  let isBootstrapping: boolean = true;
   let locationStatus: string = 'Getting location...';
   let baseTileLayer: TileLayer | undefined;
   let usingOnlineTiles: boolean = false;
@@ -267,17 +268,28 @@
 
   // run once when the Svelte component is mounted
   onMount(() => {
+    setNonVitalErrorSuppressed(true);
+
     try {
-      void initializeWifiStateForMap();
-      loadMap();             // create map instance and hook events
-      startGPSTracking();    // begin receiving backend GPS data
+      loadMap();       // create map instance and hook events
       startSystemHealthTracking(); // subscribe to live system health for menu hints
+
+      // Keep startup silent until initial map-related hooks are in place.
+      void Promise.allSettled([
+        initializeWifiStateForMap(),
+        startGPSTracking(),
+        loadAprsStations(),
+      ]).finally(() => {
+        isBootstrapping = false;
+        setNonVitalErrorSuppressed(false);
+      });
     } catch (error: unknown) {
       reportVitalError(error, 'HomeMapPage.onMount');
+      isBootstrapping = false;
+      setNonVitalErrorSuppressed(false);
     }
 
-    // Load APRS stations from backend and refresh periodically.
-    loadAprsStations();
+    // Refresh APRS stations periodically after the initial startup load.
     aprsRefreshInterval = setInterval(() => {
       loadAprsStations();
     }, 15000);
@@ -317,6 +329,8 @@
         clearInterval(aprsRefreshInterval);
         aprsRefreshInterval = null;
       }
+
+      setNonVitalErrorSuppressed(false);
     };
   });
 
@@ -705,8 +719,8 @@
    * Start receiving positions from backend API.
    * Pulls one initial snapshot then subscribes to /ws/get-position updates.
    */
-  function startGPSTracking(): void {
-    getCurrentPosition()
+  async function startGPSTracking(): Promise<void> {
+    await getCurrentPosition()
       .then((position) => handleGPSPosition(position))
       .catch((error: unknown) => {
         // Keep startup resilient: websocket updates can still provide the first valid fix.
@@ -1162,6 +1176,10 @@
 
 <main style="margin: 0; padding: 0; height: 100%; width: 100%;">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
+
+  {#if isBootstrapping}
+    <div class="startup-overlay" role="status" aria-live="polite">Starting up...</div>
+  {/if}
   
   <div class="snap_nav_icon">
       <!-- svelte-ignore a11y_consider_explicit_label -->
@@ -1421,6 +1439,20 @@
 
   :global(.ol-zoom) {
     font-size: 1.1em;
+  }
+
+  .startup-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 3000;
+    background: #ffffff;
+    color: #333;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.8rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
   }
 
 </style>
