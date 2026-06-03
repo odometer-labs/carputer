@@ -18,9 +18,14 @@ SAMPLE_RATE=24000
 # `rtl_test -p` (or kalibrate-rtl) and set the result here.
 PPM=-3
 
-# Tuner gain in dB. 49.6 is max on many dongles; sweep (28 / 33.8 / 40.2 / 49.6)
-# and pick whatever yields the most Direwolf decodes for your antenna.
-GAIN=49.6
+# Tuner gain in dB. 49.6 is the MAXIMUM on many dongles, but max gain is a
+# common cause of "I can't hear local stations": strong APRS transmitters a
+# couple of miles away overload the RTL-SDR front-end (intermod / desense) so
+# nothing decodes. Measured open-squelch audio level at 49.6 was ~95 (clipping)
+# and ~84 at 40.2 - both hot. Start moderate and sweep (20.7 / 25.4 / 33.8 /
+# 40.2 / 49.6), watching `direwolf -a 10` audio levels (~50 is ideal) and
+# decode counts, then pick the best for your antenna/location.
+GAIN=33.8
 
 # Create log directory
 mkdir -p /var/log/carputer/aprs

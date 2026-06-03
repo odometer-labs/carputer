@@ -357,28 +357,38 @@ MYCALL N0CALL-10
 MODEM 1200
 
 # Reduce console spam
-QUIET
+# QUIET
 
-# Enable KISS interface on TCP port 8003
+# Enable KISS interface on TCP port 8003 (read by aprs_bridge)
 KISSPORT 8003
 
-# Enable AGW port on 8005 - as far as I know we don't use this, but default overlaps with :8000
+# Setting AGW port away from default port 8000, to 8005
 AGWPORT 8005
 
-# Log all received packets
+# Log every decoded packet to a daily-rotating file (YYYY-MM-DD.log).
+# Use LOGDIR only. Do NOT also set LOGFILE - it overrides the daily rotation
+# and Direwolf warns "LOGFILE ... is replacing an earlier LOGDIR".
 LOGDIR /var/log/carputer/aprs
-LOGFILE aprs-%Y%m%d.log
 
 # Receive all packets (no filtering)
-FILTER 0 1
+# FILTER 0 1
 
 # Digipeater DISABLED (receive-only, no license needed)
-DIGIPEAT 0 0
+# DIGIPEAT 0 0
 
 # Internet gateway DISABLED (receive-only)
 # Don't connect to APRS-IS network
 
 # Beaconing DISABLED (receive-only, no license needed)
+
+# Receive-only appliance - nothing else to configure:
+#   - Direwolf receives ALL packets by default; there is no RX "filter"
+#     directive. (`FILTER` is only for IGate/digipeat; `FILTER 0 1` is invalid
+#     and Direwolf rejects it with "TO-channel 1 is not valid".)
+#   - No digipeating. (`DIGIPEAT 0 0` is invalid -> "Missing alias pattern".)
+#   - No Internet gateway (not connected to APRS-IS).
+#   - No beaconing (receive-only, no license needed).
+
 EOF
 info "Direwolf configuration created at $DIREWOLF_CONF."
 fi
@@ -412,8 +422,10 @@ mkdir -p /var/log/carputer/aprs
 # Start pipeline
 echo "Starting APRS reception on 144.390 MHz..."
 
-# rtl_fm demodulates FM audio, pipes to Direwolf
-rtl_fm -f $FREQ -s $SAMPLE_RATE -g 49.6 -p 0 -d $DEVICE - | \
+# rtl_fm demodulates FM audio, pipes to Direwolf.
+# Gain 33.8 dB (not max): max gain often overloads the front-end near strong
+# local stations. Sweep with `direwolf -a 10` and pick the best for your site.
+rtl_fm -f $FREQ -s $SAMPLE_RATE -g 33.8 -p 0 -d $DEVICE - | \
     direwolf -c /opt/carputer/aprs/direwolf.conf -r $SAMPLE_RATE -D 1 -
 EOF
 info "APRS reception script created at $APRS_SCRIPT."
