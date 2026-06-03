@@ -152,6 +152,7 @@ export function clearVitalError(): void {
 }
 
 export function clearAllErrors(): void {
+  nonVitalErrorSuppressed = false;
   state.set(INITIAL_STATE);
 }
 
