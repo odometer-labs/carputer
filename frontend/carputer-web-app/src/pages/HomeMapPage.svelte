@@ -5,6 +5,7 @@
   import View from 'ol/View.js';
   import TileLayer from 'ol/layer/Tile.js';
   import OSM from 'ol/source/OSM.js';
+  import ImageTile from 'ol/ImageTile.js';
   import { defaults as defaultControls } from 'ol/control/defaults.js';
   import { fromLonLat } from 'ol/proj.js';
   import Feature from 'ol/Feature.js';
@@ -105,6 +106,8 @@
   const ROAD_HISTORY_MIN_DISTANCE_METERS = 8;
   const MILES_TO_METERS = 1609.34;
   const LOCAL_TILE_URL = 'http://localhost:8070/tile/{z}/{x}/{y}.png';
+  const TRANSPARENT_TILE_DATA_URL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+  const TILE_FETCH_TIMEOUT_MS = 10000;
   const userLonLat = writable<[number, number] | null>(null);
 
   // this is the list of tracks that is shown on the page, filtered
@@ -520,6 +523,56 @@
 
     return new OSM({
       url: LOCAL_TILE_URL,
+      wrapX: false,
+      crossOrigin: 'anonymous',
+      tileLoadFunction: (tile, src) => {
+        const imageTile = tile as ImageTile;
+        const image = imageTile.getImage();
+        if (!(image instanceof HTMLImageElement)) {
+          return;
+        }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+        }, TILE_FETCH_TIMEOUT_MS);
+
+        void fetch(src, { signal: controller.signal })
+          .then((response) => {
+            if (!response.ok || response.status === 204) {
+              return null;
+            }
+
+            return response.blob();
+          })
+          .then((blob) => {
+            if (!blob) {
+              image.src = TRANSPARENT_TILE_DATA_URL;
+              return;
+            }
+
+            const objectUrl = URL.createObjectURL(blob);
+            image.onload = () => {
+              URL.revokeObjectURL(objectUrl);
+              image.onload = null;
+              image.onerror = null;
+            };
+            image.onerror = () => {
+              URL.revokeObjectURL(objectUrl);
+              image.onload = null;
+              image.onerror = null;
+              image.src = TRANSPARENT_TILE_DATA_URL;
+            };
+            image.src = objectUrl;
+          })
+          .catch(() => {
+            image.onload = null;
+            image.onerror = null;
+            image.src = TRANSPARENT_TILE_DATA_URL;
+          })
+          .finally(() => {
+            clearTimeout(timeoutId);
+          });
+      },
     });
   }
 

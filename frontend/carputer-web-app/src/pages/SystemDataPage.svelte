@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, tick } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import BackButton from "../assets/components/BackButton.svelte";
   import SystemIndicators from "../assets/components/SystemIndicators.svelte";
   import check_mark from "../assets/icons/check-circle-bold.svg";
@@ -298,21 +298,8 @@
     });
   }
 
-  function hasMapElementSize(): boolean {
-    if (!mapElement) return false;
-    return mapElement.clientWidth > 0 && mapElement.clientHeight > 0;
-  }
-
-  async function waitForMapElementSize(maxFrames: number = 180): Promise<boolean> {
-    for (let i = 0; i < maxFrames; i++) {
-      if (hasMapElementSize()) return true;
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    }
-    return hasMapElementSize();
-  }
-
   function updateMapSizeIfVisible(): void {
-    if (!map || !hasMapElementSize()) return;
+    if (!map || !mapElement || mapElement.clientWidth === 0 || mapElement.clientHeight === 0) return;
     map.updateSize();
   }
 
@@ -328,7 +315,9 @@
 
   // re-render grid whenever select mode changes
   $: if (map && gridSource) updateGrid();
-  $: hasPendingTileSyncChanges = selectionDiffersFromDownloaded();
+  $: hasPendingTileSyncChanges =
+    selectedTiles.size !== downloadedRegionIdsByTileKey.size ||
+    [...selectedTiles.keys()].some(key => !downloadedRegionIdsByTileKey.has(key));
   $: canDownloadTiles = $wifiStore.isWifiOn && $wifiStore.isConnected;
   $: if (map) {
     canDownloadTiles;
@@ -515,8 +504,6 @@
 
     loadDownloadedRegions();
 
-    let isDestroyed = false;
-
     const handleMapClick = async (event: any) => {
       if (!isSelectMode || !map || !selectionSource || !gridLayer) return;
 
@@ -571,11 +558,7 @@
       selectedTiles = new Map(selectedTiles);
     };
 
-    const initializeMap = async (): Promise<void> => {
-      await tick();
-      const ready = await waitForMapElementSize();
-      if (!ready || isDestroyed || !mapElement) return;
-
+    if (mapElement && gridLayer) {
       map = new OLMap({
         target: mapElement,
         layers: [
@@ -604,14 +587,15 @@
       mapResizeObserver.observe(mapElement);
       window.addEventListener('resize', scheduleMapResize);
 
-      scheduleMapResize();
-      startGPSTracking();
-    };
+      // Let the browser finish layout before telling OL the canvas size.
+      requestAnimationFrame(() => {
+        map?.updateSize();
+      });
 
-    void initializeMap();
+      startGPSTracking();
+    }
 
     return () => {
-      isDestroyed = true;
       window.removeEventListener('resize', scheduleMapResize);
       mapResizeObserver?.disconnect();
       mapResizeObserver = null;
@@ -804,6 +788,44 @@
     applyDownloadedTileSelections(downloadedTiles);
   }
 
+  /**
+   * Pre-warms the local tile server cache by requesting each selected tile and
+   * its immediate sub-tiles. This triggers renderd to render and cache tiles
+   * from the local OSM database so they are served instantly when offline.
+   *
+   * Called as fire-and-forget after downloadTiles() saves regions to the DB.
+   * Errors are silently ignored — the local tile server may not have OSM data
+   * on first use, which is expected before running 'make map-import'.
+   */
+  async function prefetchLocalTiles(): Promise<void> {
+    const PREFETCH_DETAIL_LEVELS = 3; // prefetch up to 3 zoom levels deeper than selected
+    const PREFETCH_CONCURRENCY = 6;
+    const MAX_PREFETCH_TILES = 500;
+
+    const urls: string[] = [];
+
+    outer:
+    for (const [, tileCoord] of selectedTiles) {
+      const [z, x, y] = tileCoord;
+      urls.push(`/tile/${z}/${x}/${y}.png`);
+
+      for (let dz = 1; dz <= PREFETCH_DETAIL_LEVELS; dz++) {
+        const subTiles = getSubTiles(tileCoord, z + dz);
+        for (const [sz, sx, sy] of subTiles) {
+          urls.push(`/tile/${sz}/${sx}/${sy}.png`);
+          if (urls.length >= MAX_PREFETCH_TILES) break outer;
+        }
+      }
+    }
+
+    for (let i = 0; i < urls.length; i += PREFETCH_CONCURRENCY) {
+      const batch = urls.slice(i, i + PREFETCH_CONCURRENCY);
+      void Promise.allSettled(batch.map(url => fetch(url)));
+      // Yield to the event loop between batches to keep the UI responsive.
+      await new Promise<void>(resolve => setTimeout(resolve, 60));
+    }
+  }
+
   async function downloadTiles(): Promise<void> {
     if (!canDownloadTiles) {
       return;
@@ -861,6 +883,10 @@
       }
 
       await loadDownloadedRegions();
+
+      // Pre-warm the local tile server cache so tiles are ready when offline.
+      // This is fire-and-forget — it runs after the UI reflects the new state.
+      void prefetchLocalTiles();
     } catch (error: unknown) {
       reportNonVitalError(error, 'SystemDataPage.downloadTiles');
     } finally {
@@ -1053,7 +1079,6 @@
       <div
         class="map-container"
         class:select-mode={isSelectMode}
-        class:map-container--hidden={!canDownloadTiles}
         bind:this={mapElement}
       ></div>
 
@@ -1078,7 +1103,7 @@
   .body-container {
     display: flex;
     justify-content: flex-start;
-    align-items: flex-start;
+    align-items: stretch;
     flex: 1;
     min-height: 0;
     gap: 12px;
@@ -1194,7 +1219,6 @@
     background-color: var(--secondary-color);
     flex: 1 1 0;
     min-width: 0;
-    height: 100%;
     min-height: 0;
     border-width: 2px;
     border-color: rgb(255, 255, 255);
@@ -1214,9 +1238,11 @@
   }
 
   .map-container {
-    flex: 1;
-    min-height: 0;
-    width: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
   }
 
   .map-stage {
@@ -1224,11 +1250,6 @@
     flex: 1;
     min-height: 0;
     width: 100%;
-  }
-
-  .map-container--hidden {
-    visibility: hidden;
-    pointer-events: none;
   }
 
   .map-fallback-message {
