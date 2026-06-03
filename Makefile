@@ -8,7 +8,8 @@
 # =============================================================================
 
 .PHONY: help up down build rebuild logs shell db-shell test lint clean deploy \
-        buildx-setup buildx-api buildx-frontend buildx-backend buildx-all
+        buildx-setup buildx-api buildx-frontend buildx-backend buildx-all \
+        map-setup map-download-pbf map-import map-logs map-shell
 
 # Default target
 .DEFAULT_GOAL := help
@@ -54,6 +55,9 @@ help: ## Show this help message
 	@echo ""
 	@echo "$(GREEN)Multi-arch Builds:$(RESET)"
 	@grep -E '^buildx-' $(MAKEFILE_LIST) | grep '## ' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-15s$(RESET) %s\n", $$1, $$2}'
+	@echo ""
+	@echo "$(GREEN)Map Tile Server (offline maps):$(RESET)"
+	@grep -E '^map-' $(MAKEFILE_LIST) | grep '## ' | awk 'BEGIN {FS = ":.*?## "}; {printf "  $(CYAN)%-20s$(RESET) %s\n", $$1, $$2}'
 	@echo ""
 
 # -----------------------------------------------------------------------------
@@ -203,6 +207,47 @@ install-frontend: ## Install frontend npm dependencies
 
 install-backend: ## Install backend Python dependencies
 	cd backend/geotracker && uv sync
+
+# -----------------------------------------------------------------------------
+# Map Tile Server (local OSM tiles for offline use)
+# -----------------------------------------------------------------------------
+# The map tile server requires an 'osm-data' Docker volume containing imported
+# OSM data. Run 'make map-setup' once before starting services for the first time.
+#
+# To import data for a different region, download a .osm.pbf from geofabrik.de
+# and set PBF=/path/to/region.osm.pbf when calling make map-import.
+#   Example: make map-import PBF=~/oregon-latest.osm.pbf
+# -----------------------------------------------------------------------------
+OSM_PBF ?= $(HOME)/oregon-latest.osm.pbf
+OSM_PBF_URL ?= https://download.geofabrik.de/north-america/us/oregon-latest.osm.pbf
+
+map-setup: ## Create the osm-data Docker volume (one-time setup required before first run)
+	@echo "$(CYAN)Creating osm-data Docker volume...$(RESET)"
+	@docker volume inspect osm-data >/dev/null 2>&1 && \
+		echo "$(YELLOW)osm-data volume already exists$(RESET)" || \
+		(docker volume create osm-data && echo "$(GREEN)osm-data volume created$(RESET)")
+	@echo ""
+	@echo "$(YELLOW)Next step: import OSM data with 'make map-import' (this downloads ~300MB and takes 15-30 min)$(RESET)"
+
+map-download-pbf: ## Download Oregon OSM data from Geofabrik (~300MB)
+	@echo "$(CYAN)Downloading Oregon OSM data to $(OSM_PBF)...$(RESET)"
+	wget -O $(OSM_PBF) $(OSM_PBF_URL)
+	@echo "$(GREEN)Download complete: $(OSM_PBF)$(RESET)"
+
+map-import: ## Import OSM data into osm-data volume (requires PBF file — see map-download-pbf)
+	@test -f "$(OSM_PBF)" || (echo "$(YELLOW)PBF file not found at $(OSM_PBF). Run 'make map-download-pbf' first, or set PBF=/path/to/file.osm.pbf$(RESET)" && exit 1)
+	@docker volume inspect osm-data >/dev/null 2>&1 || (echo "$(YELLOW)osm-data volume missing — run 'make map-setup' first$(RESET)" && exit 1)
+	@echo "$(CYAN)Importing OSM data from $(OSM_PBF) (this takes 15-30 minutes)...$(RESET)"
+	$(DOCKER_COMPOSE) -f map-vector-tiles/docker-compose.yml run --rm \
+		-v "$(OSM_PBF):/data/region.osm.pbf" \
+		map import
+	@echo "$(GREEN)Import complete! You can now run 'make up' to start all services.$(RESET)"
+
+map-logs: ## Follow tile server logs
+	$(DOCKER_COMPOSE) logs -f map
+
+map-shell: ## Open shell in tile server container
+	$(DOCKER_COMPOSE) exec map /bin/bash
 # -----------------------------------------------------------------------------
 # Multi-arch Builds (for Raspberry Pi arm64 + Mac/CI amd64)
 # -----------------------------------------------------------------------------

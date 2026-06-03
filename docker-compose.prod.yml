@@ -129,8 +129,28 @@ services:
     networks:
       - carputer
 
+  # ---------------------------------------------------------------------------
+  # Map Tile Server (OpenStreetMap vector tiles via renderd/mod_tile)
+  # Requires the osm-data external volume to be pre-populated:
+  #   make map-setup && make map-download-pbf && make map-import
+  # ---------------------------------------------------------------------------
+  map:
+    build: ./map-vector-tiles
+    volumes:
+      - osm-data:/data/database/
+    ports:
+      - "8070:80"
+    command: "run"
+    restart: always
+    networks:
+      - carputer
+    environment:
+      - ALLOW_CORS=enabled
+
 volumes:
   postgres_data:
+  osm-data:
+    external: true
 
 networks:
   carputer:
