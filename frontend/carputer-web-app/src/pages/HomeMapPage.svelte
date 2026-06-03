@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { derived, writable } from 'svelte/store';
+  import { derived, writable, get } from 'svelte/store';
   import Map from 'ol/Map.js';
   import View from 'ol/View.js';
   import TileLayer from 'ol/layer/Tile.js';
@@ -36,6 +36,8 @@
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
   let isBootstrapping: boolean = true;
+  let hasInitialGpsFix: boolean = false;
+  let resolveFirstGpsFix: (() => void) | null = null;
   let locationStatus: string = 'Getting location...';
   let baseTileLayer: TileLayer | undefined;
   let usingOnlineTiles: boolean = false;
@@ -271,14 +273,14 @@
     setNonVitalErrorSuppressed(true);
 
     try {
-      loadMap();       // create map instance and hook events
       startSystemHealthTracking(); // subscribe to live system health for menu hints
+      void startGPSTracking();    // begin receiving backend GPS data
 
-      // Keep startup silent until initial map-related hooks are in place.
+      // Keep startup silent until first GPS fix and initial service calls complete.
       void Promise.allSettled([
         initializeWifiStateForMap(),
-        startGPSTracking(),
         loadAprsStations(),
+        waitForFirstGpsFix(),
       ]).finally(() => {
         isBootstrapping = false;
         setNonVitalErrorSuppressed(false);
@@ -334,6 +336,16 @@
     };
   });
 
+  function waitForFirstGpsFix(): Promise<void> {
+    if (hasInitialGpsFix) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      resolveFirstGpsFix = resolve;
+    });
+  }
+
   /**
    * Initialize the OpenLayers map and attach all event handlers.
    * Distinguishes user pan (breaks lock) from pinch-zoom (keeps lock) via
@@ -342,6 +354,8 @@
    */
   function loadMap(): void {
     usingOnlineTiles = !hasResolvedWifiStatus || ($wifiStore.isWifiOn && $wifiStore.isConnected);
+    const initialCenter = latestUserCoords ?? fromLonLat([0, 0]);
+
     baseTileLayer = new TileLayer({
       source: createBaseTileSource(usingOnlineTiles),
     });
@@ -352,7 +366,7 @@
         baseTileLayer
       ],
       view: new View({
-        center: fromLonLat([-122.6765, 45.5231]), // Default center: Portland, OR (fallback when GPS is unavailable)
+        center: initialCenter,
         zoom: zoomLevel
       }),
       controls: defaultControls({
@@ -394,6 +408,9 @@
 
     map.addLayer(oldTrackLayer);
     map.addLayer(currentTrackLayer);
+
+    const { tracks, selectedTrackId } = get(filteredTracks);
+    renderTracks(tracks, selectedTrackId);
 
     // this is for making points for APRS locations ------------
     aprsSource = new VectorSource();
@@ -773,6 +790,17 @@
 
     latestUserCoords = filteredCoords;
     userLonLat.set([lon, lat]);
+
+    if (!hasInitialGpsFix) {
+      hasInitialGpsFix = true;
+
+      if (!map) {
+        loadMap();
+      }
+
+      resolveFirstGpsFix?.();
+      resolveFirstGpsFix = null;
+    }
 
     if (!map) {
       return;
