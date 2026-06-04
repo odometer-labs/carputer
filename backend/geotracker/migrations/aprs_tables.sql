@@ -145,9 +145,10 @@ CREATE OR REPLACE FUNCTION gps.get_aprs_stations_near(
 DECLARE
     v_current_pos GEOGRAPHY;
 BEGIN
-    -- Get most recent GPS position
+    -- Get most recent GPS position (exclude rows with NULL timestamps)
     SELECT tp.geom INTO v_current_pos
     FROM gps.track_points tp
+    WHERE tp.time_stamp IS NOT NULL
     ORDER BY tp.time_stamp DESC
     LIMIT 1;
 
