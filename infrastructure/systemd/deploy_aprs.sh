@@ -7,7 +7,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CURRENT_USER=$(whoami)
 
 # Colors
@@ -35,7 +35,7 @@ fi
 # -----------------------------------------------------------------------------
 info "Deploying systemd services..."
 
-SERVICE_DIR="$SCRIPT_DIR/systemd"
+SERVICE_DIR="$SCRIPT_DIR"
 
 if [ ! -f "$SERVICE_DIR/aprs-receiver.service" ]; then
     error "Cannot find aprs-receiver.service at $SERVICE_DIR"
@@ -112,6 +112,3 @@ warn "  2. Restart API: docker compose restart api"
 warn "  3. Start APRS services: sudo systemctl start aprs-receiver aprs-bridge"
 warn "  4. Check logs: sudo journalctl -u aprs-receiver -f"
 echo "============================================"
-EOF
-
-chmod +x /opt/carputer/infrastructure/deploy_aprs.sh

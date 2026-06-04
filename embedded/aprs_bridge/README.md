@@ -7,7 +7,7 @@ Connects Direwolf's KISS TCP interface to the Carputer FastAPI backend.
 ```
 ┌─────────────┐     ┌───────────────┐     ┌─────────────┐     ┌──────────────┐
 │  RTL-SDR    │────►│   rtl_fm      │────►│  Direwolf   │────►│ APRS Bridge  │
-│  Antenna    │     │ FM demod      │     │  KISS:8001  │     │  (this)      │
+│  Antenna    │     │ FM demod      │     │  KISS:8003  │     │  (this)      │
 └─────────────┘     └───────────────┘     └─────────────┘     └──────┬───────┘
                                                                      │
                                                                      ▼
@@ -21,7 +21,7 @@ Connects Direwolf's KISS TCP interface to the Carputer FastAPI backend.
 
 - Python 3.9+
 - `requests` library
-- Direwolf running with KISS TCP enabled on port 8001
+- Direwolf running with KISS TCP enabled on port 8003
 
 ## Installation
 
@@ -42,7 +42,7 @@ python -m aprs_bridge
 
 ```bash
 KISS_HOST=192.168.1.100 \
-KISS_PORT=8001 \
+KISS_PORT=8003 \
 BACKEND_URL=http://localhost:8000 \
 python -m aprs_bridge
 ```
@@ -56,7 +56,7 @@ See `/infrastructure/systemd/` for service files.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `KISS_HOST` | `localhost` | Direwolf host |
-| `KISS_PORT` | `8001` | Direwolf KISS TCP port |
+| `KISS_PORT` | `8003` | Direwolf KISS TCP port |
 | `BACKEND_URL` | `http://localhost:8000` | FastAPI backend URL |
 | `RECONNECT_DELAY` | `5.0` | Seconds between reconnect attempts |
 | `APRS_LOG_FILE` | `/var/log/carputer/aprs-bridge.log` | Log file path |

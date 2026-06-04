@@ -1,4 +1,5 @@
 #!/bin/bash
+set -o pipefail
 #############################################################
 # APRS Reception Pipeline
 # RTL-SDR → rtl_fm → Direwolf

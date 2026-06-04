@@ -422,7 +422,7 @@
 
     aprsLayer = new VectorLayer({
       source: aprCluster,
-      minZoom: 13, //this determines how far our zoomed can the aprs still load.
+      minZoom: 0, //this determines how far our zoomed can the aprs still load.
       style: (feature) => {
         // make sure that map exists before doing anything
         if (!map) return;
@@ -1467,20 +1467,6 @@
 
   :global(.ol-zoom) {
     font-size: 1.1em;
-  }
-
-  .startup-overlay {
-    position: absolute;
-    inset: 0;
-    z-index: 3000;
-    background: #ffffff;
-    color: #333;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.8rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
   }
 
 </style>
