@@ -1,0 +1,22 @@
+[Unit]
+Description=Carputer Application
+After=network.target chrony.service gpsd.service docker.service
+Wants=chrony.service gpsd.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=carputer
+Group=carputer
+WorkingDirectory=/opt/carputer
+EnvironmentFile=/opt/carputer/.env
+ExecStart=/usr/bin/docker compose -f /opt/carputer/docker-compose.prod.yml up -d
+ExecStop=/usr/bin/docker compose -f /opt/carputer/docker-compose.prod.yml down
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=carputer
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

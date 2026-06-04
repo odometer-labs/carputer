@@ -1,0 +1,24 @@
+[Unit]
+Description=Carputer Application (Local Build)
+After=network.target chrony.service gpsd.service docker.service
+Wants=chrony.service gpsd.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=carputer
+Group=carputer
+WorkingDirectory=/opt/carputer
+EnvironmentFile=/opt/carputer/.env
+# Uses docker-compose.local.yml which builds images from local source
+ExecStart=/usr/bin/docker compose -f /opt/carputer/docker-compose.local.yml up -d --build
+ExecStop=/usr/bin/docker compose -f /opt/carputer/docker-compose.local.yml down
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=carputer
+# First boot may take longer due to building images
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target
