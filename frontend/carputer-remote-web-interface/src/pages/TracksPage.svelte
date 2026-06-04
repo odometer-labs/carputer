@@ -46,6 +46,9 @@
   let filteredTracks: TrackListItem[] = [];
   let pageError: string | null = null;
   let isDeleting: boolean = false;
+  let hasActiveWifiConnection: boolean = true;
+  let hasResolvedWifiConnection: boolean = false;
+  let wifiStatusRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
   $: filteredTracks = $trackItems.filter(t =>
     t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -215,7 +218,28 @@
     push('/ManageData');
   }
 
+  async function refreshWifiConnectionStatus(): Promise<void> {
+    try {
+      const response = await fetch('/wifi/connection', {
+        method: 'GET'
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch Wi-Fi connection status');
+      }
+
+      const connection = await response.json() as Record<string, unknown> | null;
+      hasActiveWifiConnection = connection !== null;
+    } catch {
+      hasActiveWifiConnection = false;
+    } finally {
+      hasResolvedWifiConnection = true;
+    }
+  }
+
   onMount(() => {
+    void refreshWifiConnectionStatus();
+
     trackLayer = new VectorLayer({
       source: new VectorSource(),
       style: (feature) => getPointStyle(feature)
@@ -242,6 +266,10 @@
 
     void loadTracksFromApi();
 
+    wifiStatusRefreshTimer = setInterval(() => {
+      void refreshWifiConnectionStatus();
+    }, 15_000);
+
     map.on('singleclick', (event) => {
       const currentZoom = map?.getView().getZoom() ?? 0;
       if (currentZoom < POINT_VISIBILITY_MIN_ZOOM || !trackLayer) return;
@@ -265,6 +293,11 @@
     return () => {
       map?.setTarget(undefined);
       trackLayer = undefined;
+
+      if (wifiStatusRefreshTimer !== null) {
+        clearInterval(wifiStatusRefreshTimer);
+        wifiStatusRefreshTimer = null;
+      }
     };
   });
 </script>
@@ -277,6 +310,10 @@
     <!-- Map (left 75%) -->
     <div class="map-container">
       <div bind:this={mapElement} class="map"></div>
+
+      {#if hasResolvedWifiConnection && !hasActiveWifiConnection}
+        <div class="map-fallback-message">This service requires an active Wi-Fi connection.</div>
+      {/if}
     </div>
 
     <!-- Right panel: search + track list (right 25%) -->
@@ -400,11 +437,26 @@
   .map-container {
     flex: 1;
     min-width: 0;
+    position: relative;
   }
 
   .map {
     width: 100%;
     height: 100%;
+  }
+
+  .map-fallback-message {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 16px;
+    font-size: 1rem;
+    color: rgba(0, 0, 0, 0.8);
+    background: rgba(255, 255, 255, 0.75);
+    z-index: 20;
   }
 
   /* Right panel */

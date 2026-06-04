@@ -23,6 +23,7 @@ const INITIAL_STATE: AppErrorState = {
 
 const MAX_NOTIFICATIONS = 4;
 const NOTIFICATION_DEDUP_MS = 8000;
+let nonVitalErrorSuppressed = true;
 
 const state = writable<AppErrorState>(INITIAL_STATE);
 
@@ -106,6 +107,10 @@ export function reportNonVitalError(
   source?: string,
   force = false,
 ): void {
+  if (nonVitalErrorSuppressed) {
+    return;
+  }
+
   const appError = createError("non-vital", error, source);
 
   if (
@@ -147,7 +152,19 @@ export function clearVitalError(): void {
 }
 
 export function clearAllErrors(): void {
+  nonVitalErrorSuppressed = false;
   state.set(INITIAL_STATE);
+}
+
+export function setNonVitalErrorSuppressed(suppressed: boolean): void {
+  nonVitalErrorSuppressed = suppressed;
+
+  if (suppressed) {
+    state.update((current) => ({
+      ...current,
+      notifications: [],
+    }));
+  }
 }
 
 export const appErrorState = {
