@@ -17,7 +17,7 @@ def main():
         "--interval", type=float, default=1.0, help="Seconds between TPV messages"
     )
     parser.add_argument(
-        "--speed", type=float, default=5.0, help="Speed in m/s (~11 mph)"
+        "--speed", type=float, default=8.0, help="Speed in m/s (~18 mph city driving)"
     )
     args = parser.parse_args()
 
@@ -29,8 +29,8 @@ def main():
     )
     addr = server.server_address
     print(f"Mock gpsd serving on {addr[0]}:{addr[1]}")
-    print(f"  Center: 45.5104, -122.68365 (Portland State University)")
-    print(f"  Radius: 0.5 mi, Speed: {args.speed} m/s, Interval: {args.interval}s")
+    print(f"  Route: City blocks around PSU / South Park Blocks")
+    print(f"  Speed: {args.speed} m/s (~{args.speed * 2.237:.0f} mph), Interval: {args.interval}s")
     print("  Connect with: gpspipe -w localhost")
     try:
         server.serve_forever()

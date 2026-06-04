@@ -382,3 +382,4 @@ vite.config.ts.timestamp-*
 # Private/local files
 CapstoneReview/
 AI_Slop_MDs/
+infrastructure/image-builder/pi-gen

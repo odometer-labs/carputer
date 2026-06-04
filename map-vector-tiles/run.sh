@@ -164,7 +164,8 @@ if [ "$1" == "run" ]; then
     # Initialize PostgreSQL and Apache
     createPostgresConfig
     service postgresql start
-    service apache2 restart
+    . /etc/apache2/envvars
+    /usr/sbin/apache2ctl start
     setPostgresPassword
 
     # Configure renderd threads

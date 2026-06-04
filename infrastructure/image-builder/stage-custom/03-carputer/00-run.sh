@@ -1,20 +1,18 @@
 #!/bin/bash -e
 
 CARPUTER_REPO="git@github.com:odometer-labs/carputer.git"
+CARPUTER_DEPLOY_KEY="files/deploy_key"
 
-source "files/.env"
-
-echo "Creating SSH config containg deployment key"
+echo "Creating SSH config containing deployment key"
 install -v -m 0700 -o 1000 -g 1000 -d "${ROOTFS_DIR}"/home/"${FIRST_USER_NAME}"/.ssh
-cp "${CARPUTER_DEPLOY_KEY}" "${ROOTFS_DIR}"/home/"${FIRST_USER_NAME}"/.ssh/id_ed25519
-# cp "${CARPUTER_DEPLOY_KEY}.pub" "${ROOTFS_DIR}"/home/"${FIRST_USER_NAME}"/.ssh/id_ed25519.pub
+cp "$CARPUTER_DEPLOY_KEY" "${ROOTFS_DIR}"/home/"${FIRST_USER_NAME}"/.ssh/id_ed25519
 ssh-keyscan github.com > "${ROOTFS_DIR}"/home/"${FIRST_USER_NAME}"/.ssh/known_hosts
 chown -R 1000:1000 "${ROOTFS_DIR}"/home/"${FIRST_USER_NAME}"/.ssh/
 chmod 0600 "${ROOTFS_DIR}"/home/"${FIRST_USER_NAME}"/.ssh/*
 
 echo "Creating carputer application directory"
 install -v -m 0700 -o 1000 -g 1000 -d "${ROOTFS_DIR}/opt/carputer"
-GIT_SSH_COMMAND="ssh -i ${CARPUTER_DEPLOY_KEY}" git clone --depth 1 --single-branch "$CARPUTER_REPO" "${ROOTFS_DIR}/opt/carputer"
+GIT_SSH_COMMAND="ssh -i $CARPUTER_DEPLOY_KEY" git clone --depth 1 --single-branch "$CARPUTER_REPO" "${ROOTFS_DIR}/opt/carputer"
 chown -R 1000:1000 "${ROOTFS_DIR}/opt/carputer"
 chmod -R 0600 "${ROOTFS_DIR}/opt/carputer"
 

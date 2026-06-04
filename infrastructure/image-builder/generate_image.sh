@@ -5,12 +5,34 @@ LOGIN_PASSWORD="$(openssl rand -base64 20)"
 PIGEN_REPO="https://github.com/RPI-Distro/pi-gen.git"
 PIGEN_BRANCH="arm64"
 
-if [ ! -f ".env" ]
-then
-	echo "Building an imagine requires creating a .env and copying it to this directory"
-	echo "See the .env.example at the root of this project for a template env file"
-	exit 1
+if [ ! -f ".env" ]; then
+    echo "Building an image requires a .env file in this directory."
+    echo "See .env.example at the project root for a template."
+    exit 1
 fi
+
+source .env
+
+if [ -z "$CARPUTER_DEPLOY_KEY" ]; then
+    echo "CARPUTER_DEPLOY_KEY must be set in .env to the path of an SSH private key."
+    exit 1
+fi
+
+if [ ! -f "$CARPUTER_DEPLOY_KEY" ]; then
+    echo "SSH key not found at: $CARPUTER_DEPLOY_KEY"
+    exit 1
+fi
+
+# Stage the deploy key inside the custom stage so it's accessible during the
+# build regardless of whether we're running natively or inside Docker.
+STAGED_KEY="stage-custom/03-carputer/files/deploy_key"
+cp "$CARPUTER_DEPLOY_KEY" "$STAGED_KEY"
+chmod 600 "$STAGED_KEY"
+
+cleanup() {
+    rm -f "$STAGED_KEY"
+}
+trap cleanup EXIT
 
 [ -d "./pi-gen" ] && rm -rf pi-gen
 
@@ -36,8 +58,16 @@ ENABLE_SSH=1
 STAGE_LIST="stage0 stage1 stage2 stage3 stage-custom"
 HEREDOC
 
-sudo ./build.sh
+if [[ "$(uname)" != "Linux" ]]; then
+    echo "Non-Linux host detected — building via Docker (requires Docker Desktop)."
+    sudo ./build-docker.sh
+else
+    sudo ./build.sh
+fi
 
-echo "Generated login credentials"
-echo "User: $APP_NAME"
-echo "Default Password: $LOGIN_PASSWORD"
+echo ""
+echo "Image build complete. Output: ./pi-gen/deploy/"
+echo ""
+echo "Login credentials"
+echo "  User:     $APP_NAME"
+echo "  Password: $LOGIN_PASSWORD"

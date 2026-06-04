@@ -53,6 +53,8 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 # Get packages
 RUN apt-get update \
 && apt-get install -y --no-install-recommends \
+ apache2 \
+ libapache2-mod-tile \
  cron \
  dateutils \
  fonts-hanazono \
@@ -66,6 +68,7 @@ RUN apt-get update \
  lua5.3 \
  mapnik-utils \
  npm \
+ nodejs \
  osm2pgsql \
  osmium-tool \
  osmosis \
@@ -85,6 +88,9 @@ RUN apt-get update \
 && apt-get clean autoclean \
 && apt-get autoremove --yes \
 && rm -rf /var/lib/{apt,dpkg,cache,log}/
+
+# Install carto for stylesheet compilation
+RUN npm install -g carto
 
 RUN adduser --disabled-password --gecos "" renderer
 

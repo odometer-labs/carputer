@@ -36,7 +36,7 @@
   let map: Map | undefined;
   let locationStatus: string = 'Getting location...';
   let baseTileLayer: TileLayer | undefined;
-  let usingOnlineTiles: boolean = false;
+  let usingOnlineTiles: boolean = true;
   let hasResolvedWifiStatus: boolean = false;
 
   // roadhistory and current track line
@@ -252,15 +252,15 @@
     aprsPopupData = null;
   }
 
-  // Use online tiles only when Wi-Fi is both powered and connected.
-  // Otherwise prefer local tiles for offline operation.
-  $: if (baseTileLayer) {
-    const shouldUseOnlineTiles = !hasResolvedWifiStatus || ($wifiStore.isWifiOn && $wifiStore.isConnected);
-    if (shouldUseOnlineTiles !== usingOnlineTiles) {
-      usingOnlineTiles = shouldUseOnlineTiles;
-      baseTileLayer.setSource(createBaseTileSource(usingOnlineTiles));
-    }
-  }
+  // Always use online tiles for now (local tile server disabled)
+  // TODO: Re-enable wifi-based switching when local tile server is fixed
+  // $: if (baseTileLayer) {
+  //   const shouldUseOnlineTiles = !hasResolvedWifiStatus || ($wifiStore.isWifiOn && $wifiStore.isConnected);
+  //   if (shouldUseOnlineTiles !== usingOnlineTiles) {
+  //     usingOnlineTiles = shouldUseOnlineTiles;
+  //     baseTileLayer.setSource(createBaseTileSource(usingOnlineTiles));
+  //   }
+  // }
 
   // run once when the Svelte component is mounted
   onMount(() => {
@@ -324,7 +324,8 @@
    * isProgrammaticMove / isProgrammaticRotationChange flags.
    */
   function loadMap(): void {
-    usingOnlineTiles = !hasResolvedWifiStatus || ($wifiStore.isWifiOn && $wifiStore.isConnected);
+    // Default to online tiles; fall back to local only when explicitly offline
+    usingOnlineTiles = true;
     baseTileLayer = new TileLayer({
       source: createBaseTileSource(usingOnlineTiles),
     });
