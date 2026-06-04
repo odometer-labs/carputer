@@ -391,7 +391,7 @@
 
     aprsLayer = new VectorLayer({
       source: aprCluster,
-      minZoom: 13, //this determines how far our zoomed can the aprs still load.
+      minZoom: 0, //this determines how far our zoomed can the aprs still load.
       style: (feature) => {
         // make sure that map exists before doing anything
         if (!map) return;
