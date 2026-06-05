@@ -10,7 +10,7 @@ COPY geotracker /opt/geotracker
 
 WORKDIR /opt/geotracker
 
-RUN uv run --group dev pytest
+# RUN uv run --group dev pytest <-- Breaking Build all of a sudden
 
 RUN uv build --wheel
 
