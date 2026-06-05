@@ -5,7 +5,7 @@ Requires=aprs-receiver.service
 
 [Service]
 Type=simple
-User=emb_usr
+User=carputer
 WorkingDirectory=/opt/carputer/embedded
 Environment="KISS_HOST=localhost"
 Environment="KISS_PORT=8003"

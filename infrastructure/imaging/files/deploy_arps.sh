@@ -1,11 +1,3 @@
-#!/bin/bash
-# =============================================================================
-# APRS Deployment Script
-# Deploys APRS systemd services and applies database migration
-# =============================================================================
-
-set -e
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CURRENT_USER=$(whoami)
