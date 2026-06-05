@@ -1,0 +1,13 @@
+git
+gpsd
+gpsd-clients
+chrony
+curl
+rtl-sdr
+cmake
+gcc
+g++
+make
+libasound2-dev
+python3-requests
+python3-pip

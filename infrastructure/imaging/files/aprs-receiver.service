@@ -5,12 +5,12 @@ Wants=network.target
 
 [Service]
 Type=simple
-User=emb_usr
+User=carputer
 Group=plugdev
-WorkingDirectory=/opt/carputer/aprs
+WorkingDirectory=/opt/aprs
 ExecStartPre=/bin/sleep 5
-ExecStart=/opt/carputer/aprs/start_aprs.sh
-Restart=always
+ExecStart=/opt/aprs/start_aprs.sh
+Restart=on-failure
 RestartSec=10
 Nice=-5
 CPUQuota=50%
