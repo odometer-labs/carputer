@@ -1,38 +1,9 @@
-import type { TrackRange } from "../services/settings_preferences";
 import { getDistance as getGeoDistance } from 'ol/sphere.js';
 import type { Track } from '../api/types';
+import { getDistance } from "ol/sphere";
+import { toLonLat } from "ol/proj";
 
 // this page is dedicated to have function for the HomeMapPage to help reduce clutter
-
-
-// this function gets the date by 1 day, week, month or year. 
-// if there shouldn't be a date, if the user has selected all tracks
-// to show then it should default to null
-export function getAfterDate(range: TrackRange) : Date | null {
-  if (range === "all") return null;
-
-  const date = new Date();
-
-  // set to midnight
-  date.setHours(0, 0, 0, 0);
-
-  switch (range) {
-    case "day":
-      date.setDate(date.getDate() - 1);
-      break;
-    case "week":
-      date.setDate(date.getDate() - 7);
-      break;
-    case "month":
-      date.setMonth(date.getMonth() - 1);
-      break;
-    case "year":
-      date.setFullYear(date.getFullYear() - 1);
-      break;
-  }
-
-  return date;
-}
 
 
 export function isTrackWithinRadius(track: Track, centerLonLat: [number, number], radiusMeters: number): boolean {
@@ -67,12 +38,8 @@ export function hexToRgba(hex: string, alpha: number): string {
 
 
 export function getDistanceMeters(a: [number, number], b: [number, number]): number {
-  const dx = a[0] - b[0];
-  const dy = a[1] - b[1];
-  return Math.sqrt(dx * dx + dy * dy);
-}
-
-
-export function bytesToGigabytes(bytes: number): number {
-  return bytes / 1_073_741_824;
+  return getDistance(
+    toLonLat(a),
+    toLonLat(b)
+  )
 }

@@ -27,10 +27,11 @@
   import SystemIndicators from "../assets/components/SystemIndicators.svelte";
   import NameTrackPopUp from '../assets/components/NameTrackPopUp.svelte';
   import APRSPopUp from '../assets/components/APRSPopUp.svelte';
-  import { isTrackWithinRadius, hexToRgba, getAfterDate, getDistanceMeters, bytesToGigabytes } from '../utils/mapUtils';
+  import { isTrackWithinRadius, hexToRgba, getDistanceMeters } from '../utils/mapUtils';
   import { createBaseTileSource } from '../services/map/tileSource';
-  import { addAprsPoint, createAprsLayer, } from '../services/map/aprsLayer'
-  import { createTrackLayers, renderTracks } from '../services/map/trackRenderer'
+  import { addAprsPoint, createAprsLayer, } from '../services/map/aprsLayer';
+  import { createTrackLayers, renderTracks } from '../services/map/trackRenderer';
+  import { getAfterDate } from '../utils/dateUtils';
 
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
@@ -105,6 +106,7 @@
   const GPS_JITTER_DISTANCE_METERS = 4;
   const GPS_STATIONARY_SPEED_MPS = 0.8;
   const ROAD_HISTORY_MIN_DISTANCE_METERS = 8;
+  const TRACK_POINT_MIN_DISTANCE_METERS = 5;
   const MILES_TO_METERS = 1609.34;
   const userLonLat = writable<[number, number] | null>(null);
 
@@ -165,6 +167,10 @@
 
   function getTrackWidth(offset: number = 0): number {
     return Math.max(1, $settingsPreferences.trackThickness + offset);
+  }
+
+  function bytesToGigabytes(bytes: number): number {
+    return bytes / 1_073_741_824;
   }
 
   $: if (oldTrackLayer) {
@@ -737,17 +743,6 @@
     }
   }
 
-  // this function checks if the user has passed a certain amount of distance
-  // I made this becuase I realized that the applyTrackLine will add multiple 
-  // points on the same spot on the map and that just seem very wastefull.
-  function hasMovedEnough(newCoords : [number, number], minimumDistance = 5) : boolean {
-    if (!lastUserTrackCoord) return true;
-
-    const dx = newCoords[0] - lastUserTrackCoord[0];
-    const dy = newCoords[1] - lastUserTrackCoord[1];
-
-    return (Math.sqrt(dx * dx + dy * dy) > minimumDistance);
-  }
 
   // this is used to make the track line for the user, given that the coordnates pushed
   // in are the user's coordinates.
@@ -768,13 +763,18 @@
         return;
       } 
 
+      if ( 
+        lastUserTrackCoord && getDistanceMeters(coords, lastUserTrackCoord) 
+        < TRACK_POINT_MIN_DISTANCE_METERS
+      ) {
+        return;
+      }
+
       // adds a point to an existing track line
-      if (hasMovedEnough(coords as [number, number])){ 
-        const geom = currentTrackFeature.getGeometry();
-        if (geom) {
-          geom.appendCoordinate(coords);
-          lastUserTrackCoord = coords;
-        }
+      const geom = currentTrackFeature.getGeometry();
+      if (geom) {
+        geom.appendCoordinate(coords);
+        lastUserTrackCoord = coords;
       }
     }
   }

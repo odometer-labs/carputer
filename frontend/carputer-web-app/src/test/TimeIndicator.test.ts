@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatTime } from "../utils/timeFormatter";
+import { formatTime } from "../utils/dateUtils";
 
 // testing the function formatTime with example times to check formating.
 describe("formatTime", () => {

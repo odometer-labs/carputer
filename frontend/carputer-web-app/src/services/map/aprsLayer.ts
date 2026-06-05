@@ -117,7 +117,7 @@ export function createAprsLayer(
       const size = clusteredFeatures.length;
 
       if (size === 1) {
-        const inner = feature.get('features')[0] as Feature | undefined;
+        const inner = clusteredFeatures[0];
 
         const aprsId = inner?.get('aprsId') as string | undefined;
 
