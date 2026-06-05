@@ -45,6 +45,7 @@ The top 5 fastest frameworks (fiber, chi, aah, gin, and kami) are all written in
 | `POST` | `/v2/tracks/import-track` | Import a track |
 | `POST` | `/v2/tracks/import-track-point/{track_id}` | Import a track point to a specified track |
 | `GET` | `/v2/tracks/check-new-road` | Check if currently on a new road |
+| `GET` | `/v2/tracks/latest-track-point` | Get the most recent GPS track point |
  
 ---
  
@@ -64,17 +65,26 @@ The top 5 fastest frameworks (fiber, chi, aah, gin, and kami) are all written in
 ### Versioning 
 | Method | Path | Summary |
 |--------|------|---------|
-| `POST` | `/versioning` | Create New Version |
-| `GET`  | `/versioning/latest` | Get Latest Version |
-| `GET`  | `/versioning/history` | Get Version History |
+| `POST` | `/v2/versioning` | Create New Version |
+| `GET`  | `/v2/versioning/latest` | Get Latest Version |
+| `GET`  | `/v2/versioning/history` | Get Version History |
 
 ---
 
 ### Travel History
 | Method | Path | Summary |
 |--------|------|---------|
-| `POST` | `/travel/history` | Create Travel History |
-| `GET`  | `/travel/history` | List Travel History |
+| `POST` | `/v2/travel/history` | Create Travel History |
+| `GET`  | `/v2/travel/history` | List Travel History |
+
+---
+
+### Regions
+| Method | Path | Summary |
+|--------|------|---------|
+| `POST`   | `/v2/region` | Create a region (bounding limit for map rendering) |
+| `GET`    | `/v2/region` | List all regions |
+| `DELETE` | `/v2/region` | Delete a region by ID |
 
 
 ## Requirements 
