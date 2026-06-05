@@ -63,14 +63,17 @@ help: ## Show this help message
 # -----------------------------------------------------------------------------
 # Docker Commands
 # -----------------------------------------------------------------------------
-up: ## Start all services (api, frontend, db, adminer)
+up: ## Start all services
 	$(DOCKER_COMPOSE) up -d
 	@echo ""
 	@echo "$(GREEN)Services started:$(RESET)"
-	@echo "  Frontend: http://localhost:3000"
-	@echo "  API:      http://localhost:8000"
-	@echo "  API Docs: http://localhost:8000/docs"
-	@echo "  Adminer:  http://localhost:8080"
+	@echo "  In-car frontend:      http://localhost:3000"
+	@echo "  Remote interface:     http://localhost:3001"
+	@echo "  Legacy API:           http://localhost:8000"
+	@echo "  Legacy API Docs:      http://localhost:8000/docs"
+	@echo "  Core API:             http://localhost:8888"
+	@echo "  Core API Docs:        http://localhost:8888/docs"
+	@echo "  Adminer:              http://localhost:8080"
 
 down: ## Stop all services
 	$(DOCKER_COMPOSE) down
@@ -129,6 +132,9 @@ test: ## Run all tests
 	@echo ""
 	@echo "$(CYAN)Running backend tests...$(RESET)"
 	cd backend/geotracker && uv run pytest || true
+	@echo ""
+	@echo "$(CYAN)Running core-api tests...$(RESET)"
+	cd core-api && go test ./... || true
 
 test-api: ## Run API tests only
 	$(DOCKER_COMPOSE) exec api pytest
@@ -199,6 +205,7 @@ setup: ## Initial setup: copy .env.example and install deps
 	@echo ""
 	@echo "Installing frontend dependencies..."
 	cd frontend/carputer-web-app && npm install
+	cd frontend/carputer-remote-web-interface && npm install
 	@echo ""
 	@echo "$(GREEN)Setup complete! Run 'make up' to start services.$(RESET)"
 

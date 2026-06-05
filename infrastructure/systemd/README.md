@@ -7,7 +7,7 @@ This is for manual control. HIGHLY recommend to use `setup.sh` in `infrastructur
 
 | Service | Description |
 |---------|-------------|
-| `carputer.service` | Main Carputer application (FastAPI backend) |
+| `carputer.service` | Main Carputer application (Docker Compose stack) |
 
 ## Installation
 
@@ -43,7 +43,7 @@ journalctl -u carputer.service -f
 
 - Python virtual environment at `/opt/carputer/venv`
 - PostgreSQL installed and running
-- GPS module connected to `/dev/ttyUSB0`
+- GPS module connected to `/dev/ttyACM0`
 - gpsd package installed (`sudo apt install gpsd`)
 
 ## Troubleshooting
@@ -54,5 +54,5 @@ journalctl -u carputer.service -n 50 --no-pager
 ```
 
 **GPS device not found:**
-- Check USB connection: `ls -la /dev/ttyUSB*`
+- Check USB connection: `ls -la /dev/ttyACM*`
 - Verify gpsd config: `cat /etc/default/gpsd`
