@@ -4,7 +4,7 @@
   // time zones or change time manually.)
 
   import { onMount } from "svelte";
-  import { formatTime } from "../../utils/timeFormatter";//formats time data
+  import { formatTime } from "../../utils/dateUtils";//formats time data
 
   let time = new Date();
   let hoursMinutes = formatTime(time);
