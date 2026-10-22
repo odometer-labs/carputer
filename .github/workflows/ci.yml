@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -12,30 +13,6 @@ on:
       - development
 
 jobs:
-  api-tests:
-    name: API Tests (FastAPI)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: api
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-          cache: pip
-          cache-dependency-path: api/requirements.txt
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Run tests
-        run: pytest
-
   frontend-checks:
     name: Frontend Lint Typecheck Test
     runs-on: ubuntu-latest
@@ -65,3 +42,111 @@ jobs:
 
       - name: Run tests
         run: npm run test -- --run
+
+  backend-db-tests:
+    name: Backend DB Tests (Python + PostGIS)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: imresamu/postgis:17-3.5-bookworm
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: carputer
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U testuser -d carputer"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply migrations
+        env:
+          PGPASSWORD: testpass
+        run: |
+          for f in \
+            backend/geotracker/migrations/gps_functions.sql \
+            backend/geotracker/migrations/aprs_tables.sql \
+            backend/geotracker/migrations/aprs_functions.sql \
+            backend/geotracker/migrations/versioning_functions.sql \
+            backend/geotracker/migrations/versioning_tables.sql \
+            backend/geotracker/migrations/travel_history_tables.sql \
+            backend/geotracker/migrations/travel_history_functions.sql; do
+            psql -h localhost -U testuser -d carputer -f "$f"
+          done
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Run DB tests
+        env:
+          DB_HOST: localhost
+          DB_PORT: "5432"
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: carputer
+        run: pytest backend/geotracker/tests/ -v
+
+  core-api-integration-tests:
+    name: Core API Integration Tests (Go + PostGIS)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: imresamu/postgis:17-3.5-bookworm
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: carputer
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U testuser -d carputer"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply migrations
+        env:
+          PGPASSWORD: testpass
+        run: |
+          for f in \
+            backend/geotracker/migrations/gps_functions.sql \
+            backend/geotracker/migrations/aprs_tables.sql \
+            backend/geotracker/migrations/versioning_functions.sql \
+            backend/geotracker/migrations/versioning_tables.sql \
+            backend/geotracker/migrations/travel_history_functions.sql \
+            backend/geotracker/migrations/travel_history_tables.sql; do
+            psql -h localhost -U testuser -d carputer -f "$f"
+          done
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: core-api/go.mod
+          cache-dependency-path: core-api/go.sum
+
+      - name: Run integration tests
+        working-directory: core-api
+        env:
+          DB_HOST: localhost
+          DB_PORT: "5432"
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: carputer
+        run: go test -tags integration -v ./internal/integration/...

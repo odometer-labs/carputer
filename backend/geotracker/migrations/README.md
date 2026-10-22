@@ -6,7 +6,7 @@ NEEDS PostGIS EXTENSION INSTALLED
 * **Coordinate System**: WGS84 (EPSG:4326) using the `GEOGRAPHY` type for high-precision global calculations.
 * **Units of Measure**: 
     * **Distance**: Meters (standardized by PostGIS Geography).
-    * **Speed**: Miles per Hour (MPH).
+    * **Speed**: Meters per second (MPS).
     * **Heading**: Degrees (0-360, where 0 is True North).
         * **New Road Differentiation**: 30 meters - swallows gps errors/drifts and able to distinguish different roads
 * **Spatial Indexing**: GIST (Generalized Search Tree) indexes are applied to all `geom` columns to ensure $O(\log n)$ 
@@ -30,22 +30,32 @@ CRUD Operations
 Standard operations to manage your tracking data:
 
 ### Session Lifecycle
-`gps.create_track()`: Starts a new session or returns the active track_id.
+`gps.create_track()`: Starts a new track and generates name or returns the active track_id.
+`gps.create_track(name)`: Starts a new track with specificed name or returns the active track_id.
 
-`gps.add_track_point(...)`: Ingests raw GPS coordinates.
+`gps.add_track_point(track_id, ...)`: Ingests raw GPS coordinates with specified track id.
+`gps.add_track_point(...)`: Ingests raw GPS coordinates to add to current track.
 
-`gps.end_track()`: Ends the current session.
+`gps.end_track()`: Ends the current session and creates the linestring from the current track's track points.
+                    Updated from the previous version due to the track line trigger being removed.
 
 ### Data Management
-`gps.retrieve_track(id)`: Fetches a specific track's metadata and geometry.
 
-`gps.view_all_tracks()`: Fetches all tracks' metadata and geometry.
+`gps.retrieve_track(id)`: Fetches a specific track's metadata and geometry as GEOJSON.
+`gps.view_all_tracks()`: Fetches all tracks' metadata and geometry as GEOJSON.
 
-`gps.update_track(...)`: Modifies existing track metadata (start/end) times.
-
+`gps.update_track(...)`: Modifies existing track metadata (start/end time, name).
 `gps.delete_track(id)`: Removes a track and all associated spatial data (cascading)
 
-`gps.import_track()`: Creates a new track for application to import track points into.
+`gps.import_track()`: Creates a new track and track line using a GEOJSON text string.
+`gps.get_tracks_mvt(...)`: Retrieval track function with 4 modes that return a mapbox vector tile: 
+                            -- CAN ONLY RETRIEVE TRACKS IN SPECIFIED TILE ENVELOPE
+                                -- `z,x,y` = 0,0,0 for `whole world`
+                                    --- `0,0,0 causes nearby mode to malfunction`
+                            - All: Retrieves all tracks in specified tile envelope
+                            - Single: Retrieves track by specified track_id in specified tile envelope
+                            - Nearby: Retrieves all nearby tracks within specified meters in specified tile envelope
+                            - Road: Retrieves all tracks that overlap with current track in specified tile envelope
 
 ---------------------------------------------------------------------------------------------------------------
 Spatial Analysis Queries
@@ -53,17 +63,22 @@ Advanced PostGIS-driven logic for real-time discovery and historical analysis.
 
 `gps.is_new_road()`: Returns TRUE if the current position is `> 30m` from any previous tracks.
 
-`gps.get_track_lines_near_location(meters)`: Finds all historical tracks within a specific radius of the current user.
+`gps.get_track_lines_near_location(meters)`: Finds all historical tracks within a specific radius of the current user, as GEOJSON.
 
-`gps.get_track_lines_using_road()`: Identifies historical tracks that overlap with the current active path.
-
+`gps.get_track_lines_using_road()`: Identifies historical tracks that overlap with the current active path, as GEOJSON.
+    `Note`: Both using road and road mode in get_tracks_mvt dynamically creates a linestring of the points in the current track
+            and compares. Updated from the previous version where the line string was pre-computed.
 ---------------------------------------------------------------------------------------------------------------
 Utilities
 
 `gps.validate_geometry(track_id)`: Validates and fixes spatial geometry.
 
----------------------------------------------------------------------------------------------------------------
-
-### Database Only (Not required for application)
-This system uses a PostgreSQL Trigger (`trg_update_track_line`) to manage spatial data automatically after each raw telemetry data insert.
 `gps.get_latest_track_point()`: Quick-access helper for last inserted telemetry data
+
+---------------------------------------------------------------------------------------------------------------
+Helper Functions
+`gps.import_gpx(track_name)`: Helper function for importing gpx tracks.
+`gps.end_gpx_track(track_id)`: Helper function for importing gpx tracks. 
+                                Does nearly the same function as gps.end_track()
+
+

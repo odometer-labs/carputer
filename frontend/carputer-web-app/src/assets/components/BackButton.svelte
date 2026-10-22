@@ -1,5 +1,5 @@
 <script>
-  import arrow from "../arrow-left-bold.svg";
+  import arrow from "../icons/arrow-left-bold.svg";
   import { goBack } from "../../utils/navigation";
 </script>
 
@@ -14,7 +14,6 @@
   .back-btn {
     background-color: rgba(227, 227, 227, 0.9);
     position:absolute; 
-    top: 15px;
     left: 1%;
 
     width: 50px;

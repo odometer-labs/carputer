@@ -1,0 +1,105 @@
+/* Shared popup overlay and container styles */
+.popup-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(188, 188, 188, 0.45);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+.popup-container {
+  background-color: rgb(188, 188, 188);
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  text-align: center;
+}
+
+/* Header for popups with close button */
+.popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.popup-title {
+  font-weight: bold;
+  font-size: 1.1rem;
+  color: black;
+  margin: 0;
+}
+
+.popup-close-btn {
+  background: none;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.2s;
+  color: black;
+  display: flex;
+  align-items: center;
+}
+
+.popup-content {
+  margin: 0;
+  color: black;
+  font-size: 1rem;
+  word-break: break-word;
+}
+
+.popup-content-empty {
+  color: #555;
+  font-style: italic;
+}
+
+/* Button styles for popup buttons */
+.popup-button {
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 1.3rem;
+  -webkit-text-fill-color: black;
+  line-height: 1;
+  background-color: rgb(130, 130, 130);
+  border: 1px solid #ccc;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+  transition: background-color 0.2s;
+}
+
+.popup-button:active {
+  background-color: rgb(100, 100, 100);
+}
+
+.popup-button:hover {
+  background-color: rgb(145, 145, 145);
+}
+
+.popup-buttons-container {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* Input field styles for popups */
+.popup-input {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 14px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 14px;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.popup-input:focus {
+  border-color: #999;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.1);
+}

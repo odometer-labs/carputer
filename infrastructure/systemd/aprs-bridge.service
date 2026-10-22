@@ -1,0 +1,23 @@
+[Unit]
+Description=APRS Bridge to Backend
+After=aprs-receiver.service network.target
+Requires=aprs-receiver.service
+
+[Service]
+Type=simple
+User=emb_usr
+WorkingDirectory=/opt/carputer/embedded
+Environment="KISS_HOST=localhost"
+Environment="KISS_PORT=8003"
+Environment="AGW_HOST=localhost"
+Environment="AGW_PORT=8005"
+Environment="BACKEND_URL=http://localhost:8000"
+ExecStart=/usr/bin/python3 -m aprs_bridge
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aprs-bridge
+
+[Install]
+WantedBy=multi-user.target

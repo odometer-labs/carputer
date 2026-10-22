@@ -1,26 +1,63 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { derived, writable, get } from 'svelte/store';
   import Map from 'ol/Map.js';
   import View from 'ol/View.js';
   import TileLayer from 'ol/layer/Tile.js';
   import OSM from 'ol/source/OSM.js';
+  import ImageTile from 'ol/ImageTile.js';
   import { defaults as defaultControls } from 'ol/control/defaults.js';
   import { fromLonLat } from 'ol/proj.js';
   import Feature from 'ol/Feature.js';
   import Point from 'ol/geom/Point.js';
+  import LineString from 'ol/geom/LineString.js'
   import VectorLayer from 'ol/layer/Vector.js';
   import VectorSource from 'ol/source/Vector.js';
-  import { Style, Circle, Fill, Stroke, RegularShape, Icon } from 'ol/style.js';
+  import { Style, Circle, Fill, Stroke, RegularShape, Icon, Text } from 'ol/style.js';
+  import { getDistance as getGeoDistance } from 'ol/sphere.js';
   import 'ol/ol.css';
-  import { gpsService } from '../fake-api/gpsService';
-  import type { GPSPosition } from '../fake-api/types';
-  import { push } from 'svelte-spa-router';
-
+  import { getCurrentPosition, subscribeToPositionStream, getAprsStations, subscribeToSysHealth } from '../api/restApi';
+  import { getCurrentWifiConnection, getWifiAccessPoints } from '../api/wifiApi';
+  import type { GPSData, APRSStation, SysHealthData } from '../api/types';
+  import { push, location } from 'svelte-spa-router';
+  import { Cluster } from 'ol/source';
+  import { reportNonVitalError, reportVitalError, setNonVitalErrorSuppressed } from '../stores/errorStore';
+  import { setWifiConnected, setWifiDisconnected, setWifiPower, wifiStore } from '../stores/wifiStore';
+  import { settingsPreferences, type TrackRange } from '../services/settings_preferences';
+  import aprsIconUrl from '../assets/icons/aprs-bold.svg';
+  import userArrowIconUrl from '../assets/icons/maps-arrow-blue-white.svg';
+  import { trackStore } from '../stores/trackStore'
   import '../assets/styles/ui.css'; // this is for styling the overlay ui (settings page, etc)
+  import SystemIndicators from "../assets/components/SystemIndicators.svelte";
+  import NameTrackPopUp from '../assets/components/NameTrackPopUp.svelte';
+  import APRSPopUp from '../assets/components/APRSPopUp.svelte';
+  import type { Track, LineString as ApiLineString } from '../api/types';
 
   let mapElement: HTMLDivElement | undefined;
   let map: Map | undefined;
+  let isBootstrapping: boolean = true;
+  let hasInitialGpsFix: boolean = false;
+  let resolveFirstGpsFix: (() => void) | null = null;
   let locationStatus: string = 'Getting location...';
+  let baseTileLayer: TileLayer | undefined;
+  let usingOnlineTiles: boolean = false;
+  let hasResolvedWifiStatus: boolean = false;
+
+  // roadhistory and current track line
+  let oldTrackLayer: VectorLayer | undefined;
+  let oldTrackSource: VectorSource | undefined;
+  let currentTrackLayer: VectorLayer | undefined;
+  let currentTrackSource: VectorSource | undefined;
+  let currentTrackFeature: Feature<LineString> | undefined;
+
+  // this is to store the tracks points to be sent to backend
+  let trackCoords: [number, number][] = [];
+  let trackName: string = "";
+
+  //APRS locations
+  let aprsLayer: VectorLayer | undefined;
+  let aprCluster: Cluster | undefined;
+  let aprsSource: VectorSource | undefined;
 
   // position marker objects
   let userLayer: VectorLayer | undefined;
@@ -28,7 +65,7 @@
   let vectorSource: VectorSource | undefined;
 
   // latest GPS state (map projection coords + heading)
-  let latestUserCoords: number[] | null = null;
+  let latestUserCoords: [number, number] | null = null;
   let latestHeadingDegrees: number | null = null;
 
   // follow-lock state: position only vs. position + heading (compass mode)
@@ -48,17 +85,232 @@
 
   // device orientation listener (reserved for future compass integration)
   let orientationListener: ((event: DeviceOrientationEvent) => void) | null = null;
+  let stopGPSSubscription: (() => void) | null = null;
+  let stopSysHealthSubscription: (() => void) | null = null;
+  let aprsRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
-  let zoomLevel: number = 18; // default zoom level when centering on user
+  let zoomLevel: number = 18;
+  $: zoomLevel = $settingsPreferences.defaultZoom; // default zoom level when centering on user
+
+  //this is to prevent having too many calls for $trackStore.checkIfNewRoad
+  let lastCheckTime: number = 0;
+  const CHECK_ROAD_INTERVAL: number = 1000; //one second
+
+  // for the popup window to set the name
+  let showTrackNamePopup: boolean = false;
+  let pendingStart: boolean = false;
+
+  // this is used to prevent the user track having too many points on 1 spot
+  let lastUserTrackCoord: [number, number] | null = null;
+  let lastRoadHistoryCoord: [number, number] | null = null;
+
+  const GPS_JITTER_DISTANCE_METERS = 4;
+  const GPS_STATIONARY_SPEED_MPS = 0.8;
+  const ROAD_HISTORY_MIN_DISTANCE_METERS = 8;
+  const MILES_TO_METERS = 1609.34;
+  const LOCAL_TILE_URL = 'http://localhost:8070/tile/{z}/{x}/{y}.png';
+  const TRANSPARENT_TILE_DATA_URL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+  const TILE_FETCH_TIMEOUT_MS = 10000;
+  const userLonLat = writable<[number, number] | null>(null);
+
+  // this is the list of tracks that is shown on the page, filtered
+  const filteredTracks = derived(
+    [trackStore, settingsPreferences, userLonLat],
+    ([$trackStore, $settingsPreferences, $userLonLat]) => {
+      //disable all tracks 
+      if (!$settingsPreferences.areAllTracksOn) {
+        //set the selectedTrackID to null
+        $trackStore.selectedTrackId = null;
+
+        //return just an empty tracks
+        return {
+          tracks: [],
+          selectedTrackId: $trackStore.selectedTrackId
+        };
+      }
+
+      const afterDate = getAfterDate($settingsPreferences.trackRange);
+      const radiusMeters = $settingsPreferences.milesToDiscoverRoads * MILES_TO_METERS;
+
+      return {
+        tracks: $trackStore.tracks.filter(track => {
+          const start = new Date(track.start_time);
+
+          //this is for after the date
+          if ((afterDate) && (start < afterDate)) return false;
+
+          // Apply the frontend-only radius filter from the current user location.
+          if ($userLonLat && !isTrackWithinRadius(track, $userLonLat, radiusMeters)) {
+            return false;
+          }
+
+          return true;
+        }),
+        selectedTrackId: $trackStore.selectedTrackId
+      };
+    }
+  );
+
+  // this function gets the date by 1 day, week, month or year. 
+  // if there shouldn't be a date, if the user has selected all tracks
+  // to show then it should default to null
+  function getAfterDate(range: TrackRange) : Date | null {
+    if (range === "all") return null;
+
+    const date = new Date();
+
+    // set to midnight
+    date.setHours(0, 0, 0, 0);
+
+    switch (range) {
+      case "day":
+        date.setDate(date.getDate() - 1);
+        break;
+      case "week":
+        date.setDate(date.getDate() - 7);
+        break;
+      case "month":
+        date.setMonth(date.getMonth() - 1);
+        break;
+      case "year":
+        date.setFullYear(date.getFullYear() - 1);
+        break;
+    }
+
+    return date;
+  }
+
+  function isTrackWithinRadius(track: Track, centerLonLat: [number, number], radiusMeters: number): boolean {
+    if (!track.geom?.coordinates?.length) {
+      return false;
+    }
+
+    for (const [lon, lat] of track.geom.coordinates) {
+      const distanceMeters = getGeoDistance(centerLonLat, [lon, lat]);
+      if (distanceMeters <= radiusMeters) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  function getUserIconScale(): number {
+    return 0.6 + ($settingsPreferences.iconSizeLevel * 0.2);
+  }
+
+  function getUserMarkerRadius(): number {
+    return 5 + $settingsPreferences.iconSizeLevel;
+  }
+
+  function hexToRgba(hex: string, alpha: number): string {
+    const normalized = hex.trim().replace("#", "");
+
+    if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+      return `rgba(255, 52, 241, ${alpha})`;
+    }
+
+    const red = parseInt(normalized.slice(0, 2), 16);
+    const green = parseInt(normalized.slice(2, 4), 16);
+    const blue = parseInt(normalized.slice(4, 6), 16);
+
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+  }
+
+  function getSelectedTrackColor(alpha: number = 1): string {
+    return hexToRgba($settingsPreferences.selectedTrackColor, alpha);
+  }
+
+  function getRestingTrackColor(alpha: number = 1): string {
+    return hexToRgba($settingsPreferences.restingTrackColor, alpha);
+  }
+
+  function getTrackWidth(offset: number = 0): number {
+    return Math.max(1, $settingsPreferences.trackThickness + offset);
+  }
+
+  $: if (oldTrackLayer) {
+    $settingsPreferences.selectedTrackColor;
+    $settingsPreferences.restingTrackColor;
+    $settingsPreferences.trackThickness;
+    oldTrackLayer.changed();
+  }
+
+  $: if (currentTrackLayer) {
+    $settingsPreferences.selectedTrackColor;
+    $settingsPreferences.restingTrackColor;
+    $settingsPreferences.trackThickness;
+    currentTrackLayer.changed();
+  }
+
+  // HomeMapPage remains mounted under overlay routes; clear popup when leaving map route.
+  $: if ($location !== '/' && aprsPopupData !== null) {
+    aprsPopupData = null;
+  }
+
+  $: if (aprsLayer) {
+    aprsLayer.setVisible($settingsPreferences.areAprsPointsOn);
+    aprsPopupData;
+    aprsLayer.changed();
+  }
+
+  $: if (!$settingsPreferences.areAprsPointsOn && aprsPopupData !== null) {
+    aprsPopupData = null;
+  }
+
+  // Use online tiles only when Wi-Fi is both powered and connected.
+  // Otherwise prefer local tiles for offline operation.
+  $: if (baseTileLayer) {
+    const shouldUseOnlineTiles = !hasResolvedWifiStatus || ($wifiStore.isWifiOn && $wifiStore.isConnected);
+    if (shouldUseOnlineTiles !== usingOnlineTiles) {
+      usingOnlineTiles = shouldUseOnlineTiles;
+      baseTileLayer.setSource(createBaseTileSource(usingOnlineTiles));
+    }
+  }
 
   // run once when the Svelte component is mounted
   onMount(() => {
-    loadMap();             // create map instance and hook events
-    startGPSTracking();    // begin receiving simulated GPS data
+    setNonVitalErrorSuppressed(true);
+
+    try {
+      startSystemHealthTracking(); // subscribe to live system health for menu hints
+      void startGPSTracking();    // begin receiving backend GPS data
+
+      // Keep startup silent until first GPS fix and initial service calls complete.
+      void Promise.allSettled([
+        initializeWifiStateForMap(),
+        loadAprsStations(),
+        waitForFirstGpsFix(),
+      ]).finally(() => {
+        isBootstrapping = false;
+        setNonVitalErrorSuppressed(false);
+      });
+    } catch (error: unknown) {
+      reportVitalError(error, 'HomeMapPage.onMount');
+      isBootstrapping = false;
+      setNonVitalErrorSuppressed(false);
+    }
+
+    // Refresh APRS stations periodically after the initial startup load.
+    aprsRefreshInterval = setInterval(() => {
+      loadAprsStations();
+    }, 15000);
+
+    // subscribes to track changes
+    const unsubscribeTracks = filteredTracks.subscribe(({ tracks, selectedTrackId }) => {
+      renderTracks(tracks, selectedTrackId);
+    });
+    // Load completed tracks from backend.
+    trackStore.loadTracks();
 
     return () => {
+      unsubscribeTracks();
+
       map?.setTarget(undefined);
-      gpsService.stop();
+      stopGPSSubscription?.();
+      stopGPSSubscription = null;
+      stopSysHealthSubscription?.();
+      stopSysHealthSubscription = null;
 
       if (orientationListener) {
         window.removeEventListener('deviceorientationabsolute', orientationListener);
@@ -74,8 +326,25 @@
       if (rotationProgrammaticGuardTimeout !== null) {
         clearTimeout(rotationProgrammaticGuardTimeout);
       }
+
+      if (aprsRefreshInterval !== null) {
+        clearInterval(aprsRefreshInterval);
+        aprsRefreshInterval = null;
+      }
+
+      setNonVitalErrorSuppressed(false);
     };
   });
+
+  function waitForFirstGpsFix(): Promise<void> {
+    if (hasInitialGpsFix) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      resolveFirstGpsFix = resolve;
+    });
+  }
 
   /**
    * Initialize the OpenLayers map and attach all event handlers.
@@ -84,21 +353,107 @@
    * isProgrammaticMove / isProgrammaticRotationChange flags.
    */
   function loadMap(): void {
+    usingOnlineTiles = !hasResolvedWifiStatus || ($wifiStore.isWifiOn && $wifiStore.isConnected);
+    const initialCenter = latestUserCoords ?? fromLonLat([0, 0]);
+
+    baseTileLayer = new TileLayer({
+      source: createBaseTileSource(usingOnlineTiles),
+    });
+
     map = new Map({
       target: mapElement,
       layers: [
-        new TileLayer({
-          source: new OSM() // OpenStreetMap tiles
-        })
+        baseTileLayer
       ],
       view: new View({
-        center: fromLonLat([0, 0]), // Default center
+        center: initialCenter,
         zoom: zoomLevel
       }),
       controls: defaultControls({
         rotate: false, // disable default rotation control since we handle it ourselves
       })
     });
+
+    // ------this is the track layer----------
+    oldTrackSource = new VectorSource();
+
+    // this determines the color/shape/size of the old tracks
+    oldTrackLayer = new VectorLayer({
+      source: oldTrackSource,
+      minZoom: 13,
+      style: (feature) => {
+        const isActive = feature.get('isActive');
+
+        return new Style({
+          stroke: new Stroke({
+            color: isActive ? getSelectedTrackColor(0.95) : getRestingTrackColor(0.55),
+            width: isActive ? getTrackWidth(1) : getTrackWidth(0)
+          })
+        })
+      }
+    });
+
+    currentTrackSource = new VectorSource();
+
+    // this determines the color/shape/size of the current track the user is making
+    currentTrackLayer = new VectorLayer({
+      source: currentTrackSource,
+      style: () => new Style({
+        stroke: new Stroke({
+          color: getSelectedTrackColor(0.8),
+          width: getTrackWidth(0)
+        })
+      })
+    });
+
+    map.addLayer(oldTrackLayer);
+    map.addLayer(currentTrackLayer);
+
+    const { tracks, selectedTrackId } = get(filteredTracks);
+    renderTracks(tracks, selectedTrackId);
+
+    // this is for making points for APRS locations ------------
+    aprsSource = new VectorSource();
+
+    aprCluster = new Cluster({
+      distance: 30, // this is what determines how far from each point before combining.
+      source: aprsSource
+    });
+
+    aprsLayer = new VectorLayer({
+      source: aprCluster,
+      minZoom: 0, //this determines how far our zoomed can the aprs still load.
+      style: (feature) => {
+        // make sure that map exists before doing anything
+        if (!map) return;
+
+        const size = feature.get('features').length;
+
+        // Single point = normal APRS icon
+        if (size === 1) {
+          const inner = feature.get('features')[0] as Feature | undefined;
+          const aprsId = inner?.get('aprsId') as string | undefined;
+          const isSelected = aprsId !== undefined && aprsPopupData?.aprsId === aprsId;
+          return getAprsPinStyle(getAprsIcon(), isSelected);
+        }
+
+        // Cluster (circle with number, combined close by points)
+        return new Style({
+          image: new Circle({
+            radius: 12,
+            fill: new Fill({ color: '#3399CC' }),
+            stroke: new Stroke({ color: '#fff', width: 2 })
+          }),
+          text: new Text({
+            text: size.toString(),
+            fill: new Fill({ color: '#fff' })
+          })
+        });
+      }
+    });
+
+    map.addLayer(aprsLayer);
+    
 
     if (mapElement) {
       pointerDownListener = (event: PointerEvent) => {
@@ -122,7 +477,8 @@
     map.on('pointerdrag', () => {
       if (activeTouchPointerIds.size >= 2) return;
 
-      if (!isProgrammaticMove && (isFollowingUser || isFollowingHeading)) {
+      // User intent always wins: dragging should immediately release follow-lock.
+      if (isFollowingUser || isFollowingHeading) {
         isFollowingUser = false;
         isFollowingHeading = false;
         updateUserMarkerStyle();
@@ -143,6 +499,136 @@
         updateUserMarkerStyle();
       }
     });
+
+    map.on('singleclick', (event) => {
+      // Handle track selection clicks
+      map?.forEachFeatureAtPixel(event.pixel, (featureLike) => {
+        if (!(featureLike instanceof Feature)) return;
+
+        const trackId = featureLike.get('trackId');
+        if (trackId != null) {
+          trackStore.selectTrack(trackId);
+        }
+      },
+      {
+        layerFilter: (layer) => layer === oldTrackLayer,
+        hitTolerance: 13
+      });
+
+      // Handle APRS station clicks — only show popup for single (non-clustered) points
+      let hitAprs = false;
+      map?.forEachFeatureAtPixel(event.pixel, (featureLike) => {
+        if (!(featureLike instanceof Feature)) return;
+
+        const clusteredFeatures = featureLike.get('features') as Feature[] | undefined;
+        if (!clusteredFeatures || clusteredFeatures.length !== 1) return;
+
+        const inner = clusteredFeatures[0];
+        if (!inner) return;
+        const aprsId = inner?.get('aprsId') as string | undefined;
+        const callsign = inner?.get('callsign') as string | undefined;
+        if (callsign && aprsId) {
+          aprsPopupData = {
+            aprsId,
+            callsign,
+            comment: inner.get('comment') ?? null
+          };
+          hitAprs = true;
+        }
+      },
+      {
+        layerFilter: (layer) => layer === aprsLayer,
+        hitTolerance: 10
+      });
+
+      if (!hitAprs) {
+        aprsPopupData = null;
+      }
+    });
+  }
+
+  function createBaseTileSource(useOnlineTiles: boolean): OSM {
+    if (useOnlineTiles) {
+      return new OSM();
+    }
+
+    return new OSM({
+      url: LOCAL_TILE_URL,
+      wrapX: false,
+      crossOrigin: 'anonymous',
+      tileLoadFunction: (tile, src) => {
+        const imageTile = tile as ImageTile;
+        const image = imageTile.getImage();
+        if (!(image instanceof HTMLImageElement)) {
+          return;
+        }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+        }, TILE_FETCH_TIMEOUT_MS);
+
+        void fetch(src, { signal: controller.signal })
+          .then((response) => {
+            if (!response.ok || response.status === 204) {
+              return null;
+            }
+
+            return response.blob();
+          })
+          .then((blob) => {
+            if (!blob) {
+              image.src = TRANSPARENT_TILE_DATA_URL;
+              return;
+            }
+
+            const objectUrl = URL.createObjectURL(blob);
+            image.onload = () => {
+              URL.revokeObjectURL(objectUrl);
+              image.onload = null;
+              image.onerror = null;
+            };
+            image.onerror = () => {
+              URL.revokeObjectURL(objectUrl);
+              image.onload = null;
+              image.onerror = null;
+              image.src = TRANSPARENT_TILE_DATA_URL;
+            };
+            image.src = objectUrl;
+          })
+          .catch(() => {
+            image.onload = null;
+            image.onerror = null;
+            image.src = TRANSPARENT_TILE_DATA_URL;
+          })
+          .finally(() => {
+            clearTimeout(timeoutId);
+          });
+      },
+    });
+  }
+
+  async function initializeWifiStateForMap(): Promise<void> {
+    try {
+      const [currentConnection, accessPoints] = await Promise.all([
+        getCurrentWifiConnection(),
+        getWifiAccessPoints(),
+      ]);
+
+      if (!currentConnection) {
+        setWifiDisconnected();
+        return;
+      }
+
+      setWifiPower(true);
+      const matchingAccessPoint = accessPoints.find(
+        (accessPoint) => accessPoint.ssid === currentConnection.ssid,
+      );
+      setWifiConnected(currentConnection.ssid, matchingAccessPoint?.signal_strength ?? 0);
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'HomeMapPage.initializeWifiStateForMap');
+    } finally {
+      hasResolvedWifiStatus = true;
+    }
   }
 
 
@@ -208,7 +694,7 @@
 
 
   function getIconoirArrowUrl(): string {
-    return '/src/assets/icons/maps-arrow-blue-white.svg';
+    return userArrowIconUrl;
   }
 
   /**
@@ -229,7 +715,7 @@
         image: new Icon({
           src: getIconoirArrowUrl(),
           anchor: [0.5, 0.5],
-          scale: 1,
+          scale: getUserIconScale(),
           rotation: (latestHeadingDegrees * Math.PI) / 180,
           rotateWithView: true,
           crossOrigin: 'anonymous',
@@ -238,7 +724,7 @@
     } else {
       userMarker.setStyle(new Style({
         image: new Circle({
-          radius: 8,
+          radius: getUserMarkerRadius(),
           fill: new Fill({ color: '#3399CC' }),
           stroke: new Stroke({ color: '#fff', width: 2 })
         })
@@ -247,85 +733,148 @@
   }
 
   /**
-   * Start receiving positions from the GPS service (NMEA playback or gpsfake).
-   * Each update: stores coords and heading, creates/moves the marker feature,
-   * recentres the map if locked, and applies heading rotation in compass mode.
-   * See src/fake-api/README.md for mode switching and configuration.
+   * Start receiving positions from backend API.
+   * Pulls one initial snapshot then subscribes to /ws/get-position updates.
    */
-  function startGPSTracking(): void {
-    gpsService.start(
-      (position: GPSPosition) => {
-        const lon: number = position.longitude;
-        const lat: number = position.latitude;
-        if (typeof position.heading === 'number' && Number.isFinite(position.heading)) {
-          latestHeadingDegrees = position.heading;
-        }
-        const coords = fromLonLat([lon, lat]);
-        latestUserCoords = coords;
-        
-        if (map) {
-          if (!userMarker) {
-            // first fix: create marker feature and add to map
-            userMarker = new Feature({
-              geometry: new Point(coords)
-            });
+  async function startGPSTracking(): Promise<void> {
+    await getCurrentPosition()
+      .then((position) => handleGPSPosition(position))
+      .catch((error: unknown) => {
+        // Keep startup resilient: websocket updates can still provide the first valid fix.
+        locationStatus = 'Waiting for GPS fix...';
+        reportNonVitalError(error, 'HomeMapPage.getCurrentPosition');
+      });
 
-            userMarker.setStyle(new Style({
-              image: new Circle({
-                radius: 8,
-                fill: new Fill({ color: '#3399CC' }),
-                stroke: new Stroke({ color: '#fff', width: 2 })
-              })
-            }));
-
-            vectorSource = new VectorSource({
-              features: [userMarker]
-            });
-
-            if (userLayer) {
-              map.removeLayer(userLayer);
-            }
-
-            userLayer = new VectorLayer({
-              source: vectorSource
-            });
-
-            map.addLayer(userLayer);
-          } else {
-            // subsequent fixes: move marker and refresh style
-            const geometry = userMarker.getGeometry();
-            if (geometry) {
-              geometry.setCoordinates(coords);
-            } else {
-              userMarker.setGeometry(new Point(coords));
-            }
-            
-            if (isFollowingUser) {
-              updateUserMarkerStyle();
-            }
-            
-            if (vectorSource) {
-              vectorSource.changed();
-            }
-          }
-
-          if (!hasCenteredInitially) {
-            centerOnUserLocation(true);
-            hasCenteredInitially = true;
-          } else if (isFollowingUser) {
-            centerOnUserLocation(false);
-          }
-
-          applyHeadingRotation();
-          
-          locationStatus = `Location: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
-        }
+    stopGPSSubscription = subscribeToPositionStream(
+      (position: GPSData) => {
+        handleGPSPosition(position);
       },
       (error: string) => {
         console.error('GPS error:', error);
         locationStatus = `GPS Error: ${error}`;
+        reportNonVitalError(error, 'HomeMapPage.subscribeToPositionStream');
       }
     );
+  }
+
+  function handleGPSPosition(position: GPSData): void {
+    const lon: number = Number(position.longitude);
+    const lat: number = Number(position.latitude);
+    const speedMps = Number(position.speed);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      return;
+    }
+
+    // gpsd and some upstreams emit 0/0 placeholders before a real fix is available.
+    if (lat === 0 && lon === 0) {
+      return;
+    }
+
+    if (typeof position.heading === 'number' && Number.isFinite(position.heading)) {
+      latestHeadingDegrees = position.heading;
+    }
+
+    const coords = fromLonLat([lon, lat]) as [number, number];
+
+    let filteredCoords: [number, number] = coords;
+    if (latestUserCoords) {
+      const movementMeters = getDistanceMeters(coords, latestUserCoords);
+      const isLikelyStationary = Number.isFinite(speedMps) && speedMps < GPS_STATIONARY_SPEED_MPS;
+
+      // Hold position when stationary to suppress GPS drift jitter on the marker.
+      if (isLikelyStationary && movementMeters < GPS_JITTER_DISTANCE_METERS) {
+        filteredCoords = latestUserCoords;
+      }
+    }
+
+    latestUserCoords = filteredCoords;
+    userLonLat.set([lon, lat]);
+
+    if (!hasInitialGpsFix) {
+      hasInitialGpsFix = true;
+
+      if (!map) {
+        loadMap();
+      }
+
+      resolveFirstGpsFix?.();
+      resolveFirstGpsFix = null;
+    }
+
+    if (!map) {
+      return;
+    }
+
+    if (!userMarker) {
+      // first fix: create marker feature and add to map
+      userMarker = new Feature({
+        geometry: new Point(filteredCoords)
+      });
+
+      userMarker.setStyle(new Style({
+        image: new Circle({
+          radius: getUserMarkerRadius(),
+          fill: new Fill({ color: '#3399CC' }),
+          stroke: new Stroke({ color: '#fff', width: 2 })
+        })
+      }));
+
+      vectorSource = new VectorSource({
+        features: [userMarker]
+      });
+
+      if (userLayer) {
+        map.removeLayer(userLayer);
+      }
+
+      userLayer = new VectorLayer({
+        source: vectorSource,
+        updateWhileAnimating: true,
+        updateWhileInteracting: true
+      });
+
+      map.addLayer(userLayer);
+      map.render();
+    } else {
+      // subsequent fixes: move marker and refresh style
+      const geometry = userMarker.getGeometry();
+      if (geometry) {
+        geometry.setCoordinates(filteredCoords);
+      } else {
+        userMarker.setGeometry(new Point(filteredCoords));
+      }
+
+      if (isFollowingUser) {
+        updateUserMarkerStyle();
+      }
+
+      if (vectorSource) {
+        vectorSource.changed();
+      }
+
+      // Request a redraw so marker motion remains visible during map drag interactions.
+      map.render();
+    }
+
+    if (!hasCenteredInitially) {
+      centerOnUserLocation(true);
+      hasCenteredInitially = true;
+    } else if (isFollowingUser) {
+      centerOnUserLocation(false);
+    }
+
+    applyHeadingRotation();
+
+    locationStatus = `Location: ${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+
+    // Non-critical side effects should never block primary GPS rendering.
+    try {
+      applyTrackLine(filteredCoords, lon, lat);
+      checkRoadHistory(filteredCoords);
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'HomeMapPage.handleGPSPosition.sideEffects');
+    }
   }
 
   /**
@@ -357,6 +906,232 @@
     }
   }
 
+  // this function checks if the user has passed a certain amount of distance
+  // I made this becuase I realized that the applyTrackLine will add multiple 
+  // points on the same spot on the map and that just seem very wastefull.
+  function hasMovedEnough(newCoords : [number, number], minimumDistance = 5) : boolean {
+    if (!lastUserTrackCoord) return true;
+
+    const dx = newCoords[0] - lastUserTrackCoord[0];
+    const dy = newCoords[1] - lastUserTrackCoord[1];
+
+    return (Math.sqrt(dx * dx + dy * dy) > minimumDistance);
+  }
+
+  // this is used to make the track line for the user, given that the coordnates pushed
+  // in are the user's coordinates.
+  async function applyTrackLine(
+    coords : [number, number],
+    lon: number,
+    lat: number
+  ) : Promise<void> {
+    // this adds a line so the user can see where they have been (current track) 
+    if ($trackStore.isTracking) { 
+
+      //this determines if this is the beggining of a new line 
+      if (!currentTrackFeature) { 
+        currentTrackFeature = new Feature({
+          geometry: new LineString([coords])
+        }); 
+        
+        currentTrackSource?.addFeature(currentTrackFeature);
+        
+        lastUserTrackCoord = coords;
+
+        trackCoords = [[lon, lat]];
+        return;
+      } 
+
+      // adds a point to an existing track line
+      if (hasMovedEnough(coords as [number, number])){ 
+        const geom = currentTrackFeature.getGeometry();
+        if (geom) {
+          geom.appendCoordinate(coords);
+          lastUserTrackCoord = coords;
+
+          trackCoords.push([lon, lat])
+        }
+      }
+    }
+  }
+
+  // this function is used to check if the current road the user is on is a road
+  // that the user has never driven on before.
+  function checkRoadHistory(coords: [number, number]) : void {
+    const now = Date.now();
+
+    // makes sure that the most a call for checking if the road is new is at most 1 per sec
+    if (now - lastCheckTime <= CHECK_ROAD_INTERVAL) return;
+
+    if (lastRoadHistoryCoord) {
+      const movementMeters = getDistanceMeters(coords, lastRoadHistoryCoord);
+      if (movementMeters < ROAD_HISTORY_MIN_DISTANCE_METERS) return;
+    }
+
+    lastCheckTime = now;
+    lastRoadHistoryCoord = [coords[0], coords[1]];
+    trackStore.checkIfNewRoad();
+  }
+
+  function getDistanceMeters(a: [number, number], b: [number, number]): number {
+    const dx = a[0] - b[0];
+    const dy = a[1] - b[1];
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+
+  // set up the old tracks that the user has been on previously
+  function renderTracks(tracks: Track[], selectedTrackId: number | null) : void {
+    //check if the trackSource exists
+    if (!oldTrackSource) return;
+
+    // remove any of the old tracks on the map to prevent duplicates
+    oldTrackSource.clear();
+
+    tracks.forEach((track) => {
+      const coords = track.geom.coordinates.map(([lon, lat]) =>
+        fromLonLat([lon, lat])
+      );
+
+      const feature = new Feature({
+        geometry: new LineString(coords),
+        trackId: track.track_id
+      });
+
+      feature.set("isActive", track.track_id === selectedTrackId)
+
+      oldTrackSource?.addFeature(feature);
+    });
+  }
+
+  // this function helps start the tracking for backend and end
+  // it also refreshes the TrackLayer from the current track when the user 
+  // presses end track
+  async function startEndTracking() : Promise<void> {
+    if ($trackStore.isTracking) {
+      await trackStore.end();
+
+      currentTrackSource?.clear();
+      currentTrackFeature = undefined;
+
+      await trackStore.loadTracks();
+    } else {
+      showTrackNamePopup = true;
+      pendingStart = true;
+    }
+  }
+
+  
+  // for handling the naming of a track with the popup
+  // Called by NameTrackPopUp confirm event
+  async function startTrackingNameIt(name: string): Promise<void> {
+    if (!pendingStart) return;
+    trackName = "";
+    trackCoords = [];
+
+    await trackStore.start(name);
+
+    showTrackNamePopup = false;
+    pendingStart = false;
+  }
+
+  //in case the user wishes to cancel ending the track or naming
+  function cancelTrackName(): void {
+    trackName = "";
+    showTrackNamePopup = false;
+    pendingStart = false;
+  }
+
+
+  // TODO: there are appearently many different kinds of aprs icons so it may need
+  // to be able to shift through different icons for the situation. or if we decided
+  // to not implement different icons for different aprs then that fine, just remove
+  // this comment.
+  function getAprsIcon(): string {
+    return aprsIconUrl;
+  }
+
+  /**
+   * Sets up feature points for APRS stations fetched from the backend API.
+   */
+  function addAprsPoint(lat: number, long: number, callsign: string, comment: string | null): void {
+    //if the aprsSource hasn't been set up then don't do anything
+    if (!aprsSource) return;
+
+    const aprsId = `${callsign}-${lat.toFixed(6)}-${long.toFixed(6)}`;
+
+    const aprsMarker = new Feature({
+      geometry: new Point(fromLonLat([long, lat])),
+      aprsId,
+      callsign,
+      comment,
+    });
+
+    aprsSource.addFeature(aprsMarker);
+  }
+
+  // this is the style for the pins, you can insert the image to the pin
+  function getAprsPinStyle(img: string, isSelected: boolean = false): Style[] {
+    return [
+      // pin stem (triangle)
+      new Style({
+        image: new RegularShape({
+          points: 3,
+          radius: 10,
+          rotation: Math.PI,
+          fill: new Fill({ color: 'black' }),
+          stroke: new Stroke({ color: 'black', width: 1 }),
+          displacement: [0, -12]
+        })
+      }),
+
+      // pin head (circle)
+      new Style({
+        image: new Circle({
+          radius: 13,
+          fill: new Fill({ color: isSelected ? '#93e38b' : 'white' }),
+          stroke: new Stroke({ color: 'black', width: 2 }),
+          displacement: [0, 26]
+        })
+      }),
+
+      // APRS icon on top
+      new Style({
+        image: new Icon({
+          src: img,
+          scale: 0.05,
+          anchor: [0.5, 0.5],
+          displacement: [0, 26]
+        })
+      })
+    ];
+  }
+
+  
+  async function loadAprsStations(): Promise<void> {
+    if (!$settingsPreferences.areAprsPointsOn) {
+      aprsSource?.clear();
+      return;
+    }
+
+    aprsSource?.clear();
+
+    try {
+      let stations: APRSStation[] | null = await getAprsStations();
+
+      // If nothing is nearby, widen the search radius to show available APRS traffic.
+      if (!stations || stations.length === 0) {
+        stations = await getAprsStations(500000);
+      }
+
+      stations?.forEach((station) => {
+        addAprsPoint(station.latitude, station.longitude, station.callsign, station.last_comment ?? null);
+      });
+    } catch (error: unknown) {
+      reportNonVitalError(error, 'HomeMapPage.loadAprsStations');
+    }
+  }
+
   // this function changes route to /SettingPreference
   function goToSettingPreference() : void {
     push("/SettingPreference");
@@ -369,19 +1144,70 @@
 
   // this function changes route to /Dashboard
   function goToDashboard() : void {
-    push("/Dashboard");
-  }
-  
-  // this function changes route to /Dashboard
-  function goToMapDownload() : void {
-    push("/MapDownload");
+    push("/SystemData");
   }
 
   let isDropdownOpen: boolean = false;
+
+  let latestSysHealth: SysHealthData | null = null;
+  let wifiMenuHint: string = 'Checking Wi-Fi...';
+  let settingsMenuHint: string = 'Day mode activated';
+  let systemDataMenuHint: string = 'Free storage unavailable';
+
+  $: wifiMenuHint = getWifiMenuHint();
+  $: settingsMenuHint = $settingsPreferences.nightMode ? 'Night mode activated' : 'Day mode activated';
+  $: systemDataMenuHint = getSystemDataMenuHint(latestSysHealth);
+
+  // APRS popup: set when the user clicks a single APRS station on the map
+  let aprsPopupData: { aprsId: string; callsign: string; comment: string | null } | null = null;
+
+  function bytesToGigabytes(bytes: number): number {
+    return bytes / 1_073_741_824;
+  }
+
+  function getSystemDataMenuHint(sysHealth: SysHealthData | null): string {
+    if (!sysHealth) {
+      return 'Free storage unavailable';
+    }
+
+    const freeGb = Math.max(0, bytesToGigabytes(sysHealth.disk.free_bytes));
+    return `${freeGb.toFixed(1)} GB free`;
+  }
+
+  function getWifiMenuHint(): string {
+    if (!hasResolvedWifiStatus) {
+      return 'Checking Wi-Fi...';
+    }
+
+    if (!$wifiStore.isWifiOn) {
+      return 'Wi-Fi is off';
+    }
+
+    if ($wifiStore.isConnected) {
+      return `Connected to ${$wifiStore.ssid ?? 'network'}`;
+    }
+
+    return 'Not connected';
+  }
+
+  function startSystemHealthTracking(): void {
+    stopSysHealthSubscription = subscribeToSysHealth(
+      (data: SysHealthData) => {
+        latestSysHealth = data;
+      },
+      (error: string) => {
+        reportNonVitalError(error, 'HomeMapPage.subscribeToSysHealth');
+      }
+    );
+  }
 </script>
 
 <main style="margin: 0; padding: 0; height: 100%; width: 100%;">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/iconoir-icons/iconoir@main/css/iconoir.css" />
+
+  {#if isBootstrapping}
+    <div class="startup-overlay" role="status" aria-live="polite">Starting up...</div>
+  {/if}
   
   <div class="snap_nav_icon">
       <!-- svelte-ignore a11y_consider_explicit_label -->
@@ -415,16 +1241,7 @@
               <i class="iconoir-wifi dropdown-menu_btn_icons"></i>
               Wifi
               <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
-                <sub class="sub_text">Connected to PSU-Guest</sub>
-              </div>  
-            </button>
-        </li>
-        <li style="padding: 0;">
-            <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false; goToMapDownload()}}>
-              <i class="iconoir-download dropdown-menu_btn_icons"></i>
-              Download Map
-              <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
-                <sub class="sub_text">2GB free</sub>
+                <sub class="sub_text">{wifiMenuHint}</sub>
               </div>  
             </button>
         </li>
@@ -433,16 +1250,16 @@
               <i class="iconoir-settings dropdown-menu_btn_icons"></i>
               Settings
               <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
-                <sub class="sub_text">Day mode activated</sub>
+                <sub class="sub_text">{settingsMenuHint}</sub>
               </div>  
             </button>
         </li>
         <li style="padding: 0;">
           <button class="dropdown-menu_btn" on:click={() => { isDropdownOpen = false; goToDashboard()}}>
             <i class="iconoir-info-circle dropdown-menu_btn_icons"></i>
-            System Info
+            System Data
             <div class="grid-container" style="margin-left: 30px; margin-top: 5px;">
-                <sub class="sub_text">Patch Level: 0.0.0</sub>
+                <sub class="sub_text">{systemDataMenuHint}</sub>
             </div>  
           </button>
         </li>
@@ -450,10 +1267,35 @@
     </div>
   {/if}
 
+  
+  <!-- this is the system indicators. -->
+  <SystemIndicators />
+
+  <!-- this is the button for letting backend know when to start/end a track-->
+  <button 
+    class="start-end-track_butn"
+    on:click={() => startEndTracking()}
+    style="background-color: {$trackStore.isTracking ? 'lightcoral' : 'lightgreen'}"
+  >
+    <strong>{$trackStore.isTracking ? "Stop Track" : "Start Track"}</strong>
+  </button>
+
   <div class="map-container">
     <div bind:this={mapElement} class="map" style="width: 100%; height: 100%;"></div>
   </div>
 
+  <APRSPopUp
+    show={aprsPopupData !== null}
+    aprsData={aprsPopupData}
+    on:close={() => aprsPopupData = null}
+  />
+
+  <NameTrackPopUp
+    show={showTrackNamePopup}
+    initialTrackName={trackName}
+    on:confirm={e => startTrackingNameIt(e.detail.trackName)}
+    on:cancel={cancelTrackName}
+  />
 </main>
 
 
@@ -506,7 +1348,7 @@
     background-color: rgba(188, 188, 188, 0.9);
     color: #333;
     font-weight: 500;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);   
     transition: all 0.2s;
     outline: none;
   }
@@ -585,6 +1427,46 @@
   .hamburger_menu_icon_btn i {
     display: block;
     line-height: 1;
+  }
+
+  .start-end-track_butn {
+    position: absolute;
+    bottom: 20px;
+    right: 25px;
+    z-index: 1000;
+    width: 80px;
+    height: 70px;
+    padding: 0px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: 1px solid white;
+    border-radius: 15%;
+    background-color: rgba(188, 188, 188, 0.9);
+    color: #333;
+    font-weight: 500;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s;
+    outline: none;
+  }
+
+  :global(.ol-zoom button) {
+    width: 2.25em;
+    height: 2.25em;
+    font-size: 1.4rem;
+    line-height: 1;
+    background-color: rgb(188, 188, 188);
+    border: 1px solid white;
+  }
+
+  :global(.ol-zoom button:hover) {
+    background-color: rgb(225, 225, 225);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+  }
+
+  :global(.ol-zoom) {
+    font-size: 1.1em;
   }
 
 </style>

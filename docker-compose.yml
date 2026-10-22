@@ -1,11 +1,153 @@
-#For more information, look for README in the backend subdirectory for instructions on how to setup a database and configure
-#the .env.
+# =============================================================================
+# Carputer Docker Compose
+# =============================================================================
+# Quick start:
+#   cp .env.example .env
+#   docker compose up -d
+#
+# Services:
+#   - Frontend:  http://localhost:3000  (Svelte app)
+#   - Remote Web Interface:  http://localhost:3001  (Svelte app)
+#   - Core API:       http://localhost:8888  (Go + Huma)
+#   - Core API Docs:  http://localhost:8888/docs
+#   - Legacy API:       http://localhost:8000  (Python + FastAPI)
+#   - Legacy API Docs:  http://localhost:8000/docs
+#   - Adminer:   http://localhost:8080  (DB admin)
+#
+# For more information, see backend/README.md
+# =============================================================================
+
 services:
+  # ---------------------------------------------------------------------------
+  # Core API Service (Go + Huma)
+  # ---------------------------------------------------------------------------
+  core-api:
+    build:
+      context: ./core-api
+      dockerfile: deployments/docker/Dockerfile
+    ports:
+      - "8888:8888"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      DB_HOST: db
+      DB_PORT: 5432
+    restart: always
+    networks:
+      - carputer
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+
+  # ---------------------------------------------------------------------------
+  # Legacy API Service (Python + FastAPI)
+  # ---------------------------------------------------------------------------
+  api:
+    build: ./api
+    ports:
+      - "8000:8000"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      DB_HOST: db
+      DB_PORT: 5432
+    restart: always
+    networks:
+      - carputer
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+
+  # ---------------------------------------------------------------------------
+  # GPSD Service (GPSD Python Microservice)
+  # ---------------------------------------------------------------------------
+  gpsd-service:
+    build: ./gpsd
+    environment:
+      GPSD_HOST: ${GPSD_HOST:-host-gateway}
+      GPSD_PORT: ${GPSD_PORT:-2947}
+    extra_hosts:
+      - "host-gateway:host-gateway"
+    restart: always
+    networks:
+      - carputer
+    depends_on:
+      api:
+        condition: service_started
+        restart: true
+
+  # ---------------------------------------------------------------------------
+  # Frontend (Svelte + Vite, served by nginx)
+  # ---------------------------------------------------------------------------
+  frontend:
+    build: ./frontend/carputer-web-app
+    ports:
+      - "3000:80"
+    restart: always
+    networks:
+      - carputer
+    depends_on:
+      - wifi-manager
+      - core-api
+    healthcheck:
+      test:
+        ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Remote Web Interface (Svelte + Vite, served by nginx)
+  # ---------------------------------------------------------------------------
+  remote-web-interface:
+    build: ./frontend/carputer-remote-web-interface
+    ports:
+      - "3001:80"
+    restart: always
+    networks:
+      - carputer
+    depends_on:
+      - core-api
+      - sys-health
+      - wifi-manager
+    healthcheck:
+      test:
+        ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Geotracker Backend (Python library/service)
+  # ---------------------------------------------------------------------------
+  # Currently a stub - enable with: docker compose --profile backend up
+  geotracker:
+    build: ./backend
+    profiles:
+      - backend
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      DB_HOST: db
+      DB_PORT: 5432
+    networks:
+      - carputer
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL + PostGIS Database
+  # ---------------------------------------------------------------------------
   db:
-    image: postgis/postgis:16-3.4
+    image: imresamu/postgis:17-3.5-alpine
     container_name: carputer_db
     restart: always
-    # Docker will look for a .env file in the same directory by default
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -18,8 +160,78 @@ services:
       timeout: 5s
       retries: 5
     volumes:
-      - ./backend/geotracker/migrations/gps_functions.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./backend/geotracker/migrations/gps_functions.sql:/docker-entrypoint-initdb.d/01_gps_functions.sql
+      - ./backend/geotracker/migrations/aprs_tables.sql:/docker-entrypoint-initdb.d/02_aprs_tables.sql
+      - ./backend/geotracker/migrations/versioning_functions.sql:/docker-entrypoint-initdb.d/03_versioning_functions.sql
+      - ./backend/geotracker/migrations/versioning_tables.sql:/docker-entrypoint-initdb.d/04_versioning_tables.sql
+      - ./backend/geotracker/migrations/travel_history_functions.sql:/docker-entrypoint-initdb.d/05_travel_history_functions.sql
+      - ./backend/geotracker/migrations/travel_history_tables.sql:/docker-entrypoint-initdb.d/06_travel_history_tables.sql
+      - ./backend/geotracker/migrations/region_tables.sql:/docker-entrypoint-initdb.d/07_region_tables.sql
+      - ./backend/geotracker/migrations/region_functions.sql:/docker-entrypoint-initdb.d/08_region_functions.sql
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - carputer
+
+  # ---------------------------------------------------------------------------
+  # Adminer (Database Admin UI)
+  # ---------------------------------------------------------------------------
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
+    networks:
+      - carputer
+
+  # ---------------------------------------------------------------------------
+  # System Health Service (Go)
+  # ---------------------------------------------------------------------------
+  sys-health:
+    build: ./sys-health
+    restart: always
+    ports:
+      - "8090:8090"
+    networks:
+      - carputer
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://127.0.0.1:8090/health",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Wifi Management Service
+  # ---------------------------------------------------------------------------
+  wifi-manager:
+    build: ./infrastructure/wifi-manager/
+    restart: always
+    ports:
+      - "9001:9001"
+    volumes:
+      - "/var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket"
+    networks:
+      - carputer
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9001/wifi/version"]
+      interval: 360s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+include:
+  - ./map-vector-tiles/docker-compose.yml
 
 volumes:
   postgres_data:
+
+networks:
+  carputer:
+    driver: bridge

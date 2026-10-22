@@ -50,7 +50,7 @@ infrastructure/
 The Pi is assigned a static IP on the PSU Secure network:
 
 ```
-10.200.110.128
+10.200.108.160
 ```
 
 **Requirements:**
@@ -58,7 +58,7 @@ The Pi is assigned a static IP on the PSU Secure network:
 - Full-tunnel VPN must be active
 
 ```bash
-ssh emb_usr@10.200.110.128
+ssh emb_usr@10.200.108.160
 ```
 
 ### Hotspot / Development
@@ -169,7 +169,7 @@ gpsd is configured via `/etc/default/gpsd`:
 
 ```bash
 DEVICES="/dev/ttyACM0"
-GPSD_OPTIONS="-F /var/run/gpsd.sock"
+GPSD_OPTIONS="-G -F /var/run/gpsd.sock"
 USBAUTO="true"
 ```
 
@@ -200,7 +200,7 @@ chronyd (time sync)
 
 ### `carputer.service`
 
-Manages the Carputer FastAPI backend application.
+Manages the full Carputer stack via Docker Compose.
 
 **Location in repo:** `infrastructure/systemd/carputer.service`
 **Deployed to:** `/etc/systemd/system/carputer.service`
@@ -210,13 +210,14 @@ Manages the Carputer FastAPI backend application.
 |-------|-------|
 | User | `emb_usr` |
 | WorkingDirectory | `/opt/carputer` |
-| ExecStart | `/opt/carputer/venv/bin/python -m api.src.main` |
-| Restart | `always` (10s delay) |
-| Watchdog | 60 seconds |
+| ExecStart | `/usr/bin/docker compose up -d` |
+| ExecStop | `/usr/bin/docker compose down` |
+| Type | `oneshot` (RemainAfterExit=yes) |
 
 **Depends on:**
 - `network.target`
-- `postgresql.service`
+- `docker.service`
+- `chrony.service`
 - `gpsd.service`
 
 **Common commands:**

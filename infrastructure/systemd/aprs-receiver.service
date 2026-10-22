@@ -1,0 +1,22 @@
+[Unit]
+Description=APRS Receiver (RTL-SDR + Direwolf)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=emb_usr
+Group=plugdev
+WorkingDirectory=/opt/carputer/aprs
+ExecStartPre=/bin/sleep 5
+ExecStart=/opt/carputer/aprs/start_aprs.sh
+Restart=always
+RestartSec=10
+Nice=-5
+CPUQuota=50%
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aprs-receiver
+
+[Install]
+WantedBy=multi-user.target
